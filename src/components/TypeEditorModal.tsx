@@ -84,7 +84,7 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
       });
     }
     const id = existing?.id ?? `${slug(name)}-${uid().slice(0, 6)}`;
-    const next: ObjType = { ...draft, id, name, properties: props, defaultTemplate: useTemplate ? template.current : null };
+    const next: ObjType = { ...draft, id, name, properties: props, defaultTemplate: useTemplate ? template.current : null, updatedAt: Date.now() };
     await db.types.put(next);
     if (existing) await reindexAll();
     close();

@@ -180,6 +180,21 @@ export async function updateTask(taskId: string, patch: { checked?: boolean; due
   if (next) await saveObject(obj.id, { content: next });
 }
 
+/** Rebuild links/tasks for these objects without touching updatedAt (used when sync applies remote changes). */
+export async function reindexObjects(ids: string[]) {
+  if (!ids.length) return;
+  await db.transaction('rw', db.objects, db.links, db.tasks, db.types, async () => {
+    for (const id of ids) {
+      const o = await db.objects.get(id);
+      if (o) await reindex(o);
+      else {
+        await db.links.where('fromId').equals(id).delete();
+        await db.tasks.where('objectId').equals(id).delete();
+      }
+    }
+  });
+}
+
 export async function reindexAll() {
   const objs = await db.objects.toArray();
   const types = new Map((await db.types.toArray()).map((t) => [t.id, t]));

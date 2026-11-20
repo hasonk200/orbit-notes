@@ -2401,3 +2401,51 @@ span.olink-card {
     gap: 2px 12px;
   }
 }
+
+/* cloud sync */
+.sync-ind {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.sync-ind:hover {
+  background: var(--surface-3);
+}
+.sync-ind span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sync-synced { color: var(--ok); }
+.sync-error { color: var(--danger); }
+.sync-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+}
+.sync-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 8px;
+}
+.sync-user img {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+.sync-user-name {
+  font-weight: 600;
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

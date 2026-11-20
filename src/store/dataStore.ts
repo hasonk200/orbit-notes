@@ -71,5 +71,8 @@ export function displayTitle(o?: Obj | null) {
 export async function togglePinned(id: string) {
   const cur: string[] = ((await db.meta.get('pinned'))?.value as string[]) ?? [];
   const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
-  await db.meta.put({ key: 'pinned', value: next });
+  await db.meta.bulkPut([
+    { key: 'pinned', value: next },
+    { key: 'pinnedUpdatedAt', value: Date.now() },
+  ]);
 }
