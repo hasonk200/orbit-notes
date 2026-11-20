@@ -7,6 +7,7 @@ import { pruneOrphans, reindexAll } from '../db/indexers';
 import { db } from '../db/schema';
 import { useData } from '../store/dataStore';
 import { useUI, type Theme } from '../store/uiStore';
+import { CloudSyncSettings } from '../components/CloudSync';
 
 export function Settings() {
   const { theme, setTheme } = useUI();
@@ -60,6 +61,8 @@ export function Settings() {
           ))}
         </div>
       </section>
+
+      <CloudSyncSettings />
 
       <section className="card-section">
         <h3>Backup &amp; restore</h3>

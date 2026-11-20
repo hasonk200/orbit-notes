@@ -30,6 +30,7 @@ export interface ObjType {
   defaultTemplate?: JSONContent | null;
   builtin?: boolean;
   order: number;
+  updatedAt?: number;
 }
 
 export interface Obj {

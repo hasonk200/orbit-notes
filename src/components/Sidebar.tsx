@@ -6,6 +6,7 @@ import { objPath, useOpen, usePane } from '../store/pane';
 import { getOrCreateDaily } from '../db/indexers';
 import { todayISO } from '../lib/dates';
 import { NewMenu } from './NewMenu';
+import { SyncIndicator } from './CloudSync';
 
 function NavItem({ icon, label, path, active, badge, onClick }: { icon: React.ReactNode; label: string; path?: string; active?: boolean; badge?: React.ReactNode; onClick?: (e: React.MouseEvent) => void }) {
   const open = useOpen();
@@ -153,6 +154,7 @@ export function Sidebar() {
       </div>
 
       <div className="sb-foot">
+        <SyncIndicator />
         <NavItem icon={<Trash size={16} />} label="Trash" path="/trash" active={p === '/trash'} badge={counts.trash || null} />
         <div className="sb-foot-row">
           <NavItem icon={<Settings size={16} />} label="Settings" path="/settings" active={p === '/settings'} />

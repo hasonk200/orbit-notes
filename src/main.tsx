@@ -6,6 +6,7 @@ import { ensureSeed } from './db/seed';
 import { startDataSync } from './store/dataStore';
 import { applyTheme, useUI } from './store/uiStore';
 import { autoBackupIfDue } from './db/fsSync';
+import { initSync } from './sync/engine';
 import './styles/tokens.css';
 import './styles/app.css';
 
@@ -21,6 +22,11 @@ async function boot() {
     return;
   }
   startDataSync();
+  try {
+    initSync();
+  } catch (e) {
+    console.error('Orbit: cloud sync failed to start', e);
+  }
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <BrowserRouter>
