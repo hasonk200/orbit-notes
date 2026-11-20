@@ -10,6 +10,7 @@
   "dependencies": {
     "@tiptap/extension-mention": "^3.35.0",
     "@tiptap/extension-placeholder": "^3.35.0",
+    "@tiptap/extension-table": "^3.35.0",
     "@tiptap/extension-task-item": "^3.35.0",
     "@tiptap/extension-task-list": "^3.35.0",
     "@tiptap/pm": "^3.35.0",

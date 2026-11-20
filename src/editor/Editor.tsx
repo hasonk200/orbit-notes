@@ -1,35 +1,73 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TaskList } from '@tiptap/extension-task-list';
 import { Placeholder } from '@tiptap/extension-placeholder';
+import { TableKit } from '@tiptap/extension-table';
 import { OrbitTaskItem } from './extensions/TaskItem';
+import { OutlinerListItem } from './extensions/OutlinerListItem';
+import { Callout } from './extensions/Callout';
+import { Toggle } from './extensions/Toggle';
 import { ObjectLink } from './extensions/ObjectLink';
 import { Tag } from './extensions/TagSuggest';
 import { DateRef } from './extensions/DateRef';
 import { BlobImage } from './extensions/BlobImage';
 import { SlashMenu } from './SlashMenu';
+import { BlockDragHandle } from './BlockDragHandle';
 import type { JSONContent, Obj } from '../db/schema';
 import { saveObject } from '../db/indexers';
 
 export function buildExtensions(placeholder: string) {
   return [
     StarterKit.configure({
+      listItem: false,
       heading: { levels: [1, 2, 3] },
       link: { openOnClick: true, autolink: true, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' } },
     }),
+    OutlinerListItem,
     Placeholder.configure({
       placeholder: ({ node }) => (node.type.name === 'heading' ? 'Heading' : placeholder),
       showOnlyCurrent: true,
     }),
     TaskList,
     OrbitTaskItem,
+    Callout,
+    Toggle,
+    TableKit.configure({
+      table: { resizable: true, renderWrapper: true },
+    }),
     ObjectLink,
     Tag,
     DateRef,
     BlobImage,
     SlashMenu,
   ];
+}
+
+function TableToolbar({ editor }: { editor: Editor }) {
+  return (
+    <div className="table-bar" contentEditable={false}>
+      <span className="table-bar-label">Table</span>
+      <button type="button" onClick={() => editor.chain().focus().addRowAfter().run()}>
+        + Row
+      </button>
+      <button type="button" onClick={() => editor.chain().focus().addColumnAfter().run()}>
+        + Col
+      </button>
+      <button type="button" onClick={() => editor.chain().focus().deleteRow().run()}>
+        − Row
+      </button>
+      <button type="button" onClick={() => editor.chain().focus().deleteColumn().run()}>
+        − Col
+      </button>
+      <button type="button" onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
+        Header
+      </button>
+      <button type="button" className="danger" onClick={() => editor.chain().focus().deleteTable().run()}>
+        Delete
+      </button>
+    </div>
+  );
 }
 
 interface RichEditorProps {
@@ -40,13 +78,27 @@ interface RichEditorProps {
   editable?: boolean;
   autofocus?: boolean;
   className?: string;
+  showGutter?: boolean;
   onReady?: (e: Editor) => void;
 }
 
 /** Generic editor. Re-created when docKey changes. */
-export function RichEditor({ docKey, content, onChange, placeholder, editable = true, autofocus, className, onReady }: RichEditorProps) {
+export function RichEditor({
+  docKey,
+  content,
+  onChange,
+  placeholder,
+  editable = true,
+  autofocus,
+  className,
+  showGutter = true,
+  onReady,
+}: RichEditorProps) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [inTable, setInTable] = useState(false);
+
   const editor = useEditor(
     {
       extensions: buildExtensions(placeholder ?? 'Write something, or type / for commands, [[ to link, # to tag, @ for dates'),
@@ -55,6 +107,8 @@ export function RichEditor({ docKey, content, onChange, placeholder, editable = 
       autofocus: autofocus ? 'end' : false,
       editorProps: { attributes: { class: `prose ${className ?? ''}`, spellcheck: 'true' } },
       onUpdate: ({ editor }) => onChangeRef.current(editor.getJSON() as JSONContent),
+      onSelectionUpdate: ({ editor }) => setInTable(editor.isActive('table')),
+      onTransaction: ({ editor }) => setInTable(editor.isActive('table')),
     },
     [docKey],
   );
@@ -64,7 +118,14 @@ export function RichEditor({ docKey, content, onChange, placeholder, editable = 
   useEffect(() => {
     editor?.setEditable(editable, false);
   }, [editor, editable]);
-  return <EditorContent editor={editor} className="editor-root" />;
+
+  return (
+    <div ref={wrapRef} className={`editor-shell${showGutter && editable ? ' with-gutter' : ''}`}>
+      {showGutter && editable && <BlockDragHandle editor={editor} containerRef={wrapRef} />}
+      {editable && editor && inTable && <TableToolbar editor={editor} />}
+      <EditorContent editor={editor} className="editor-root" />
+    </div>
+  );
 }
 
 /**

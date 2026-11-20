@@ -36,6 +36,7 @@ export function CommandPalette() {
   const setPalette = useUI((s) => s.setPalette);
   const objects = useData((s) => s.objects);
   const types = useData((s) => s.types);
+  const collections = useData((s) => s.collections);
   const open = useOpen();
   const [q, setQ] = useState('');
   const [index, setIndex] = useState(0);
@@ -134,6 +135,10 @@ export function CommandPalette() {
       ['🗑', 'Trash', '/trash'],
       ['⚙', 'Settings', '/settings'],
       ...types.map((t) => [t.icon, `All ${t.name}s`, `/type/${t.id}`] as [string, string, string]),
+      ...collections.map((c) => {
+        const t = typeMap.get(c.typeId);
+        return [c.icon || '📁', `${t?.name ?? ''} / ${c.name}`, `/type/${c.typeId}?collection=${c.id}`] as [string, string, string];
+      }),
     ];
     const lq = query.toLowerCase();
     for (const [icon, label, path] of views) {
@@ -154,7 +159,7 @@ export function CommandPalette() {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, search, texts, objects, types]);
+  }, [q, search, texts, objects, types, collections]);
 
   useEffect(() => setIndex(0), [q]);
   useEffect(() => {

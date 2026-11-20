@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { displayTitle, useActiveObjects, useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
+import { useUI } from '../store/uiStore';
 
 interface GNode {
   id: string;
@@ -21,12 +22,26 @@ export function GraphView() {
   const objects = useActiveObjects();
   const types = useData((s) => s.types);
   const links = useData((s) => s.links);
+  const theme = useUI((s) => s.theme);
   const open = useOpen();
   const wrap = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 600, h: 400 });
   const [hidden, setHidden] = useState<Set<string>>(() => new Set(['daily']));
   const [hideOrphans, setHideOrphans] = useState(false);
   const [hover, setHover] = useState<string | null>(null);
+  const [colors, setColors] = useState(() => ({ text: cssVar('--text') || '#222', line: cssVar('--line-strong') || '#ccc' }));
+
+  useEffect(() => {
+    const sync = () => setColors({ text: cssVar('--text') || '#222', line: cssVar('--line-strong') || '#ccc' });
+    sync();
+    const raf = requestAnimationFrame(sync);
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener?.('change', sync);
+    return () => {
+      cancelAnimationFrame(raf);
+      mq.removeEventListener?.('change', sync);
+    };
+  }, [theme]);
 
   useEffect(() => {
     const el = wrap.current;
@@ -80,8 +95,7 @@ export function GraphView() {
     return s;
   }, [hover, data]);
 
-  const text = cssVar('--text') || '#222';
-  const line = cssVar('--line-strong') || '#ccc';
+  const { text, line } = colors;
 
   const toggle = (id: string) => {
     const next = new Set(hidden);

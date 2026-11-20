@@ -1,14 +1,15 @@
 import JSZip from 'jszip';
 import { db, getMeta, SCHEMA_VERSION, setMeta, type BlobRec } from './schema';
-import { extForMime } from './blobs';
+import { clearBlobUrlCache, extForMime } from './blobs';
 import { reindexAll } from './indexers';
 
 const LOCAL_META_KEYS = new Set(['backupDirHandle']);
 
 export async function buildBackupZip(): Promise<Blob> {
-  const [meta, types, objects, links, tasks, blobs] = await Promise.all([
+  const [meta, types, collections, objects, links, tasks, blobs] = await Promise.all([
     db.meta.toArray(),
     db.types.toArray(),
+    db.collections.toArray(),
     db.objects.toArray(),
     db.links.toArray(),
     db.tasks.toArray(),
@@ -22,6 +23,7 @@ export async function buildBackupZip(): Promise<Blob> {
     exportedAt: new Date().toISOString(),
     meta: meta.filter((m) => !LOCAL_META_KEYS.has(m.key)),
     types,
+    collections,
     objects,
     links,
     tasks,
@@ -65,12 +67,22 @@ export async function importBackupZip(file: Blob) {
     blobs.push({ ...rest, data: new Blob([raw], { type: b.mimeType }) });
   }
   const handle = await getMeta('backupDirHandle');
-  await db.transaction('rw', [db.meta, db.types, db.objects, db.links, db.tasks, db.blobs], async () => {
-    await Promise.all([db.meta.clear(), db.types.clear(), db.objects.clear(), db.links.clear(), db.tasks.clear(), db.blobs.clear()]);
+  clearBlobUrlCache();
+  await db.transaction('rw', [db.meta, db.types, db.collections, db.objects, db.links, db.tasks, db.blobs], async () => {
+    await Promise.all([
+      db.meta.clear(),
+      db.types.clear(),
+      db.collections.clear(),
+      db.objects.clear(),
+      db.links.clear(),
+      db.tasks.clear(),
+      db.blobs.clear(),
+    ]);
     await db.meta.bulkPut((data.meta ?? []).filter((m: any) => !LOCAL_META_KEYS.has(m.key)));
     if (handle) await db.meta.put({ key: 'backupDirHandle', value: handle });
     await db.meta.put({ key: 'schemaVersion', value: SCHEMA_VERSION });
     await db.types.bulkPut(data.types ?? []);
+    if (Array.isArray(data.collections) && data.collections.length) await db.collections.bulkPut(data.collections);
     await db.objects.bulkPut(data.objects);
     await db.links.bulkPut(data.links ?? []);
     await db.tasks.bulkPut(data.tasks ?? []);

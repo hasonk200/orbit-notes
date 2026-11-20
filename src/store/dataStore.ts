@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import { liveQuery } from 'dexie';
 import { useMemo } from 'react';
-import { db, type LinkRec, type Obj, type ObjType, type TaskRec } from '../db/schema';
+import { db, type CollectionRec, type LinkRec, type Obj, type ObjType, type TaskRec } from '../db/schema';
 
 interface DataState {
   ready: boolean;
   objects: Obj[];
   types: ObjType[];
+  collections: CollectionRec[];
   tasks: TaskRec[];
   links: LinkRec[];
   pinned: string[];
@@ -18,6 +19,7 @@ export const useData = create<DataState>(() => ({
   ready: false,
   objects: [],
   types: [],
+  collections: [],
   tasks: [],
   links: [],
   pinned: [],
@@ -29,15 +31,24 @@ export function startDataSync() {
   if (started) return;
   started = true;
   liveQuery(async () => {
-    const [objects, types, tasks, links, pinned, lastBackupAt] = await Promise.all([
+    const [objects, types, collections, tasks, links, pinned, lastBackupAt] = await Promise.all([
       db.objects.toArray(),
       db.types.orderBy('order').toArray(),
+      db.collections.orderBy('order').toArray(),
       db.tasks.toArray(),
       db.links.toArray(),
       db.meta.get('pinned'),
       db.meta.get('lastBackupAt'),
     ]);
-    return { objects, types, tasks, links, pinned: (pinned?.value as string[]) ?? [], lastBackupAt: (lastBackupAt?.value as number) ?? null };
+    return {
+      objects,
+      types,
+      collections,
+      tasks,
+      links,
+      pinned: (pinned?.value as string[]) ?? [],
+      lastBackupAt: (lastBackupAt?.value as number) ?? null,
+    };
   }).subscribe({
     next: (v) => useData.setState({ ...v, ready: true }),
     error: (e) => console.error('Orbit live query failed', e),

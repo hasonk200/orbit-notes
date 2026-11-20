@@ -147,7 +147,9 @@ export function Settings() {
       <section className="card-section">
         <h3>Data</h3>
         <p className="muted small">
-          {objects.filter((o) => !o.deletedAt).length} objects · {tasks.length} tasks · {storage.blobs} images ({(storage.bytes / 1024 / 1024).toFixed(1)} MB)
+          {objects.filter((o) => !o.deletedAt).length} objects ·{' '}
+          {tasks.filter((t) => t.text.trim() && !objects.find((o) => o.id === t.objectId)?.deletedAt).length} tasks · {storage.blobs} images (
+          {(storage.bytes / 1024 / 1024).toFixed(1)} MB)
         </p>
         <div className="btn-row">
           <button
@@ -174,7 +176,8 @@ export function Settings() {
           <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>D</kbd> Today’s note</li>
           <li><kbd>Ctrl</kbd> + <kbd>\</kbd> Toggle sidebar</li>
           <li><kbd>Alt</kbd> + click a link: open in split view</li>
-          <li><kbd>/</kbd> commands · <kbd>[[</kbd> link · <kbd>#</kbd> tag · <kbd>@</kbd> date (sets the due date inside a task)</li>
+          <li><kbd>/</kbd> commands (Callout, Toggle, Table, Outliner…) · <kbd>[[</kbd> link · <kbd>#</kbd> tag · <kbd>@</kbd> date</li>
+          <li><kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd> nest bullet points · <kbd>Ctrl</kbd> + <kbd>.</kbd> collapse / expand bullet branch</li>
         </ul>
       </section>
     </div>

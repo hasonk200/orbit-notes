@@ -47,6 +47,11 @@ export async function saveImage(file: Blob): Promise<string> {
 
 const urlCache = new Map<string, string>();
 
+export function clearBlobUrlCache() {
+  for (const u of urlCache.values()) URL.revokeObjectURL(u);
+  urlCache.clear();
+}
+
 export function useBlobUrl(blobId?: string | null) {
   const [url, setUrl] = useState<string | null>(blobId ? urlCache.get(blobId) ?? null : null);
   useEffect(() => {

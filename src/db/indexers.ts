@@ -1,4 +1,4 @@
-import { db, uid, type JSONContent, type LinkRec, type Obj, type ObjType, type TaskRec } from './schema';
+import { db, uid, type CollectionRec, type JSONContent, type LinkRec, type Obj, type ObjType, type TaskPriority, type TaskRec } from './schema';
 import { assignTaskIds, emptyDoc, extractBlobIds, extractLinkIds, extractTags, extractTasks, patchTaskInDoc } from '../lib/content';
 import { dailyTitle, toISODate } from '../lib/dates';
 
@@ -32,13 +32,14 @@ async function reindex(obj: Obj, type?: ObjType) {
   const now = Date.now();
   const rows: TaskRec[] = extracted.map((t) => {
     const prev = oldMap.get(t.id);
-    const changed = !prev || prev.text !== t.text || prev.done !== t.done || (prev.due ?? null) !== t.due;
+    const changed = !prev || prev.text !== t.text || prev.done !== t.done || (prev.due ?? null) !== t.due || (prev.priority ?? null) !== t.priority;
     return {
       id: t.id,
       objectId: obj.id,
       text: t.text,
       done: t.done,
       due: t.due,
+      priority: t.priority,
       createdAt: prev?.createdAt ?? now,
       updatedAt: changed ? now : prev!.updatedAt,
     };
@@ -167,11 +168,50 @@ export async function convertType(id: string, newTypeId: string) {
     const oldDef = cur?.properties.find((d) => d.key === def.key && d.kind === def.kind);
     if (oldDef && obj.props[def.key] !== undefined) props[def.key] = obj.props[def.key];
   }
-  await saveObject(id, { typeId: newTypeId, props, dailyDate: newTypeId === 'daily' ? obj.dailyDate : null });
+  await saveObject(id, { typeId: newTypeId, props, collectionIds: [], dailyDate: newTypeId === 'daily' ? obj.dailyDate : null });
+}
+
+export async function createCollection(typeId: string, name: string, icon?: string | null): Promise<CollectionRec> {
+  const existing = await db.collections.where('typeId').equals(typeId).toArray();
+  const col: CollectionRec = {
+    id: uid(),
+    typeId,
+    name: name.trim() || 'Untitled collection',
+    icon: icon ?? '📁',
+    color: null,
+    order: existing.length,
+    createdAt: Date.now(),
+  };
+  await db.collections.add(col);
+  return col;
+}
+
+export async function updateCollection(id: string, patch: Partial<Pick<CollectionRec, 'name' | 'icon' | 'color' | 'order'>>) {
+  await db.collections.update(id, patch);
+}
+
+export async function deleteCollection(id: string) {
+  await db.transaction('rw', [db.collections, db.objects], async () => {
+    await db.collections.delete(id);
+    const objs = await db.objects.toArray();
+    for (const o of objs) {
+      if (o.collectionIds?.includes(id)) {
+        await db.objects.put({ ...o, collectionIds: o.collectionIds.filter((c) => c !== id) });
+      }
+    }
+  });
+}
+
+export async function toggleObjectCollection(objectId: string, collectionId: string) {
+  await saveObject(objectId, (cur) => {
+    const list = cur.collectionIds ?? [];
+    const next = list.includes(collectionId) ? list.filter((c) => c !== collectionId) : [...list, collectionId];
+    return { collectionIds: next };
+  });
 }
 
 /** Write a task change back into the exact node of its source object. */
-export async function updateTask(taskId: string, patch: { checked?: boolean; due?: string | null }) {
+export async function updateTask(taskId: string, patch: { checked?: boolean; due?: string | null; priority?: TaskPriority | null }) {
   const task = await db.tasks.get(taskId);
   if (!task) return;
   const obj = await db.objects.get(task.objectId);

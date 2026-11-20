@@ -14,6 +14,7 @@ export function ObjectCard({ obj, type }: { obj: Obj; type?: ObjType }) {
     .map((d) => formatPropValue(d, obj.props[d.key], objects))
     .filter(Boolean)
     .slice(0, 3);
+  const titleOf = (id: string) => displayTitle(objects.find((x) => x.id === id));
   return (
     <button type="button" className="obj-card" style={{ ['--type-color' as any]: type?.color }} onClick={(e) => open(objPath(obj.id), e)}>
       {cover ? <img className="obj-card-cover" src={cover} alt="" /> : <div className="obj-card-band" />}
@@ -28,7 +29,7 @@ export function ObjectCard({ obj, type }: { obj: Obj; type?: ObjType }) {
             ))}
           </div>
         )}
-        <p className="obj-card-snippet">{firstText(obj.content, 140)}</p>
+        <p className="obj-card-snippet">{firstText(obj.content, 140, titleOf)}</p>
         <div className="obj-card-foot">Edited {formatDistanceToNow(obj.updatedAt, { addSuffix: true })}</div>
       </div>
     </button>

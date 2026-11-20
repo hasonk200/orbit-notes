@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ExternalLink, Plus, X } from 'lucide-react';
+import { ExternalLink, Folder, Plus, X } from 'lucide-react';
 import type { Obj, ObjType, PropertyDef } from '../db/schema';
-import { createObject, setProp } from '../db/indexers';
+import { createCollection, createObject, setProp, toggleObjectCollection } from '../db/indexers';
 import { displayTitle, useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { shortDate } from '../lib/dates';
@@ -161,6 +161,71 @@ export function PropertyField({ def, obj }: { def: PropertyDef; obj: Obj }) {
   }
 }
 
+function CollectionPicker({ obj, type }: { obj: Obj; type: ObjType }) {
+  const collections = useData((s) => s.collections);
+  const open = useOpen();
+  const [picking, setPicking] = useState(false);
+  const [q, setQ] = useState('');
+  const btn = useRef<HTMLButtonElement>(null);
+
+  const typeCols = collections.filter((c) => c.typeId === type.id);
+  const assignedIds = obj.collectionIds ?? [];
+  const assigned = assignedIds.map((id) => typeCols.find((c) => c.id === id)).filter(Boolean);
+  const candidates = typeCols.filter((c) => !assignedIds.includes(c.id) && (!q || c.name.toLowerCase().includes(q.toLowerCase())));
+
+  return (
+    <div className="relation">
+      {assigned.map((c) => (
+        <span key={c!.id} className="rel-chip col-chip" style={{ ['--type-color' as any]: type.color }}>
+          <button type="button" onClick={(e) => open(`/type/${type.id}?collection=${c!.id}`, e)}>
+            {c!.icon || '📁'} {c!.name}
+          </button>
+          <button type="button" className="rel-x" onClick={() => toggleObjectCollection(obj.id, c!.id)} title="Remove from collection">
+            <X size={12} />
+          </button>
+        </span>
+      ))}
+      <button type="button" ref={btn} className="rel-add" onClick={() => setPicking(true)}>
+        <Plus size={13} /> {assigned.length ? '' : 'Add to collection'}
+      </button>
+      {picking && (
+        <Popover anchor={btn.current} onClose={() => setPicking(false)} className="rel-picker">
+          <input autoFocus placeholder="Search or create collection…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <div className="rel-options">
+            {candidates.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={async () => {
+                  await toggleObjectCollection(obj.id, c.id);
+                  setQ('');
+                }}
+              >
+                {c.icon || '📁'} {c.name}
+              </button>
+            ))}
+            {q.trim() && !typeCols.some((c) => c.name.toLowerCase() === q.trim().toLowerCase()) && (
+              <button
+                type="button"
+                className="rel-create"
+                onClick={async () => {
+                  const col = await createCollection(type.id, q.trim());
+                  await toggleObjectCollection(obj.id, col.id);
+                  setQ('');
+                  setPicking(false);
+                }}
+              >
+                <Folder size={13} /> Create collection “{q.trim()}”
+              </button>
+            )}
+            {!q && candidates.length === 0 && <div className="muted small pad">Type a name to create a collection.</div>}
+          </div>
+        </Popover>
+      )}
+    </div>
+  );
+}
+
 export function PropertyPanel({ obj, type }: { obj: Obj; type?: ObjType }) {
   const open = useOpen();
   if (!type) return null;
@@ -175,6 +240,14 @@ export function PropertyPanel({ obj, type }: { obj: Obj; type?: ObjType }) {
           </div>
         </div>
       ))}
+      {type.id !== 'daily' && (
+        <div className="prop-row">
+          <div className="prop-name">Collections</div>
+          <div className="prop-value">
+            <CollectionPicker obj={obj} type={type} />
+          </div>
+        </div>
+      )}
       {obj.tags.length > 0 && (
         <div className="prop-row">
           <div className="prop-name">Tags</div>

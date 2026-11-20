@@ -27,7 +27,7 @@ export function renderPath(path: string) {
       if (b?.startsWith('daily-')) return <CalendarView mode="day" date={b.slice(6)} />;
       return <ObjectPage id={b} isNew={q.get('new') === '1'} />;
     case 'type':
-      return <TypeView typeId={b} />;
+      return <TypeView typeId={b} collectionId={q.get('collection')} />;
     case 'tasks':
       return <TasksView />;
     case 'graph':

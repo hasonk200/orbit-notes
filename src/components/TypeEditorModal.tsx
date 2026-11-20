@@ -200,6 +200,7 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
                   docKey={`tpl-${draft.id || 'new'}`}
                   content={template.current}
                   onChange={(j) => (template.current = j)}
+                  showGutter={false}
                   placeholder="Write the starting content for every new object of this type…"
                 />
               </div>

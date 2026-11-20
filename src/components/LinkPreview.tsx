@@ -29,6 +29,7 @@ export function LinkPreview({
     .map((d) => [d.name, formatPropValue(d, obj.props[d.key], objects)] as const)
     .filter(([, v]) => v)
     .slice(0, 4);
+  const titleOf = (id: string) => displayTitle(objects.find((x) => x.id === id));
   return (
     <Popover anchor={anchor} className="link-preview" onMouseEnter={onEnter} onMouseLeave={onLeave}>
       <div className="lp-head" style={{ ['--type-color' as any]: type?.color }}>
@@ -48,7 +49,7 @@ export function LinkPreview({
           ))}
         </dl>
       )}
-      <p className="lp-snippet">{firstText(obj.content, 220) || <em>Empty</em>}</p>
+      <p className="lp-snippet">{firstText(obj.content, 220, titleOf) || <em>Empty</em>}</p>
       <div className="lp-actions" onMouseDown={(e) => e.preventDefault()}>
         <button type="button" onClick={(e) => open(objPath(obj.id), e)}>
           <ExternalLink size={14} /> Open

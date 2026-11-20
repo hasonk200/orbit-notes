@@ -1,4 +1,4 @@
-import type { JSONContent } from '../db/schema';
+import type { JSONContent, TaskPriority } from '../db/schema';
 import { uid } from '../db/schema';
 
 export const emptyDoc = (): JSONContent => ({ type: 'doc', content: [{ type: 'paragraph' }] });
@@ -18,7 +18,13 @@ export function nodeText(node: JSONContent | undefined, titleOf?: (id: string) =
   if (node.type === 'dateRef') return node.attrs?.date ?? '';
   if (node.type === 'hardBreak') return ' ';
   const inner = (node.content ?? []).map((c) => nodeText(c, titleOf));
-  const isBlockContainer = ['doc', 'bulletList', 'orderedList', 'taskList', 'listItem', 'taskItem', 'blockquote'].includes(node.type ?? '');
+  if (node.type === 'toggle') {
+    const head = String(node.attrs?.title ?? '').trim();
+    const body = inner.join('\n').trim();
+    return [head, body].filter(Boolean).join('\n');
+  }
+  if (node.type === 'tableRow') return inner.join(' | ');
+  const isBlockContainer = ['doc', 'bulletList', 'orderedList', 'taskList', 'listItem', 'taskItem', 'blockquote', 'callout', 'table'].includes(node.type ?? '');
   return inner.join(isBlockContainer ? '\n' : '');
 }
 
@@ -55,6 +61,7 @@ export interface ExtractedTask {
   text: string;
   done: boolean;
   due: string | null;
+  priority: TaskPriority | null;
 }
 
 /** Text of a task item, without nested task lists. */
@@ -75,6 +82,7 @@ export function extractTasks(doc: JSONContent | undefined, titleOf?: (id: string
         text: taskOwnText(n, titleOf),
         done: !!n.attrs.checked,
         due: n.attrs.due || null,
+        priority: (n.attrs.priority as TaskPriority) || null,
       });
     }
   });
@@ -96,7 +104,11 @@ export function assignTaskIds(doc: JSONContent, fresh = false): JSONContent {
 }
 
 /** Update the attrs of the task node with this id. Returns a new doc, or null if not found. */
-export function patchTaskInDoc(doc: JSONContent, taskId: string, patch: { checked?: boolean; due?: string | null }): JSONContent | null {
+export function patchTaskInDoc(
+  doc: JSONContent,
+  taskId: string,
+  patch: { checked?: boolean; due?: string | null; priority?: TaskPriority | null },
+): JSONContent | null {
   const copy: JSONContent = JSON.parse(JSON.stringify(doc));
   let found = false;
   walk(copy, (n) => {

@@ -14,12 +14,14 @@ function ObjectLinkView({ node, updateAttributes, selected }: ReactNodeViewProps
   const id = node.attrs.id as string;
   const display = (node.attrs.display as string) === 'card' ? 'card' : 'inline';
   const obj = useObject(id);
+  const objects = useData((s) => s.objects);
   const type = useData((s) => s.types.find((t) => t.id === obj?.typeId));
   const open = useOpen();
   const ref = useRef<HTMLSpanElement>(null);
   const [hover, setHover] = useState(false);
   const timer = useRef<number>(0);
   const gone = !obj || !!obj.deletedAt;
+  const titleOf = (oid: string) => displayTitle(objects.find((x) => x.id === oid));
 
   const enter = () => {
     window.clearTimeout(timer.current);
@@ -40,7 +42,7 @@ function ObjectLinkView({ node, updateAttributes, selected }: ReactNodeViewProps
     <NodeViewWrapper
       as="span"
       ref={ref}
-      className={`olink olink-${display}${gone ? ' olink-gone' : ''}${selected ? ' is-selected' : ''}`}
+      className={`olink olink-mode-${display}${gone ? ' olink-gone' : ''}${selected ? ' is-selected' : ''}`}
       style={{ ['--type-color' as any]: type?.color ?? '#8b8a86' }}
       onMouseEnter={enter}
       onMouseLeave={leave}
@@ -53,7 +55,7 @@ function ObjectLinkView({ node, updateAttributes, selected }: ReactNodeViewProps
           <span className="olink-card-body">
             <span className="olink-card-title">{displayTitle(obj)}</span>
             <span className="olink-card-meta">{type?.name}</span>
-            <span className="olink-card-snippet">{firstText(obj!.content, 120)}</span>
+            <span className="olink-card-snippet">{firstText(obj!.content, 120, titleOf)}</span>
           </span>
         </span>
       ) : (

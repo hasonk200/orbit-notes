@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export type JSONContent = {
   type?: string;
@@ -41,10 +41,21 @@ export interface Obj {
   props: Record<string, any>;
   content: JSONContent;
   tags: string[];
+  collectionIds?: string[];
   createdAt: number;
   updatedAt: number;
   dailyDate?: string | null; // yyyy-MM-dd for daily notes
   deletedAt?: number | null;
+}
+
+export interface CollectionRec {
+  id: string;
+  typeId: string;
+  name: string;
+  icon?: string | null;
+  color?: string | null;
+  order: number;
+  createdAt: number;
 }
 
 export interface BlobRec {
@@ -65,12 +76,15 @@ export interface LinkRec {
   propKey?: string;
 }
 
+export type TaskPriority = 'high' | 'medium' | 'low';
+
 export interface TaskRec {
   id: string; // taskId (stable UUID on the TipTap node)
   objectId: string;
   text: string;
   done: boolean;
   due?: string | null; // yyyy-MM-dd
+  priority?: TaskPriority | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -83,6 +97,7 @@ export interface MetaRec {
 class OrbitDB extends Dexie {
   meta!: Table<MetaRec, string>;
   types!: Table<ObjType, string>;
+  collections!: Table<CollectionRec, string>;
   objects!: Table<Obj, string>;
   blobs!: Table<BlobRec, string>;
   links!: Table<LinkRec, string>;
@@ -93,6 +108,15 @@ class OrbitDB extends Dexie {
     this.version(1).stores({
       meta: 'key',
       types: 'id, order',
+      objects: 'id, typeId, dailyDate, createdAt, updatedAt, *tags',
+      blobs: 'id',
+      links: 'id, fromId, toId',
+      tasks: 'id, objectId, due',
+    });
+    this.version(2).stores({
+      meta: 'key',
+      types: 'id, order',
+      collections: 'id, typeId, order',
       objects: 'id, typeId, dailyDate, createdAt, updatedAt, *tags',
       blobs: 'id',
       links: 'id, fromId, toId',

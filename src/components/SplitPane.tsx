@@ -9,6 +9,7 @@ import { dailyTitle } from '../lib/dates';
 function usePathTitle(path: string): { icon: ReactNode; title: string } {
   const objects = useData((s) => s.objects);
   const types = useData((s) => s.types);
+  const collections = useData((s) => s.collections);
   return useMemo(() => {
     const url = new URL(path, 'http://orbit.local');
     const parts = url.pathname.split('/').filter(Boolean);
@@ -25,7 +26,12 @@ function usePathTitle(path: string): { icon: ReactNode; title: string } {
     }
     if (a === 'type') {
       const t = types.find((x) => x.id === b);
-      return { icon: <span>{t?.icon}</span>, title: t?.name ?? 'Type' };
+      const colId = url.searchParams.get('collection');
+      const col = colId ? collections.find((c) => c.id === colId) : null;
+      return {
+        icon: <span>{col ? col.icon || '📁' : t?.icon}</span>,
+        title: col ? `${t?.name ?? 'Type'} / ${col.name}` : t?.name ?? 'Type',
+      };
     }
     const map: Record<string, [ReactNode, string]> = {
       tasks: [<SquareCheckBig size={15} />, 'Tasks'],
@@ -37,7 +43,7 @@ function usePathTitle(path: string): { icon: ReactNode; title: string } {
     };
     const m = map[a];
     return m ? { icon: m[0], title: m[1] } : { icon: null, title: 'Orbit' };
-  }, [path, objects, types]);
+  }, [path, objects, types, collections]);
 }
 
 function PaneTopBar() {

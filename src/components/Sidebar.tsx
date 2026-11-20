@@ -22,6 +22,7 @@ export function Sidebar() {
   const { path } = usePane();
   const objects = useData((s) => s.objects);
   const types = useData((s) => s.types);
+  const collections = useData((s) => s.collections);
   const tasks = useData((s) => s.tasks);
   const pinned = useData((s) => s.pinned);
   const objMap = useObjMap();
@@ -31,12 +32,16 @@ export function Sidebar() {
 
   const counts = useMemo(() => {
     const c = new Map<string, number>();
+    const col = new Map<string, number>();
     let trash = 0;
     for (const o of objects) {
       if (o.deletedAt) trash++;
-      else c.set(o.typeId, (c.get(o.typeId) ?? 0) + 1);
+      else {
+        c.set(o.typeId, (c.get(o.typeId) ?? 0) + 1);
+        for (const cid of o.collectionIds ?? []) col.set(cid, (col.get(cid) ?? 0) + 1);
+      }
     }
-    return { c, trash };
+    return { c, col, trash };
   }, [objects]);
 
   const openTasks = useMemo(() => {
@@ -44,7 +49,9 @@ export function Sidebar() {
     return tasks.filter((t) => !t.done && t.due && t.due <= today && t.text.trim() && !objMap.get(t.objectId)?.deletedAt).length;
   }, [tasks, objMap]);
 
-  const p = path.split('?')[0];
+  const parsedUrl = new URL(path, 'http://orbit.local');
+  const p = parsedUrl.pathname;
+  const activeColId = parsedUrl.searchParams.get('collection');
   const isCal = p === '/' || p.startsWith('/calendar') || p.startsWith('/daily');
   const nextTheme = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light';
 
@@ -114,20 +121,35 @@ export function Sidebar() {
             <Plus size={14} />
           </button>
         </div>
-        {types.map((t) => (
-          <NavItem
-            key={t.id}
-            icon={
-              <span className="nav-type-icon" style={{ ['--type-color' as any]: t.color }}>
-                {t.icon}
-              </span>
-            }
-            label={t.name}
-            path={`/type/${t.id}`}
-            active={p === `/type/${t.id}`}
-            badge={<span className="muted">{counts.c.get(t.id) ?? 0}</span>}
-          />
-        ))}
+        {types.map((t) => {
+          const cols = collections.filter((c) => c.typeId === t.id);
+          return (
+            <div key={t.id} className="sb-type-group">
+              <NavItem
+                icon={
+                  <span className="nav-type-icon" style={{ ['--type-color' as any]: t.color }}>
+                    {t.icon}
+                  </span>
+                }
+                label={t.name}
+                path={`/type/${t.id}`}
+                active={p === `/type/${t.id}` && !activeColId}
+                badge={<span className="muted">{counts.c.get(t.id) ?? 0}</span>}
+              />
+              {cols.map((col) => (
+                <div key={col.id} className="sb-col-item">
+                  <NavItem
+                    icon={<span className="nav-emoji">{col.icon || '📁'}</span>}
+                    label={col.name}
+                    path={`/type/${t.id}?collection=${col.id}`}
+                    active={p === `/type/${t.id}` && activeColId === col.id}
+                    badge={<span className="muted">{counts.col.get(col.id) ?? 0}</span>}
+                  />
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
 
       <div className="sb-foot">
