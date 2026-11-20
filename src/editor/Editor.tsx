@@ -16,6 +16,7 @@ import { SlashMenu } from './SlashMenu';
 import { BlockDragHandle } from './BlockDragHandle';
 import type { JSONContent, Obj } from '../db/schema';
 import { saveObject } from '../db/indexers';
+import { registerDraft } from '../db/drafts';
 
 export function buildExtensions(placeholder: string) {
   return [
@@ -137,37 +138,48 @@ export function ObjectEditor({ obj, autofocus, placeholder }: { obj: Obj; autofo
   const lastSaved = useRef(JSON.stringify(obj.content));
   const pending = useRef<JSONContent | null>(null);
   const timer = useRef<number>(0);
+  const write = useRef(Promise.resolve());
   const id = obj.id;
 
   const flush = useCallback(() => {
     window.clearTimeout(timer.current);
     const c = pending.current;
-    if (!c) return;
+    if (!c) return write.current;
     pending.current = null;
     lastSaved.current = JSON.stringify(c);
-    void saveObject(id, { content: c });
+    const retryable = write.current.catch(() => {}).then(() => saveObject(id, { content: c })).catch((error: unknown) => {
+      if (!pending.current && write.current === retryable) pending.current = c;
+      throw error;
+    });
+    write.current = retryable;
+    return retryable;
   }, [id]);
+  const flushInBackground = useCallback(() => {
+    void flush().catch((error) => console.error('Orbit could not save the note', error));
+  }, [flush]);
 
   const onChange = useCallback(
     (json: JSONContent) => {
       pending.current = json;
       window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(flush, 400);
+      timer.current = window.setTimeout(flushInBackground, 400);
     },
-    [flush],
+    [flushInBackground],
   );
 
   // flush when leaving the object / closing the tab
   useEffect(() => {
-    const onHide = () => flush();
+    const unregister = registerDraft(id, flush);
+    const onHide = () => flushInBackground();
     window.addEventListener('beforeunload', onHide);
     document.addEventListener('visibilitychange', onHide);
     return () => {
       window.removeEventListener('beforeunload', onHide);
       document.removeEventListener('visibilitychange', onHide);
-      flush();
+      flushInBackground();
+      unregister();
     };
-  }, [flush]);
+  }, [flush, flushInBackground, id]);
 
   // apply changes made elsewhere
   useEffect(() => {

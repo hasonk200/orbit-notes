@@ -43,7 +43,7 @@ export function startDataSync() {
     return {
       objects,
       types,
-      collections,
+      collections: collections.filter((c) => !c.deletedAt),
       tasks,
       links,
       pinned: (pinned?.value as string[]) ?? [],

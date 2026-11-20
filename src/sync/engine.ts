@@ -1,20 +1,22 @@
 /**
  * Two-way sync between the local Dexie database and Firestore.
  *
- * Layout: users/{uid}/{objects|types|blobs|meta}/{id} → { json, updatedAt, deleted?, data? }
- * Records are stored as JSON strings so TipTap documents never hit Firestore's
- * field restrictions. Conflicts resolve by last-write-wins on updatedAt.
+ * Layout: users/{uid}/{objects|types|collections|blobs|meta}/{id}
+ * Notes use a last-synced version to detect conflicting edits. Other records
+ * resolve by updatedAt. TipTap documents are stored as JSON strings.
  * Links, tasks and tags are derived data: they are rebuilt locally, never synced.
  */
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { collection, doc, onSnapshot, writeBatch, type Unsubscribe } from 'firebase/firestore';
 import { create } from 'zustand';
-import { db, type BlobRec, type Obj, type ObjType } from '../db/schema';
-import { reindexObjects } from '../db/indexers';
+import { db, type BlobRec, type ObjType } from '../db/schema';
 import { fb, firebaseConfigured } from './firebase';
+import { syncObject } from './objects';
+import { syncCollection } from './collections';
 
-type Coll = 'objects' | 'types' | 'blobs' | 'meta';
-const COLLS: Coll[] = ['objects', 'types', 'blobs', 'meta'];
+type BatchedCollection = 'types' | 'blobs' | 'meta';
+type Coll = 'objects' | 'collections' | BatchedCollection;
+const COLLS: Coll[] = ['types', 'collections', 'blobs', 'meta', 'objects'];
 const MAX_BLOB_BYTES = 700 * 1024; // base64 must fit in a 1 MiB Firestore document
 
 export type SyncStatus = 'unconfigured' | 'signed-out' | 'connecting' | 'syncing' | 'synced' | 'offline' | 'error';
@@ -42,6 +44,7 @@ let unsubs: Unsubscribe[] = [];
 let flushTimer = 0;
 let flushing = false;
 let ready = false;
+let session = 0;
 
 const key = (c: Coll, id: string) => `${c}/${id}`;
 const split = (k: string) => k.split(/\/(.*)/s).slice(0, 2) as [Coll, string];
@@ -52,11 +55,7 @@ function setStatus(s: Partial<SyncState>) {
 
 // ---------- local record helpers ----------
 
-async function readLocal(c: Coll, id: string, full = true): Promise<{ ts: number; payload: Record<string, any> } | null> {
-  if (c === 'objects') {
-    const o = await db.objects.get(id);
-    return o ? { ts: o.updatedAt, payload: { json: JSON.stringify(o) } } : null;
-  }
+async function readLocal(c: BatchedCollection, id: string, full = true): Promise<{ ts: number; payload: Record<string, any> } | null> {
   if (c === 'types') {
     const t = await db.types.get(id);
     return t ? { ts: t.updatedAt ?? 0, payload: { json: JSON.stringify(t) } } : null;
@@ -96,23 +95,22 @@ function base64ToBlob(b64: string, type: string) {
 export function schedule(c: Coll, id: string) {
   if (!uid) return;
   pending.add(key(c, id));
+  if (!ready || flushing || !navigator.onLine) return;
   window.clearTimeout(flushTimer);
   flushTimer = window.setTimeout(() => void flush(), 800);
 }
 
 async function flush() {
-  if (!uid || !ready || flushing) {
-    if (pending.size && uid) {
-      window.clearTimeout(flushTimer);
-      flushTimer = window.setTimeout(() => void flush(), 1500);
-    }
-    return;
-  }
+  if (!uid || !ready || flushing || !navigator.onLine) return;
   flushing = true;
+  window.clearTimeout(flushTimer);
   const keys = [...pending];
   pending.clear();
   const { fs } = fb();
   const userUid = uid;
+  const currentSession = session;
+  const isCurrent = () => session === currentSession;
+  let retryDelay = 800;
   try {
     let batch = writeBatch(fs);
     let n = 0;
@@ -122,6 +120,7 @@ async function flush() {
     const commit = async () => {
       if (!n) return;
       await batch.commit();
+      if (!isCurrent()) return;
       for (const [k, v] of committed) remote.set(k, v);
       committed.length = 0;
       batch = writeBatch(fs);
@@ -130,12 +129,16 @@ async function flush() {
     };
     for (const k of keys) {
       const [c, id] = split(k);
+      if (c === 'objects' || c === 'collections') continue;
       let local = await readLocal(c, id, false);
+      if (!isCurrent()) return;
       const r = remote.get(k);
       const ref = doc(fs, 'users', userUid, c, id);
       if (!local) {
         // deleted locally → tombstone, unless the cloud already has it deleted
         if (r && !r.deleted) {
+          if (n >= 400) await commit();
+          if (!isCurrent()) return;
           const ts = Date.now();
           batch.set(ref, { deleted: true, updatedAt: ts });
           committed.push([k, { ts, deleted: true }]);
@@ -147,57 +150,80 @@ async function flush() {
             skipped.add(k);
             continue;
           }
-          local = (await readLocal(c, id, true))!;
+          local = await readLocal(c, id, true);
+          if (!local || !isCurrent()) continue;
+          skipped.delete(k);
         }
         const size = String(local.payload.json).length + String(local.payload.data ?? '').length;
         if (n >= 400 || bytes + size > 8 * 1024 * 1024) await commit();
+        if (!isCurrent()) return;
         batch.set(ref, { ...local.payload, updatedAt: local.ts, deleted: false });
         committed.push([k, { ts: local.ts, deleted: false }]);
         n++;
         bytes += size;
       }
     }
+    if (!isCurrent()) return;
     await commit();
-    setStatus({ skipped: [...skipped], lastSyncAt: Date.now(), error: null, status: navigator.onLine ? 'synced' : 'offline' });
+    if (!isCurrent()) return;
+
+    const records = keys.filter((k) => k.startsWith('objects/') || k.startsWith('collections/'));
+    let failure: string | null = null;
+    for (let i = 0; i < records.length && isCurrent(); i += 8) {
+      const group = records.slice(i, i + 8);
+      const results = await Promise.allSettled(group.map((k) => {
+        const [collection, id] = split(k);
+        const sync = collection === 'objects' ? syncObject : syncCollection;
+        return sync(fs, userUid, id, isCurrent);
+      }));
+      if (!isCurrent()) return;
+      results.forEach((result, j) => {
+        if (result.status === 'rejected') {
+          pending.add(group[j]);
+          failure ??= result.reason?.message ?? String(result.reason);
+        }
+      });
+    }
+    if (!isCurrent()) return;
+    if (failure) retryDelay = 15000;
+    setStatus({
+      skipped: [...skipped], lastSyncAt: Date.now(), error: failure,
+      status: !navigator.onLine ? 'offline' : failure ? 'error' : pending.size ? 'syncing' : 'synced',
+    });
   } catch (e: any) {
+    if (!isCurrent()) return;
     // put keys back so the next attempt retries them
     keys.forEach((k) => pending.add(k));
-    setStatus({ status: 'error', error: e?.message ?? String(e) });
-    window.clearTimeout(flushTimer);
-    flushTimer = window.setTimeout(() => void flush(), 15000);
+    setStatus({ status: navigator.onLine ? 'error' : 'offline', error: e?.message ?? String(e) });
+    retryDelay = 15000;
   } finally {
     flushing = false;
-    if (pending.size) {
+    if (ready && pending.size && navigator.onLine) {
       window.clearTimeout(flushTimer);
-      flushTimer = window.setTimeout(() => void flush(), 800);
+      flushTimer = window.setTimeout(() => void flush(), retryDelay);
     }
   }
 }
 
 // ---------- pull ----------
 
-async function applyRemote(c: Coll, changes: { id: string; data: any }[]) {
-  const touchedObjects: string[] = [];
+async function applyRemote(c: BatchedCollection, changes: { id: string; data: any }[], isCurrent: () => boolean) {
   for (const { id, data } of changes) {
+    if (!isCurrent()) return;
     const ts = Number(data.updatedAt ?? 0);
     const deleted = !!data.deleted;
     remote.set(key(c, id), { ts, deleted });
-    const local = await readLocal(c, id);
+    const local = await readLocal(c, id, false);
+    if (!isCurrent()) return;
     if (deleted) {
       if (!local || local.ts > ts) continue;
-      if (c === 'objects') {
-        await db.objects.delete(id);
-        touchedObjects.push(id);
-      } else if (c === 'types') await db.types.delete(id);
+      if (c === 'types') await db.types.delete(id);
       else if (c === 'blobs') await db.blobs.delete(id);
       continue;
     }
     if (local && local.ts >= ts) continue;
     try {
-      if (c === 'objects') {
-        await db.objects.put(JSON.parse(data.json) as Obj);
-        touchedObjects.push(id);
-      } else if (c === 'types') await db.types.put(JSON.parse(data.json) as ObjType);
+      if (c === 'types') await db.types.put(JSON.parse(data.json) as ObjType);
       else if (c === 'blobs') {
         const meta = JSON.parse(data.json);
         await db.blobs.put({ ...meta, data: base64ToBlob(data.data ?? '', meta.mimeType) } as BlobRec);
@@ -211,14 +237,23 @@ async function applyRemote(c: Coll, changes: { id: string; data: any }[]) {
       console.warn('Orbit sync: could not apply', c, id, e);
     }
   }
-  if (touchedObjects.length) await reindexObjects(touchedObjects);
 }
 
 async function reconcileAll() {
-  // push every local record the cloud doesn't have, or has an older version of
-  const [objs, types, blobs] = await Promise.all([db.objects.toCollection().primaryKeys(), db.types.toCollection().primaryKeys(), db.blobs.toCollection().primaryKeys()]);
+  const account = uid;
+  const currentSession = session;
+  if (!account) return;
+  const [objs, types, collections, blobs, bases] = await Promise.all([
+    db.objects.toCollection().primaryKeys(), db.types.toCollection().primaryKeys(),
+    db.collections.toCollection().primaryKeys(), db.blobs.toCollection().primaryKeys(),
+    db.objectSyncBases.where('account').equals(account).toArray(),
+  ]);
+  if (session !== currentSession) return;
   objs.forEach((id) => pending.add(key('objects', String(id))));
+  // A locally removed note can still need a tombstone after an offline restart.
+  bases.filter((base) => base.local !== null).forEach((base) => pending.add(key('objects', base.objectId)));
   types.forEach((id) => pending.add(key('types', String(id))));
+  collections.forEach((id) => pending.add(key('collections', String(id))));
   blobs.forEach((id) => pending.add(key('blobs', String(id))));
   pending.add(key('meta', 'pinned'));
   await flush();
@@ -227,11 +262,15 @@ async function reconcileAll() {
 function start(user: User) {
   stop();
   uid = user.uid;
+  const currentSession = session;
+  const isCurrent = () => currentSession === session;
   ready = false;
   remote.clear();
   setStatus({
     status: 'connecting',
     error: null,
+    skipped: [],
+    lastSyncAt: null,
     user: { uid: user.uid, email: user.email, name: user.displayName, photo: user.photoURL },
   });
   const { fs } = fb();
@@ -241,34 +280,45 @@ function start(user: User) {
   for (const c of COLLS) {
     const unsub = onSnapshot(
       collection(fs, 'users', user.uid, c),
-      { includeMetadataChanges: false },
+      { includeMetadataChanges: true },
       (snap) => {
-        const changes = snap
-          .docChanges()
-          .filter((ch) => ch.type !== 'removed' && !ch.doc.metadata.hasPendingWrites)
-          .map((ch) => ({ id: ch.doc.id, data: ch.doc.data() }));
+        if (!isCurrent()) return;
+        if (snap.metadata.fromCache) {
+          if (!navigator.onLine) setStatus({ status: 'offline' });
+          return;
+        }
         chain = chain.then(async () => {
-          if (uid !== user.uid) return;
-          if (changes.length) await applyRemote(c, changes);
+          if (!isCurrent()) return;
+          const initial = !firstSeen.has(c);
+          const changes = initial ? snap.docs.map((doc) => ({ doc, type: 'added' })) : snap.docChanges();
+          const committed = changes.filter(({ doc }) => !doc.metadata.hasPendingWrites);
+          if (c === 'objects' || c === 'collections') {
+            committed.forEach(({ doc }) => schedule(c, doc.id));
+          } else {
+            await applyRemote(c, committed.filter((change) => change.type !== 'removed').map(({ doc }) => ({ id: doc.id, data: doc.data() })), isCurrent);
+          }
+          if (!isCurrent()) return;
           if (!firstSeen.has(c)) {
             firstSeen.add(c);
             if (firstSeen.size === COLLS.length) {
               ready = true;
               setStatus({ status: 'syncing' });
-              await reconcileAll();
+              void reconcileAll().catch(reportError);
             }
-          } else if (ready && useSync.getState().status !== 'error') {
-            setStatus({ status: snap.metadata.fromCache ? 'offline' : 'synced', lastSyncAt: Date.now() });
           }
-        });
+        }).catch(reportError);
       },
-      (err) => setStatus({ status: 'error', error: err.message }),
+      reportError,
     );
     unsubs.push(unsub);
+  }
+  function reportError(error: unknown) {
+    if (isCurrent()) setStatus({ status: 'error', error: error instanceof Error ? error.message : String(error) });
   }
 }
 
 function stop() {
+  session++;
   unsubs.forEach((u) => u());
   unsubs = [];
   uid = null;
@@ -291,6 +341,7 @@ export function initSync() {
   };
   watch('objects', db.objects);
   watch('types', db.types);
+  watch('collections', db.collections);
   watch('blobs', db.blobs);
   const metaHook = (pk: any) => {
     if (pk === 'pinned' || pk === 'pinnedUpdatedAt') schedule('meta', 'pinned');

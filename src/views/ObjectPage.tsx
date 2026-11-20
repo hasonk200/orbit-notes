@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Columns2, ImagePlus, Pin, PinOff, RotateCcw, Trash, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { togglePinned, useData, useObject } from '../store/dataStore';
 import { objPath, useOpen, usePane } from '../store/pane';
 import { restoreObject, saveObject, softDelete } from '../db/indexers';
+import { registerDraft } from '../db/drafts';
 import { saveImage, useBlobUrl } from '../db/blobs';
 import { ObjectEditor } from '../editor/Editor';
 import { PropertyPanel } from '../components/PropertyPanel';
@@ -16,6 +17,32 @@ function TitleInput({ id, value, autoFocus, disabled }: { id: string; value: str
   const ref = useRef<HTMLTextAreaElement>(null);
   const t = useRef<number>(0);
   const focused = useRef(false);
+  const latestValue = useRef(value);
+  latestValue.current = value;
+  const pending = useRef<string | null>(null);
+  const write = useRef(Promise.resolve());
+  const flush = useCallback(() => {
+    window.clearTimeout(t.current);
+    const title = pending.current;
+    if (title === null) return write.current;
+    pending.current = null;
+    const next = write.current.catch(() => {}).then(() => saveObject(id, { title })).catch((error: unknown) => {
+      if (pending.current === null && write.current === next) pending.current = title;
+      throw error;
+    });
+    write.current = next;
+    return next;
+  }, [id]);
+  const flushInBackground = useCallback(() => {
+    void flush().catch((error) => console.error('Orbit could not save the title', error));
+  }, [flush]);
+  useEffect(() => {
+    const unregister = registerDraft(id, flush);
+    return () => {
+      flushInBackground();
+      unregister();
+    };
+  }, [flush, flushInBackground, id]);
   useEffect(() => {
     if (!focused.current) setV(value);
   }, [value]);
@@ -28,7 +55,6 @@ function TitleInput({ id, value, autoFocus, disabled }: { id: string; value: str
   useEffect(() => {
     if (autoFocus) ref.current?.focus();
   }, [autoFocus]);
-  const commit = (nv: string) => saveObject(id, { title: nv.replace(/\n/g, ' ') });
   return (
     <textarea
       ref={ref}
@@ -40,14 +66,19 @@ function TitleInput({ id, value, autoFocus, disabled }: { id: string; value: str
       onFocus={() => (focused.current = true)}
       onBlur={() => {
         focused.current = false;
-        window.clearTimeout(t.current);
-        if (v !== value) commit(v);
+        if (pending.current === null) {
+          void write.current.then(() => {
+            if (!focused.current && pending.current === null) setV(latestValue.current);
+          }).catch(() => {});
+        }
+        flushInBackground();
       }}
       onChange={(e) => {
         const nv = e.target.value.replace(/\n/g, '');
         setV(nv);
+        pending.current = nv;
         window.clearTimeout(t.current);
-        t.current = window.setTimeout(() => commit(nv), 400);
+        t.current = window.setTimeout(flushInBackground, 400);
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
@@ -95,6 +126,12 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
 
   return (
     <div className="obj-page" style={{ ['--type-color' as any]: type?.color }}>
+      {obj.syncConflictOf && !obj.deletedAt && (
+        <div className="banner warn">
+          Recovered version from a sync conflict.
+          <button type="button" className="btn" onClick={(e) => open('/settings', e)}>Review versions</button>
+        </div>
+      )}
       {obj.deletedAt && (
         <div className="banner warn">
           This object is in the Trash.
@@ -147,7 +184,7 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
           <button type="button" ref={iconBtn} className="obj-icon" onClick={() => setEmojiOpen(true)} title="Change icon">
             {obj.icon || type?.icon || '📄'}
           </button>
-          <TitleInput id={obj.id} value={obj.title} autoFocus={isNew} disabled={!!obj.deletedAt} />
+          <TitleInput key={obj.id} id={obj.id} value={obj.title} autoFocus={isNew} disabled={!!obj.deletedAt} />
         </div>
         {emojiOpen && (
           <EmojiPicker
