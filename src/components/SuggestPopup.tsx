@@ -1,8 +1,10 @@
+import { useT } from '../store/uiStore';
 import { useEffect, useRef } from 'react';
 import { useSuggest } from '../editor/suggestStore';
 import { Popover } from './Popover';
 
 export function SuggestPopup() {
+  const tr = useT();
   const { open, items, index, rect, title, select } = useSuggest();
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -14,14 +16,14 @@ export function SuggestPopup() {
   let lastSection: string | undefined;
   return (
     <Popover rect={rect} className="suggest">
-      <div className="suggest-list" ref={listRef} onMouseDown={(e) => e.preventDefault()}>
-        {items.length === 0 && <div className="suggest-empty">No matches. Keep typing…</div>}
+      <div className="suggest-list" aria-label={tr(title)} ref={listRef} onMouseDown={(e) => e.preventDefault()}>
+        {items.length === 0 && <div className="suggest-empty">{tr('No matches. Keep typing…')}</div>}
         {items.map((it, i) => {
           const header = it.section && it.section !== lastSection ? it.section : null;
           lastSection = it.section;
           return (
             <div key={it.key}>
-              {header && <div className="suggest-section">{i === 0 && title !== header ? header : header}</div>}
+              {header && <div className="suggest-section">{tr(header)}</div>}
               <button
                 type="button"
                 className={`suggest-item${i === index ? ' is-active' : ''}`}

@@ -1,3 +1,4 @@
+import { useT } from '../../store/uiStore';
 import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { useRef, useState } from 'react';
@@ -16,6 +17,7 @@ const TONES: { id: CalloutTone; label: string; emoji: string }[] = [
 const QUICK_EMOJIS = ['💡', '📌', '📝', '✅', '⚠️', '🚨', '🔥', '✨', '🎯', '🧠', '💬', '📎'];
 
 function CalloutView({ node, updateAttributes, editor }: ReactNodeViewProps) {
+  const tr = useT();
   const tone = (node.attrs.tone as CalloutTone) || 'info';
   const emoji = (node.attrs.emoji as string) || '💡';
   const [menuOpen, setMenuOpen] = useState(false);
@@ -29,7 +31,7 @@ function CalloutView({ node, updateAttributes, editor }: ReactNodeViewProps) {
         className="callout-icon"
         contentEditable={false}
         disabled={!editor.isEditable}
-        title="Change callout icon or colour"
+        title={tr('Change callout icon or colour')}
         onClick={() => setMenuOpen((v) => !v)}
       >
         {emoji}
@@ -42,7 +44,7 @@ function CalloutView({ node, updateAttributes, editor }: ReactNodeViewProps) {
               key={t.id}
               type="button"
               className={`callout-dot tone-${t.id}${tone === t.id ? ' active' : ''}`}
-              title={t.label}
+              title={tr(t.label)}
               onClick={() => updateAttributes({ tone: t.id })}
             />
           ))}
@@ -76,7 +78,7 @@ function CalloutView({ node, updateAttributes, editor }: ReactNodeViewProps) {
                   setMenuOpen(false);
                 }}
               >
-                {t.emoji} {t.label}
+                {t.emoji} {tr(t.label)}
               </button>
             ))}
           </div>

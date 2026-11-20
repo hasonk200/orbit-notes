@@ -1,3 +1,4 @@
+import { useT } from '../store/uiStore';
 import type { Editor } from '@tiptap/react';
 import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, Trash } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -52,6 +53,7 @@ export function BlockDragHandle({
   editor: Editor | null;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  const tr = useT();
   const [hovered, setHovered] = useState<HoveredBlock | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
@@ -204,7 +206,7 @@ export function BlockDragHandle({
           style={{ top: hovered.top }}
           onMouseEnter={() => window.clearTimeout(hideTimer.current)}
         >
-          <button type="button" className="gutter-btn" title="Insert block below (/)" onClick={insertBelow}>
+          <button type="button" className="gutter-btn" title={tr('Insert block below (/)')} onClick={insertBelow}>
             <Plus size={14} />
           </button>
           <button
@@ -212,7 +214,7 @@ export function BlockDragHandle({
             type="button"
             className="gutter-btn gutter-grip"
             draggable
-            title="Drag to reorder · Click for block actions"
+            title={tr('Drag to reorder · Click for block actions')}
             onDragStart={(e) => {
               draggingRef.current = hovered.index;
               setDraggingIdx(hovered.index);
@@ -242,7 +244,7 @@ export function BlockDragHandle({
               setMenuOpen(false);
             }}
           >
-            <ArrowUp size={14} /> Move up
+            <ArrowUp size={14} /> {tr('Move up')}
           </button>
           <button
             type="button"
@@ -252,13 +254,13 @@ export function BlockDragHandle({
               setMenuOpen(false);
             }}
           >
-            <ArrowDown size={14} /> Move down
+            <ArrowDown size={14} /> {tr('Move down')}
           </button>
           <button type="button" onClick={duplicateBlock}>
-            <Copy size={14} /> Duplicate
+            <Copy size={14} /> {tr('Duplicate')}
           </button>
           <button type="button" className="danger" onClick={deleteBlock}>
-            <Trash size={14} /> Delete
+            <Trash size={14} /> {tr('Delete')}
           </button>
         </Popover>
       )}

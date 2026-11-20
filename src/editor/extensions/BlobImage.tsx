@@ -1,13 +1,15 @@
+import { useT } from '../../store/uiStore';
 import { Node, type Editor } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { saveImage, useBlobUrl } from '../../db/blobs';
 
 function BlobImageView({ node, selected }: ReactNodeViewProps) {
+  const tr = useT();
   const url = useBlobUrl(node.attrs.blobId);
   return (
     <NodeViewWrapper className={`blob-image${selected ? ' is-selected' : ''}`} data-drag-handle>
-      {url ? <img src={url} alt={node.attrs.alt ?? ''} draggable={false} /> : <div className="blob-image-loading">Loading image…</div>}
+      {url ? <img src={url} alt={node.attrs.alt ?? ''} draggable={false} /> : <div className="blob-image-loading">{tr('Loading image…')}</div>}
     </NodeViewWrapper>
   );
 }

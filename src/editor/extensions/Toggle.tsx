@@ -1,9 +1,12 @@
+import { isComposing } from '../../lib/keyboard';
+import { useT } from '../../store/uiStore';
 import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 function ToggleView({ node, updateAttributes, editor, getPos }: ReactNodeViewProps) {
+  const tr = useT();
   const open = node.attrs.open !== false;
   const titleAttr = (node.attrs.title as string) ?? '';
   const [title, setTitle] = useState(titleAttr);
@@ -35,7 +38,7 @@ function ToggleView({ node, updateAttributes, editor, getPos }: ReactNodeViewPro
           type="button"
           className="toggle-caret"
           aria-expanded={open}
-          title={open ? 'Collapse' : 'Expand'}
+          title={open ? tr('Collapse') : tr('Expand')}
           onClick={() => updateAttributes({ open: !open })}
         >
           <ChevronRight size={15} />
@@ -44,7 +47,7 @@ function ToggleView({ node, updateAttributes, editor, getPos }: ReactNodeViewPro
           ref={inputRef}
           className="toggle-title"
           value={title}
-          placeholder="Toggle heading…"
+          placeholder={tr('Toggle heading…')}
           disabled={!editor.isEditable}
           onFocus={() => (focused.current = true)}
           onBlur={() => {
@@ -56,6 +59,7 @@ function ToggleView({ node, updateAttributes, editor, getPos }: ReactNodeViewPro
             updateAttributes({ title: e.target.value });
           }}
           onKeyDown={(e) => {
+            if (isComposing(e.nativeEvent)) return;
             if (e.key === 'Enter') {
               e.preventDefault();
               focusBody();

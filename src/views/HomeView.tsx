@@ -1,12 +1,14 @@
+import { typeLabel } from '../lib/typeLabels';
 import { CalendarDays, Network, Search, SquareCheckBig } from 'lucide-react';
 import { createObject, getOrCreateDaily } from '../db/indexers';
 import { useActiveObjects, useData, useTypeMap } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
-import { useUI } from '../store/uiStore';
+import { useT, useUI } from '../store/uiStore';
 import { todayISO } from '../lib/dates';
 import { ObjectRow } from '../components/ObjectCard';
 
 export function HomeView() {
+  const tr = useT();
   const objects = useActiveObjects();
   const types = useData((s) => s.types);
   const typeMap = useTypeMap();
@@ -17,13 +19,13 @@ export function HomeView() {
   return (
     <div className="page">
       <header className="page-head">
-        <h1>Explore</h1>
-        <p className="muted">Jump back in, or start something new.</p>
+        <h1>{tr('Explore')}</h1>
+        <p className="muted">{tr('Jump back in, or start something new.')}</p>
       </header>
       <div className="explore-cards">
         <button type="button" className="explore-card" onClick={() => setPalette(true)}>
           <Search size={20} />
-          <span>Search</span>
+          <span>{tr('Search')}</span>
           <kbd>Ctrl K</kbd>
         </button>
         <button
@@ -36,19 +38,19 @@ export function HomeView() {
           }}
         >
           <CalendarDays size={20} />
-          <span>Today’s note</span>
+          <span>{tr('Today’s note')}</span>
         </button>
         <button type="button" className="explore-card" onClick={(e) => open('/tasks', e)}>
           <SquareCheckBig size={20} />
-          <span>Tasks</span>
+          <span>{tr('Tasks')}</span>
         </button>
         <button type="button" className="explore-card" onClick={(e) => open('/graph', e)}>
           <Network size={20} />
-          <span>Graph</span>
+          <span>{tr('Graph')}</span>
         </button>
       </div>
 
-      <h4 className="section-label">Quick create</h4>
+      <h4 className="section-label">{tr('Quick create')}</h4>
       <div className="quick-types">
         {types
           .filter((t) => t.id !== 'daily')
@@ -64,13 +66,13 @@ export function HomeView() {
                 open(objPath(o.id) + '?new=1', { altKey });
               }}
             >
-              {t.icon} {t.name}
+              {t.icon} {typeLabel(t, tr)}
             </button>
           ))}
       </div>
 
-      <h4 className="section-label">Recently edited</h4>
-      {recent.length === 0 && <p className="muted small">Nothing yet. Create your first object above.</p>}
+      <h4 className="section-label">{tr('Recently edited')}</h4>
+      {recent.length === 0 && <p className="muted small">{tr('Nothing yet. Create your first object above.')}</p>}
       <div className="row-list">
         {recent.map((o) => (
           <ObjectRow key={o.id} obj={o} type={typeMap.get(o.typeId)} />

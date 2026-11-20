@@ -3,6 +3,8 @@ import { PluginKey } from '@tiptap/pm/state';
 import Suggestion from '@tiptap/suggestion';
 import { runItem, suggestRender, type SuggestItem } from './suggestStore';
 import { pickImage } from './extensions/BlobImage';
+import { getT } from '../store/uiStore';
+import { includesText } from '../lib/search';
 import { todayISO } from '../lib/dates';
 
 const ITEMS: Omit<SuggestItem, 'key'>[] = [
@@ -57,10 +59,12 @@ export const SlashMenu = Extension.create({
         pluginKey: new PluginKey('slashMenu'),
         char: '/',
         items: ({ query }) => {
-          const q = query.toLowerCase();
-          return ITEMS.filter((i) => !q || i.label.toLowerCase().includes(q) || (i.section ?? '').toLowerCase().includes(q)).map((i) => ({
+          const tr = getT();
+          return ITEMS.filter((i) => [i.label, i.section ?? ''].some((label) => includesText(label, query) || includesText(tr(label), query))).map((i) => ({
             ...i,
             key: i.label,
+            label: tr(i.label),
+            hint: i.hint ? tr(i.hint) : undefined,
           }));
         },
         render: suggestRender('Insert'),

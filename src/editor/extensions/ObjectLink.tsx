@@ -1,3 +1,6 @@
+import { typeLabel } from '../../lib/typeLabels';
+import { includesText, normalizeText } from '../../lib/search';
+import { getT, useT } from '../../store/uiStore';
 import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { PluginKey } from '@tiptap/pm/state';
@@ -11,6 +14,7 @@ import { runItem, suggestRender, type SuggestItem } from '../suggestStore';
 import { LinkPreview } from '../../components/LinkPreview';
 
 function ObjectLinkView({ node, updateAttributes, selected }: ReactNodeViewProps) {
+  const tr = useT();
   const id = node.attrs.id as string;
   const display = (node.attrs.display as string) === 'card' ? 'card' : 'inline';
   const obj = useObject(id);
@@ -53,15 +57,15 @@ function ObjectLinkView({ node, updateAttributes, selected }: ReactNodeViewProps
         <span className="olink-card" contentEditable={false}>
           <span className="olink-card-icon">{icon}</span>
           <span className="olink-card-body">
-            <span className="olink-card-title">{displayTitle(obj)}</span>
-            <span className="olink-card-meta">{type?.name}</span>
+            <span className="olink-card-title">{displayTitle(obj, tr)}</span>
+            <span className="olink-card-meta">{type && typeLabel(type, tr)}</span>
             <span className="olink-card-snippet">{firstText(obj!.content, 120, titleOf)}</span>
           </span>
         </span>
       ) : (
         <span className="olink-pill" contentEditable={false}>
           <span className="olink-icon">{gone ? '⊘' : icon}</span>
-          <span className="olink-title">{gone ? 'Deleted object' : displayTitle(obj)}</span>
+          <span className="olink-title">{gone ? tr('Deleted object') : displayTitle(obj, tr)}</span>
         </span>
       )}
       {hover && !gone && (
@@ -79,14 +83,15 @@ function ObjectLinkView({ node, updateAttributes, selected }: ReactNodeViewProps
 }
 
 const linkItems = async ({ query }: { query: string }): Promise<SuggestItem[]> => {
-  const q = query.trim().toLowerCase();
+  const tr = getT();
+  const q = normalizeText(query.trim());
   const { objects, types } = useData.getState();
   const typeOf = new Map(types.map((t) => [t.id, t]));
   const matches = objects
-    .filter((o) => !o.deletedAt && (!q || (o.title || 'untitled').toLowerCase().includes(q)))
+    .filter((o) => !o.deletedAt && includesText(displayTitle(o, tr), q))
     .sort((a, b) => {
-      const at = (a.title || '').toLowerCase().startsWith(q) ? 0 : 1;
-      const bt = (b.title || '').toLowerCase().startsWith(q) ? 0 : 1;
+      const at = normalizeText(displayTitle(a, tr)).startsWith(q) ? 0 : 1;
+      const bt = normalizeText(displayTitle(b, tr)).startsWith(q) ? 0 : 1;
       return at - bt || b.updatedAt - a.updatedAt;
     })
     .slice(0, 8);
@@ -101,19 +106,19 @@ const linkItems = async ({ query }: { query: string }): Promise<SuggestItem[]> =
       .run();
   const items: SuggestItem[] = matches.map((o) => ({
     key: o.id,
-    label: displayTitle(o),
+    label: displayTitle(o, tr),
     icon: o.icon || typeOf.get(o.typeId)?.icon,
-    hint: typeOf.get(o.typeId)?.name,
+    hint: typeLabel(typeOf.get(o.typeId), tr),
     section: 'Link to',
     run: insert(o.id),
   }));
   if (q) {
-    const exact = objects.some((o) => !o.deletedAt && o.title.trim().toLowerCase() === q);
+    const exact = objects.some((o) => !o.deletedAt && normalizeText(displayTitle(o, tr)) === q);
     if (!exact) {
       for (const t of types.filter((t) => t.id !== 'daily').slice(0, 6)) {
         items.push({
           key: 'new-' + t.id,
-          label: `New ${t.name}: “${query.trim()}”`,
+          label: tr('New {type}: “{title}”', { type: typeLabel(t, tr), title: query.trim() }),
           icon: t.icon,
           section: 'Create',
           run: (editor, range) => {
@@ -149,11 +154,11 @@ export const ObjectLink = Node.create({
   },
   renderHTML({ HTMLAttributes, node }) {
     const o = useData.getState().objects.find((x) => x.id === node.attrs.id);
-    return ['span', mergeAttributes({ 'data-object-link': '' }, HTMLAttributes), `[[${displayTitle(o)}]]`];
+    return ['span', mergeAttributes({ 'data-object-link': '' }, HTMLAttributes), `[[${displayTitle(o, getT())}]]`];
   },
   renderText({ node }) {
     const o = useData.getState().objects.find((x) => x.id === node.attrs.id);
-    return `[[${displayTitle(o)}]]`;
+    return `[[${displayTitle(o, getT())}]]`;
   },
   addNodeView() {
     return ReactNodeViewRenderer(ObjectLinkView, { as: 'span' });

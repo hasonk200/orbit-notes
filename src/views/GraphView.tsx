@@ -1,8 +1,9 @@
+import { typeLabel } from '../lib/typeLabels';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { displayTitle, useActiveObjects, useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
-import { useUI } from '../store/uiStore';
+import { useT, useUI } from '../store/uiStore';
 
 interface GNode {
   id: string;
@@ -19,6 +20,7 @@ function cssVar(name: string) {
 }
 
 export function GraphView() {
+  const tr = useT();
   const objects = useActiveObjects();
   const types = useData((s) => s.types);
   const links = useData((s) => s.links);
@@ -71,13 +73,13 @@ export function GraphView() {
       .filter((o) => !hideOrphans || deg.get(o.id))
       .map((o) => ({
         id: o.id,
-        name: displayTitle(o),
+        name: displayTitle(o, tr),
         color: typeMap.get(o.typeId)?.color ?? '#888',
         icon: o.icon || typeMap.get(o.typeId)?.icon || '',
         deg: deg.get(o.id) ?? 0,
       }));
     return { nodes, links: ls };
-  }, [objects, types, links, hidden, hideOrphans]);
+  }, [objects, types, links, hidden, hideOrphans, tr]);
   // keep the same graph object while nothing visible changed (avoids re-heating the layout on every keystroke elsewhere)
   const sig = built.nodes.map((n) => `${n.id}:${n.name}:${n.color}:${n.deg}`).join(',') + '|' + built.links.map((l) => l.source + '>' + l.target).join(',');
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,11 +111,11 @@ export function GraphView() {
       <div className="graph-filters">
         {types.map((t) => (
           <button key={t.id} type="button" className={`chip${hidden.has(t.id) ? ' off' : ''}`} style={{ ['--type-color' as any]: t.color }} onClick={() => toggle(t.id)}>
-            <span className="dot" /> {t.icon} {t.name}
+            <span className="dot" /> {t.icon} {typeLabel(t, tr)}
           </button>
         ))}
         <label className="chip plain">
-          <input type="checkbox" checked={hideOrphans} onChange={(e) => setHideOrphans(e.target.checked)} /> Hide unlinked
+          <input type="checkbox" checked={hideOrphans} onChange={(e) => setHideOrphans(e.target.checked)} /> {tr('Hide unlinked')}
         </label>
         <span className="muted small">
           {data.nodes.length} objects · {data.links.length} links · Alt+Click opens in split view
@@ -122,8 +124,8 @@ export function GraphView() {
       <div className="graph-wrap" ref={wrap}>
         {data.nodes.length === 0 ? (
           <div className="empty-inline center">
-            <strong>Nothing to show yet.</strong>
-            <span>Create objects and link them with [[ to grow your graph.</span>
+            <strong>{tr('Nothing to show yet.')}</strong>
+            <span>{tr('Create objects and link them with [[ to grow your graph.')}</span>
           </div>
         ) : (
           <ForceGraph2D

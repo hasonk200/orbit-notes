@@ -1,3 +1,4 @@
+import { useT } from '../store/uiStore';
 import type { TaskPriority, TaskRec } from '../db/schema';
 import { updateTask } from '../db/indexers';
 import { displayTitle, useObject, useTypeMap } from '../store/dataStore';
@@ -12,6 +13,7 @@ const NEXT_PRIO: Record<string, TaskPriority | null> = {
 };
 
 export function TaskRow({ task, showSource = true }: { task: TaskRec; showSource?: boolean }) {
+  const tr = useT();
   const src = useObject(task.objectId);
   const typeMap = useTypeMap();
   const open = useOpen();
@@ -30,10 +32,10 @@ export function TaskRow({ task, showSource = true }: { task: TaskRec; showSource
         <span className="task-box" />
       </label>
       <div className="task-row-main">
-        <div className="task-row-text">{task.text || <span className="muted">Empty task</span>}</div>
+        <div className="task-row-text">{task.text || <span className="muted">{tr('Empty task')}</span>}</div>
         {showSource && src && (
           <button type="button" className="task-src" onClick={(e) => open(objPath(src.id), e)}>
-            {src.icon || t?.icon} {displayTitle(src)}
+            {src.icon || t?.icon} {displayTitle(src, tr)}
           </button>
         )}
       </div>
@@ -41,12 +43,12 @@ export function TaskRow({ task, showSource = true }: { task: TaskRec; showSource
         type="button"
         className={`prio-chip${prio ? ` prio-${prio}` : ' prio-none'}`}
         onClick={cyclePrio}
-        title="Click to cycle priority (P1 High → P2 Med → P3 Low → None)"
+        title={tr('Click to cycle priority (P1 High → P2 Med → P3 Low → None)')}
       >
         {prio === 'high' ? 'P1' : prio === 'medium' ? 'P2' : prio === 'low' ? 'P3' : 'P—'}
       </button>
-      <label className={`task-due${overdue ? ' overdue' : ''}${task.due === todayISO() ? ' today' : ''}`} title="Due date">
-        <span>{task.due ? shortDate(task.due) : 'No date'}</span>
+      <label className={`task-due${overdue ? ' overdue' : ''}${task.due === todayISO() ? ' today' : ''}`} title={tr('Due date')}>
+        <span>{task.due ? shortDate(task.due, tr) : tr('No date')}</span>
         <input type="date" value={task.due ?? ''} onChange={(e) => updateTask(task.id, { due: e.target.value || null })} />
       </label>
     </div>
