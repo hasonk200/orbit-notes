@@ -39,7 +39,7 @@ export function Backlinks({ objectId }: { objectId: string }) {
   return (
     <section className="backlinks">
       <h3>
-        Linked in <span className="count">{groups.length}</span>
+        {tr('Linked in')} <span className="count">{groups.length}</span>
       </h3>
       {groups.length === 0 && <p className="muted small">{tr('No other object links here yet. Type [[ in any note to link this one.')}</p>}
       {groups.map(({ src, props, snippets }) => (
