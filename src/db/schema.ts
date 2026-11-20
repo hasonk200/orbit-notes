@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export type JSONContent = {
   type?: string;
@@ -47,6 +47,8 @@ export interface Obj {
   updatedAt: number;
   dailyDate?: string | null; // yyyy-MM-dd for daily notes
   deletedAt?: number | null;
+  syncConflictOf?: string;
+  syncConflictDeleted?: boolean;
 }
 
 export interface CollectionRec {
@@ -57,6 +59,8 @@ export interface CollectionRec {
   color?: string | null;
   order: number;
   createdAt: number;
+  updatedAt?: number;
+  deletedAt?: number | null;
 }
 
 export interface BlobRec {
@@ -95,6 +99,13 @@ export interface MetaRec {
   value: any;
 }
 
+export interface ObjectSyncBase {
+  account: string;
+  objectId: string;
+  local: string | null;
+  cloud: string | null;
+}
+
 class OrbitDB extends Dexie {
   meta!: Table<MetaRec, string>;
   types!: Table<ObjType, string>;
@@ -103,6 +114,7 @@ class OrbitDB extends Dexie {
   blobs!: Table<BlobRec, string>;
   links!: Table<LinkRec, string>;
   tasks!: Table<TaskRec, string>;
+  objectSyncBases!: Table<ObjectSyncBase, [string, string]>;
 
   constructor() {
     super('orbit');
@@ -123,6 +135,7 @@ class OrbitDB extends Dexie {
       links: 'id, fromId, toId',
       tasks: 'id, objectId, due',
     });
+    this.version(3).stores({ objectSyncBases: '[account+objectId], account' });
   }
 }
 
