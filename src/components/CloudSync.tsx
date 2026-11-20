@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Cloud, CloudCheck, CloudOff, LogIn, LogOut, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { syncNow, useSync, type SyncStatus } from '../sync/engine';
-import { signInWithGoogle, signOutOfCloud } from '../sync/firebase';
+import { googleDirectAvailable, signInWithFirebasePopup, signInWithGoogle, signOutOfCloud } from '../sync/firebase';
 import { useOpen } from '../store/pane';
 
 const LABEL: Record<SyncStatus, string> = {
@@ -49,6 +49,10 @@ export function CloudSyncSettings() {
     } catch (e: any) {
       const code = e?.code as string | undefined;
       if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return;
+      if (code === 'popup_failed_to_open') {
+        setMsg('The browser blocked the sign-in window. Allow pop-ups for this site and try again.');
+        return;
+      }
       if (code === 'auth/operation-not-allowed' || code === 'auth/configuration-not-found')
         setMsg('Google sign-in is not enabled for this Firebase project yet. Enable it in Firebase console → Authentication → Sign-in method → Google.');
       else setMsg(e?.message ?? String(e));
@@ -71,6 +75,11 @@ export function CloudSyncSettings() {
             <button type="button" className="btn primary" disabled={busy} onClick={() => run(signInWithGoogle)}>
               <LogIn size={15} /> Sign in with Google
             </button>
+            {googleDirectAvailable && (
+              <button type="button" className="btn-ghost" disabled={busy} onClick={() => run(signInWithFirebasePopup)} title="Firebase's own popup. Use this if the main button doesn't work.">
+                Other sign-in method
+              </button>
+            )}
           </div>
         </>
       ) : (
