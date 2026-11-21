@@ -1,3 +1,4 @@
+import { useT } from '../store/uiStore';
 import { useEffect, useState } from 'react';
 import { ShieldCheck, X } from 'lucide-react';
 import { useData } from '../store/dataStore';
@@ -7,6 +8,7 @@ import { backupToFolder, getBackupFolder } from '../db/fsSync';
 const WEEK = 7 * 24 * 3600 * 1000;
 
 export function BackupBanner() {
+  const tr = useT();
   const last = useData((s) => s.lastBackupAt);
   const ready = useData((s) => s.ready);
   const count = useData((s) => s.objects.filter((o) => !o.deletedAt && o.typeId !== 'daily').length + s.objects.filter((o) => o.typeId === 'daily').length);
@@ -39,7 +41,7 @@ export function BackupBanner() {
   return (
     <div className="backup-banner" role="status">
       <ShieldCheck size={16} />
-      <span>{last ? 'Your last backup is over a week old.' : 'You haven’t backed up your notes yet.'}</span>
+      <span>{last ? tr('Your last backup is over a week old.') : tr('You haven’t backed up your notes yet.')}</span>
       {hasFolder && (
         <button
           type="button"
@@ -54,7 +56,7 @@ export function BackupBanner() {
             }
           }}
         >
-          Back up to folder
+          {tr('Back up to folder')}
         </button>
       )}
       <button
@@ -70,9 +72,9 @@ export function BackupBanner() {
           }
         }}
       >
-        Export .zip
+        {tr('Export .zip')}
       </button>
-      <button type="button" className="icon-btn tiny" onClick={dismiss} title="Remind me later">
+      <button type="button" className="icon-btn tiny" onClick={dismiss} title={tr('Remind me later')}>
         <X size={14} />
       </button>
     </div>

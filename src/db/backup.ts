@@ -3,6 +3,7 @@ import { db, SCHEMA_VERSION, setMeta, type BlobRec, type CollectionRec, type Met
 import { clearBlobUrlCache, extForMime } from './blobs';
 import { reindexAll } from './indexers';
 import { extractBlobIds } from '../lib/content';
+import { LocalizedError } from '../lib/i18n';
 
 const LOCAL_META_KEYS = new Set(['backupDirHandle']);
 
@@ -64,7 +65,9 @@ function backupRows<T>(value: unknown, label: string, key = 'id', required = fal
 }
 
 export async function readBackupZip(file: Blob) {
-  const zip = await JSZip.loadAsync(await file.arrayBuffer(), { checkCRC32: true });
+  const zip = await JSZip.loadAsync(await file.arrayBuffer(), { checkCRC32: true }).catch((cause: unknown) => {
+    throw new LocalizedError('Could not read the Orbit ZIP backup. The file may be damaged.', undefined, { cause });
+  });
   const dataFile = zip.file('data.json');
   if (!dataFile) throw new Error('This file is not an Orbit backup (data.json is missing).');
   const data: unknown = JSON.parse(await dataFile.async('string'));
@@ -85,12 +88,12 @@ export async function readBackupZip(file: Blob) {
   const blobs: BlobRec[] = [];
   for (const { file: path, ...b } of backupRows<Omit<BlobRec, 'data'> & { file: string }>(data.blobs, 'images')) {
     if (typeof path !== 'string' || !path.startsWith('media/') || typeof b.mimeType !== 'string' || !Number.isSafeInteger(b.size) || b.size < 0) {
-      throw new Error(`Invalid image metadata in the Orbit backup (${b.id}).`);
+      throw new LocalizedError('Invalid image metadata in the Orbit backup ({id}).', { id: b.id });
     }
     const entry = zip.file(path);
-    if (!entry) throw new Error(`The Orbit backup is missing image ${b.id}.`);
+    if (!entry) throw new LocalizedError('The Orbit backup is missing image {id}.', { id: b.id });
     const bytes = await entry.async('arraybuffer');
-    if (bytes.byteLength !== b.size) throw new Error(`The Orbit backup contains an incomplete image (${b.id}).`);
+    if (bytes.byteLength !== b.size) throw new LocalizedError('The Orbit backup contains an incomplete image ({id}).', { id: b.id });
     blobs.push({ ...b, data: new Blob([bytes], { type: b.mimeType }) });
   }
   const available = new Set(blobs.map((b) => b.id));
@@ -99,7 +102,7 @@ export async function readBackupZip(file: Blob) {
     ...types.flatMap((t) => extractBlobIds(t.defaultTemplate ?? undefined)),
   ]);
   for (const id of used) {
-    if (!available.has(id)) throw new Error(`The Orbit backup is missing referenced image ${id}.`);
+    if (!available.has(id)) throw new LocalizedError('The Orbit backup is missing referenced image {id}.', { id });
   }
   return { meta, types, collections, objects, tasks, blobs };
 }

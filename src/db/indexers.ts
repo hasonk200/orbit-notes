@@ -1,6 +1,8 @@
 import { db, uid, type CollectionRec, type JSONContent, type LinkRec, type Obj, type ObjType, type TaskPriority, type TaskRec } from './schema';
 import { assignTaskIds, emptyDoc, extractBlobIds, extractLinkIds, extractTags, extractTasks, patchTaskInDoc } from '../lib/content';
 import { dailyTitle, toISODate } from '../lib/dates';
+import { defaultTemplate } from '../lib/typeLabels';
+import { getT } from '../store/uiStore';
 
 /** Rebuild links / tasks / tags for one object. Must be called inside a rw transaction on objects, links, tasks. */
 async function reindex(obj: Obj, type?: ObjType) {
@@ -55,6 +57,7 @@ async function reindex(obj: Obj, type?: ObjType) {
 
 export async function createObject(typeId: string, init: Partial<Obj> = {}): Promise<Obj> {
   const type = await db.types.get(typeId);
+  const template = defaultTemplate(type, getT());
   const now = Date.now();
   const obj: Obj = {
     id: uid(),
@@ -63,7 +66,7 @@ export async function createObject(typeId: string, init: Partial<Obj> = {}): Pro
     icon: null,
     cover: null,
     props: {},
-    content: type?.defaultTemplate ? assignTaskIds(type.defaultTemplate, true) : emptyDoc(),
+    content: template ? assignTaskIds(template, true) : emptyDoc(),
     tags: [],
     createdAt: now,
     updatedAt: now,

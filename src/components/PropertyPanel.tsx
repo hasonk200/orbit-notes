@@ -1,3 +1,4 @@
+import { useT } from '../store/uiStore';
 import { useEffect, useRef, useState } from 'react';
 import { ExternalLink, Folder, Plus, X } from 'lucide-react';
 import type { Obj, ObjType, PropertyDef } from '../db/schema';
@@ -5,25 +6,31 @@ import { createCollection, createObject, setProp, toggleObjectCollection } from 
 import { displayTitle, useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { shortDate } from '../lib/dates';
+import { translators } from '../lib/i18n';
+import { includesText, normalizeText } from '../lib/search';
+import { optionLabel, propertyLabel, typeLabel } from '../lib/typeLabels';
 import { Popover } from './Popover';
 
-export function formatPropValue(def: PropertyDef, v: any, objects: Obj[]): string {
+export function formatPropValue(def: PropertyDef, v: any, objects: ReadonlyMap<string, Obj>, type?: ObjType, tr = translators.en): string {
   if (v == null || v === '' || (Array.isArray(v) && !v.length)) return '';
   switch (def.kind) {
     case 'checkbox':
-      return v ? 'Yes' : '';
+      return v ? tr('Yes') : '';
     case 'date':
-      return shortDate(v);
+      return shortDate(v, tr);
     case 'relation': {
       const ids: string[] = Array.isArray(v) ? v : [v];
-      return ids.map((id) => displayTitle(objects.find((o) => o.id === id))).join(', ');
+      return ids.map((id) => displayTitle(objects.get(id), tr)).join(', ');
     }
+    case 'select':
+      return optionLabel(type, def, String(v), tr);
     default:
       return String(v);
   }
 }
 
 function TextInput({ value, onCommit, type = 'text', placeholder }: { value: any; onCommit: (v: any) => void; type?: string; placeholder?: string }) {
+  const tr = useT();
   const [v, setV] = useState(value ?? '');
   const t = useRef<number>(0);
   useEffect(() => setV(value ?? ''), [value]);
@@ -33,7 +40,7 @@ function TextInput({ value, onCommit, type = 'text', placeholder }: { value: any
       className="prop-input"
       type={type}
       value={v}
-      placeholder={placeholder ?? 'Empty'}
+      placeholder={placeholder ?? tr('Empty')}
       onChange={(e) => {
         setV(e.target.value);
         window.clearTimeout(t.current);
@@ -49,6 +56,7 @@ function TextInput({ value, onCommit, type = 'text', placeholder }: { value: any
 }
 
 export function RelationPicker({ def, value, onChange, selfId }: { def: PropertyDef; value: any; onChange: (v: any) => void; selfId?: string }) {
+  const tr = useT();
   const objects = useData((s) => s.objects);
   const types = useData((s) => s.types);
   const open = useOpen();
@@ -60,7 +68,7 @@ export function RelationPicker({ def, value, onChange, selfId }: { def: Property
   const candidates = objects
     .filter((o) => !o.deletedAt && o.id !== selfId && !ids.includes(o.id))
     .filter((o) => !def.targetTypeId || o.typeId === def.targetTypeId)
-    .filter((o) => !q || displayTitle(o).toLowerCase().includes(q.toLowerCase()))
+    .filter((o) => includesText(displayTitle(o, tr), q))
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 8);
   const add = (id: string) => {
@@ -78,9 +86,9 @@ export function RelationPicker({ def, value, onChange, selfId }: { def: Property
         return (
           <span key={id} className={`rel-chip${!o || o.deletedAt ? ' gone' : ''}`} style={{ ['--type-color' as any]: t?.color }}>
             <button type="button" onClick={(e) => o && !o.deletedAt && open(objPath(id), e)}>
-              {o?.icon || t?.icon} {o && !o.deletedAt ? displayTitle(o) : 'Deleted object'}
+              {o?.icon || t?.icon} {o && !o.deletedAt ? displayTitle(o, tr) : tr('Deleted object')}
             </button>
-            <button type="button" className="rel-x" onClick={() => remove(id)} title="Remove">
+            <button type="button" className="rel-x" onClick={() => remove(id)} title={tr('Remove')}>
               <X size={12} />
             </button>
           </span>
@@ -88,16 +96,16 @@ export function RelationPicker({ def, value, onChange, selfId }: { def: Property
       })}
       {(def.multi || ids.length === 0) && (
         <button type="button" ref={btn} className="rel-add" onClick={() => setPicking(true)}>
-          <Plus size={13} /> {ids.length ? '' : `Add ${target?.name ?? 'object'}`}
+          <Plus size={13} /> {ids.length ? '' : tr('Add {type}', { type: typeLabel(target, tr, 'object') })}
         </button>
       )}
       {picking && (
         <Popover anchor={btn.current} onClose={() => setPicking(false)} className="rel-picker">
-          <input autoFocus placeholder={`Search ${target?.name ?? 'objects'}…`} value={q} onChange={(e) => setQ(e.target.value)} />
+          <input autoFocus placeholder={tr('Search {type}…', { type: typeLabel(target, tr, 'objects') })} value={q} onChange={(e) => setQ(e.target.value)} />
           <div className="rel-options">
             {candidates.map((o) => (
               <button key={o.id} type="button" onClick={() => add(o.id)}>
-                {o.icon || types.find((t) => t.id === o.typeId)?.icon} {displayTitle(o)}
+                {o.icon || types.find((t) => t.id === o.typeId)?.icon} {displayTitle(o, tr)}
               </button>
             ))}
             {q.trim() && (
@@ -109,10 +117,10 @@ export function RelationPicker({ def, value, onChange, selfId }: { def: Property
                   add(o.id);
                 }}
               >
-                <Plus size={13} /> Create {target?.name ?? 'Page'} “{q.trim()}”
+                <Plus size={13} /> {tr('Create {type} “{title}”', { type: typeLabel(target, tr, 'Page'), title: q.trim() })}
               </button>
             )}
-            {!q && candidates.length === 0 && <div className="muted small pad">Nothing to link yet.</div>}
+            {!q && candidates.length === 0 && <div className="muted small pad">{tr('Nothing to link yet.')}</div>}
           </div>
         </Popover>
       )}
@@ -120,7 +128,8 @@ export function RelationPicker({ def, value, onChange, selfId }: { def: Property
   );
 }
 
-export function PropertyField({ def, obj }: { def: PropertyDef; obj: Obj }) {
+export function PropertyField({ def, obj, type }: { def: PropertyDef; obj: Obj; type?: ObjType }) {
+  const tr = useT();
   const value = obj.props?.[def.key];
   const set = (v: any) => setProp(obj.id, def.key, v);
   switch (def.kind) {
@@ -133,7 +142,7 @@ export function PropertyField({ def, obj }: { def: PropertyDef; obj: Obj }) {
         <div className="prop-url">
           <TextInput value={value} onCommit={set} placeholder="https://" />
           {value && (
-            <a href={/^https?:\/\//.test(value) ? value : `https://${value}`} target="_blank" rel="noopener noreferrer" title="Open link">
+            <a href={/^https?:\/\//.test(value) ? value : `https://${value}`} target="_blank" rel="noopener noreferrer" title={tr('Open link')}>
               <ExternalLink size={14} />
             </a>
           )}
@@ -146,10 +155,10 @@ export function PropertyField({ def, obj }: { def: PropertyDef; obj: Obj }) {
     case 'select':
       return (
         <select className={`prop-select${value ? ' has-value' : ''}`} value={value ?? ''} onChange={(e) => set(e.target.value || null)}>
-          <option value="">Empty</option>
+          <option value="">{tr('Empty')}</option>
           {(def.options ?? []).map((o) => (
             <option key={o} value={o}>
-              {o}
+              {optionLabel(type, def, o, tr)}
             </option>
           ))}
         </select>
@@ -162,6 +171,7 @@ export function PropertyField({ def, obj }: { def: PropertyDef; obj: Obj }) {
 }
 
 function CollectionPicker({ obj, type }: { obj: Obj; type: ObjType }) {
+  const tr = useT();
   const collections = useData((s) => s.collections);
   const open = useOpen();
   const [picking, setPicking] = useState(false);
@@ -171,7 +181,7 @@ function CollectionPicker({ obj, type }: { obj: Obj; type: ObjType }) {
   const typeCols = collections.filter((c) => c.typeId === type.id);
   const assignedIds = obj.collectionIds ?? [];
   const assigned = assignedIds.map((id) => typeCols.find((c) => c.id === id)).filter(Boolean);
-  const candidates = typeCols.filter((c) => !assignedIds.includes(c.id) && (!q || c.name.toLowerCase().includes(q.toLowerCase())));
+  const candidates = typeCols.filter((c) => !assignedIds.includes(c.id) && includesText(c.name, q));
 
   return (
     <div className="relation">
@@ -180,17 +190,17 @@ function CollectionPicker({ obj, type }: { obj: Obj; type: ObjType }) {
           <button type="button" onClick={(e) => open(`/type/${type.id}?collection=${c!.id}`, e)}>
             {c!.icon || '📁'} {c!.name}
           </button>
-          <button type="button" className="rel-x" onClick={() => toggleObjectCollection(obj.id, c!.id)} title="Remove from collection">
+          <button type="button" className="rel-x" onClick={() => toggleObjectCollection(obj.id, c!.id)} title={tr('Remove from collection')}>
             <X size={12} />
           </button>
         </span>
       ))}
       <button type="button" ref={btn} className="rel-add" onClick={() => setPicking(true)}>
-        <Plus size={13} /> {assigned.length ? '' : 'Add to collection'}
+        <Plus size={13} /> {assigned.length ? '' : tr('Add to collection')}
       </button>
       {picking && (
         <Popover anchor={btn.current} onClose={() => setPicking(false)} className="rel-picker">
-          <input autoFocus placeholder="Search or create collection…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input autoFocus placeholder={tr('Search or create collection…')} value={q} onChange={(e) => setQ(e.target.value)} />
           <div className="rel-options">
             {candidates.map((c) => (
               <button
@@ -204,7 +214,7 @@ function CollectionPicker({ obj, type }: { obj: Obj; type: ObjType }) {
                 {c.icon || '📁'} {c.name}
               </button>
             ))}
-            {q.trim() && !typeCols.some((c) => c.name.toLowerCase() === q.trim().toLowerCase()) && (
+            {q.trim() && !typeCols.some((c) => normalizeText(c.name) === normalizeText(q.trim())) && (
               <button
                 type="button"
                 className="rel-create"
@@ -215,10 +225,10 @@ function CollectionPicker({ obj, type }: { obj: Obj; type: ObjType }) {
                   setPicking(false);
                 }}
               >
-                <Folder size={13} /> Create collection “{q.trim()}”
+                <Folder size={13} /> {tr('Create collection “{name}”', { name: q.trim() })}
               </button>
             )}
-            {!q && candidates.length === 0 && <div className="muted small pad">Type a name to create a collection.</div>}
+            {!q && candidates.length === 0 && <div className="muted small pad">{tr('Type a name to create a collection.')}</div>}
           </div>
         </Popover>
       )}
@@ -227,6 +237,7 @@ function CollectionPicker({ obj, type }: { obj: Obj; type: ObjType }) {
 }
 
 export function PropertyPanel({ obj, type }: { obj: Obj; type?: ObjType }) {
+  const tr = useT();
   const open = useOpen();
   if (!type) return null;
   const props = type.properties;
@@ -234,15 +245,15 @@ export function PropertyPanel({ obj, type }: { obj: Obj; type?: ObjType }) {
     <div className="props">
       {props.map((def) => (
         <div className="prop-row" key={def.key}>
-          <div className="prop-name">{def.name}</div>
+          <div className="prop-name">{propertyLabel(type, def, tr)}</div>
           <div className="prop-value">
-            <PropertyField def={def} obj={obj} />
+            <PropertyField def={def} obj={obj} type={type} />
           </div>
         </div>
       ))}
       {type.id !== 'daily' && (
         <div className="prop-row">
-          <div className="prop-name">Collections</div>
+          <div className="prop-name">{tr('Collections')}</div>
           <div className="prop-value">
             <CollectionPicker obj={obj} type={type} />
           </div>
@@ -250,7 +261,7 @@ export function PropertyPanel({ obj, type }: { obj: Obj; type?: ObjType }) {
       )}
       {obj.tags.length > 0 && (
         <div className="prop-row">
-          <div className="prop-name">Tags</div>
+          <div className="prop-name">{tr('Tags')}</div>
           <div className="prop-value tags-inline">
             {obj.tags.map((t) => (
               <button type="button" key={t} className="tag-chip" onClick={(e) => open(`/tags/${encodeURIComponent(t)}`, e)}>

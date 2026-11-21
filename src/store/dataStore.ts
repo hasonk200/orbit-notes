@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { liveQuery } from 'dexie';
 import { useMemo } from 'react';
 import { db, type CollectionRec, type LinkRec, type Obj, type ObjType, type TaskRec } from '../db/schema';
+import { dailyTitle } from '../lib/dates';
+import { translators } from '../lib/i18n';
 
 interface DataState {
   ready: boolean;
@@ -74,9 +76,11 @@ export function useObject(id?: string | null) {
   return useData((s) => (id ? s.objects.find((o) => o.id === id) : undefined));
 }
 
-export function displayTitle(o?: Obj | null) {
-  if (!o) return 'Deleted object';
-  return o.title?.trim() || 'Untitled';
+export function displayTitle(o: Obj | null | undefined, t = translators.en) {
+  if (!o) return t('Deleted object');
+  const title = o.title?.trim();
+  if (o.dailyDate && title === dailyTitle(o.dailyDate)) return dailyTitle(o.dailyDate, t);
+  return title || t('Untitled');
 }
 
 export async function togglePinned(id: string) {

@@ -21,6 +21,8 @@ Everything is stored in your browser's IndexedDB for this address (`localhost:51
 
 ## Writing
 
+Choose **English** or **繁體中文** in **Settings → Appearance → Language**. Search finds Chinese phrases inside unspaced text and supports mixed Chinese and English queries. Date shortcuts accept both `@tomorrow` and `@明天`.
+
 | Type | Does |
 | --- | --- |
 | `/` | Command menu: headings, lists, tasks, quote, code, divider, image |

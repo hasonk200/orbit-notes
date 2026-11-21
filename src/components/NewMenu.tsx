@@ -1,18 +1,20 @@
+import { typeLabel } from '../lib/typeLabels';
 import { Plus } from 'lucide-react';
 import { createObject, getOrCreateDaily } from '../db/indexers';
 import { useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
-import { useUI } from '../store/uiStore';
+import { useT, useUI } from '../store/uiStore';
 import { todayISO } from '../lib/dates';
 import { Popover } from './Popover';
 
 export function NewMenu({ anchor, onClose }: { anchor: HTMLElement | null; onClose: () => void }) {
+  const tr = useT();
   const types = useData((s) => s.types);
   const open = useOpen();
   const setTypeEditor = useUI((s) => s.setTypeEditor);
   return (
     <Popover anchor={anchor} onClose={onClose} className="menu">
-      <div className="menu-label">Create new</div>
+      <div className="menu-label">{tr('Create new')}</div>
       {types.map((t) => (
         <button
           key={t.id}
@@ -33,7 +35,7 @@ export function NewMenu({ anchor, onClose }: { anchor: HTMLElement | null; onClo
           <span className="menu-type-icon" style={{ ['--type-color' as any]: t.color }}>
             {t.icon}
           </span>
-          {t.name}
+          {typeLabel(t, tr)}
         </button>
       ))}
       <div className="menu-sep" />
@@ -45,7 +47,7 @@ export function NewMenu({ anchor, onClose }: { anchor: HTMLElement | null; onClo
           setTypeEditor('new');
         }}
       >
-        <Plus size={15} /> New object type…
+        <Plus size={15} /> {tr('New object type…')}
       </button>
     </Popover>
   );

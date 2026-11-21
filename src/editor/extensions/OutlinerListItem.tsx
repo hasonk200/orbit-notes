@@ -1,3 +1,4 @@
+import { useT } from '../../store/uiStore';
 import { ListItem as BaseListItem } from '@tiptap/extension-list-item';
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { ChevronRight } from 'lucide-react';
@@ -16,6 +17,7 @@ function countSubItems(node: ReactNodeViewProps['node']): number {
 }
 
 function OutlinerListItemView({ node, updateAttributes, editor, getPos }: ReactNodeViewProps) {
+  const tr = useT();
   const collapsed = !!node.attrs.collapsed;
   const nestedCount = countSubItems(node);
   const hasChildren = nestedCount > 0;
@@ -43,7 +45,7 @@ function OutlinerListItemView({ node, updateAttributes, editor, getPos }: ReactN
             <button
               type="button"
               className="outliner-caret"
-              title={collapsed ? 'Expand sub-items (Ctrl+.)' : 'Collapse sub-items (Ctrl+.)'}
+              title={collapsed ? tr('Expand sub-items (Ctrl+.)') : tr('Collapse sub-items (Ctrl+.)')}
               aria-expanded={!collapsed}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => updateAttributes({ collapsed: !collapsed })}
@@ -57,7 +59,7 @@ function OutlinerListItemView({ node, updateAttributes, editor, getPos }: ReactN
             <button
               type="button"
               className="outliner-dot"
-              title={hasChildren ? (collapsed ? 'Expand branch' : 'Collapse branch') : 'Bullet point (Tab to indent)'}
+              title={hasChildren ? (collapsed ? tr('Expand branch') : tr('Collapse branch')) : tr('Bullet point (Tab to indent)')}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => hasChildren && updateAttributes({ collapsed: !collapsed })}
             />
@@ -72,7 +74,7 @@ function OutlinerListItemView({ node, updateAttributes, editor, getPos }: ReactN
               contentEditable={false}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => updateAttributes({ collapsed: false })}
-              title="Expand hidden sub-items"
+              title={tr('Expand hidden sub-items')}
             >
               +{nestedCount}
             </button>

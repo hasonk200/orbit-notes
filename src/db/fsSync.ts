@@ -1,7 +1,7 @@
 import { getMeta, setMeta } from './schema';
 import { backupFileName, buildBackupZip } from './backup';
 
-export const fsSupported = () => typeof (window as any).showDirectoryPicker === 'function';
+export const fsSupported = () => typeof window !== 'undefined' && typeof (window as any).showDirectoryPicker === 'function';
 
 export async function chooseBackupFolder() {
   const handle = await (window as any).showDirectoryPicker({ id: 'orbit-backup', mode: 'readwrite' });

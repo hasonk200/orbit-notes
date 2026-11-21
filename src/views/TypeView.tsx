@@ -1,10 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
 import { ArrowUpDown, FolderPlus, Funnel, LayoutGrid, List, Pencil, Plus, Table, Trash, X } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { relativeTime } from '../lib/dates';
+import { includesText } from '../lib/search';
+import { propertyLabel, typeLabel } from '../lib/typeLabels';
 import { createCollection, createObject, deleteCollection, getOrCreateDaily, updateCollection } from '../db/indexers';
 import { displayTitle, useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
-import { useUI } from '../store/uiStore';
+import { useT, useUI } from '../store/uiStore';
 import { todayISO } from '../lib/dates';
 import { ObjectCard, ObjectRow } from '../components/ObjectCard';
 import { formatPropValue } from '../components/PropertyPanel';
@@ -32,6 +34,7 @@ function writePref(key: string, v: unknown) {
 }
 
 export function TypeView({ typeId, collectionId }: { typeId: string; collectionId?: string | null }) {
+  const tr = useT();
   const type = useData((s) => s.types.find((t) => t.id === typeId));
   const collections = useData((s) => s.collections);
   const objects = useData((s) => s.objects);
@@ -66,31 +69,37 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
     return m;
   }, [allOfType]);
 
+  const objectMap = useMemo(() => new Map(objects.map((o) => [o.id, o])), [objects]);
   const items = useMemo(() => {
     if (!type) return [];
     let list = activeCol ? allOfType.filter((o) => o.collectionIds?.includes(activeCol.id)) : allOfType;
     if (filterKey && filterVal.trim()) {
-      const q = filterVal.trim().toLowerCase();
-      if (filterKey === '__title') list = list.filter((o) => displayTitle(o).toLowerCase().includes(q));
-      else if (filterKey === '__tag') list = list.filter((o) => o.tags.some((t) => t.includes(q.replace(/^#/, ''))));
+      const q = filterVal.trim();
+      if (filterKey === '__title') list = list.filter((o) => includesText(displayTitle(o, tr), q));
+      else if (filterKey === '__tag') list = list.filter((o) => o.tags.some((t) => includesText(t, q.replace(/^#/, ''))));
       else {
         const def = type.properties.find((p) => p.key === filterKey);
-        if (def) list = list.filter((o) => formatPropValue(def, o.props[def.key], objects).toLowerCase().includes(q));
+        if (def) list = list.filter((o) => includesText(formatPropValue(def, o.props[def.key], objectMap, type, tr), q));
       }
     }
     const [key, dir] = sort.split(':');
     const mul = dir === 'asc' ? 1 : -1;
-    const cmp = (a: any, b: any) => (a == null || a === '' ? 1 : b == null || b === '' ? -1 : a < b ? -mul : a > b ? mul : 0);
+    const cmp = (a: any, b: any) => {
+      const missingA = a == null || a === '';
+      const missingB = b == null || b === '';
+      if (missingA || missingB) return Number(missingA) - Number(missingB);
+      return a < b ? -mul : a > b ? mul : 0;
+    };
     return [...list].sort((a, b) => {
       if (key === 'updated') return b.updatedAt - a.updatedAt;
       if (key === 'created') return b.createdAt - a.createdAt;
-      if (key === 'title') return displayTitle(a).localeCompare(displayTitle(b));
+      if (key === 'title') return displayTitle(a, tr).localeCompare(displayTitle(b, tr), tr.language);
       if (key === 'daily') return (b.dailyDate ?? '').localeCompare(a.dailyDate ?? '');
       return cmp(a.props[key], b.props[key]);
     });
-  }, [allOfType, objects, type, activeCol, sort, filterKey, filterVal]);
+  }, [allOfType, objectMap, type, activeCol, sort, filterKey, filterVal, tr]);
 
-  if (!type) return <div className="empty-state"><h2>Unknown type</h2></div>;
+  if (!type) return <div className="empty-state"><h2>{tr('Unknown type')}</h2></div>;
 
   const create = async (e: React.MouseEvent) => {
     const altKey = e.altKey;
@@ -112,6 +121,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
     open(`/type/${typeId}?collection=${col.id}`);
   };
 
+  const typeName = typeLabel(type, tr);
   const sortable = type.properties.filter((p) => ['text', 'number', 'date', 'select', 'checkbox', 'url'].includes(p.kind));
 
   return (
@@ -120,7 +130,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
         <TypeIcon type={type} size="lg" />
         <div>
           <h1>
-            {type.name}
+            {typeName}
             {activeCol && (
               <span className="col-head-sub">
                 {' '}
@@ -129,8 +139,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
             )}
           </h1>
           <p className="muted">
-            {items.length} {items.length === 1 ? 'object' : 'objects'}
-            {activeCol ? ` in ${activeCol.name}` : ''}
+            {activeCol ? tr('{count} in “{name}”', { count: items.length, name: activeCol.name }) : tr('{count} item(s)', { count: items.length })}
           </p>
         </div>
         <div className="spacer" />
@@ -144,13 +153,13 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
                 setEditingCol(true);
               }}
             >
-              <Pencil size={13} /> Rename collection
+              <Pencil size={13} /> {tr('Rename collection')}
             </button>
             <button
               type="button"
               className="btn small danger"
               onClick={async () => {
-                if (!confirm(`Delete collection “${activeCol.name}”? Objects inside will remain in ${type.name}.`)) return;
+                if (!confirm(tr('Delete collection “{name}”? Its objects will stay in {type}.', { name: activeCol.name, type: typeName }))) return;
                 await deleteCollection(activeCol.id);
                 open(`/type/${typeId}`);
               }}
@@ -170,7 +179,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
           >
             <input autoFocus value={editColName} onChange={(e) => setEditColName(e.target.value)} />
             <button type="submit" className="btn small primary">
-              Save
+              {tr('Save')}
             </button>
             <button type="button" className="icon-btn tiny" onClick={() => setEditingCol(false)}>
               <X size={14} />
@@ -178,10 +187,10 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
           </form>
         )}
         <button type="button" className="btn" onClick={() => setTypeEditor(type.id)}>
-          <Pencil size={14} /> Edit type
+          <Pencil size={14} /> {tr('Edit type')}
         </button>
         <button type="button" className="btn primary" onClick={create}>
-          <Plus size={15} /> New {type.name}
+          <Plus size={15} /> {tr('New {type}', { type: typeName })}
         </button>
       </header>
 
@@ -201,7 +210,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
             </button>
           ))}
           <button ref={addColBtn} type="button" className="col-pill col-add" onClick={() => setAddingCol((v) => !v)}>
-            <FolderPlus size={13} /> New collection
+            <FolderPlus size={13} /> {tr('New collection')}
           </button>
           {addingCol && (
             <Popover anchor={addColBtn.current} onClose={() => setAddingCol(false)} className="col-create-pop">
@@ -221,12 +230,12 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
               >
                 <input
                   autoFocus
-                  placeholder="Collection name (e.g. Reading now)…"
+                  placeholder={tr('Collection name (e.g. Reading now)…')}
                   value={newColName}
                   onChange={(e) => setNewColName(e.target.value)}
                 />
                 <button type="submit" className="btn small primary" disabled={!newColName.trim()}>
-                  Create
+                  {tr('Create')}
                 </button>
               </form>
             </Popover>
@@ -236,13 +245,13 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
 
       <div className="type-controls">
         <div className="segmented small">
-          <button type="button" className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')} title="Cards">
+          <button type="button" className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')} title={tr('Cards')}>
             <LayoutGrid size={15} />
           </button>
-          <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => setView('list')} title="List">
+          <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => setView('list')} title={tr('List')}>
             <List size={15} />
           </button>
-          <button type="button" className={view === 'table' ? 'active' : ''} onClick={() => setView('table')} title="Table">
+          <button type="button" className={view === 'table' ? 'active' : ''} onClick={() => setView('table')} title={tr('Table')}>
             <Table size={15} />
           </button>
         </div>
@@ -255,16 +264,16 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
               writePref(`orbit-sort-${typeId}`, e.target.value);
             }}
           >
-            <option value="updated">Last edited</option>
-            <option value="created">Created</option>
-            <option value="title">Title A–Z</option>
-            {typeId === 'daily' && <option value="daily">Date</option>}
+            <option value="updated">{tr('Last edited')}</option>
+            <option value="created">{tr('Created')}</option>
+            <option value="title">{tr('Title A–Z')}</option>
+            {typeId === 'daily' && <option value="daily">{tr('Date')}</option>}
             {sortable.flatMap((p) => [
               <option key={p.key + 'a'} value={`${p.key}:asc`}>
-                {p.name} ↑
+                {propertyLabel(type, p, tr)} ↑
               </option>,
               <option key={p.key + 'd'} value={`${p.key}:desc`}>
-                {p.name} ↓
+                {propertyLabel(type, p, tr)} ↓
               </option>,
             ])}
           </select>
@@ -272,12 +281,12 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
         <label className="control">
           <Funnel size={14} />
           <select value={filterKey} onChange={(e) => setFilterKey(e.target.value)}>
-            <option value="">No filter</option>
-            <option value="__title">Title</option>
-            <option value="__tag">Tag</option>
+            <option value="">{tr('No filter')}</option>
+            <option value="__title">{tr('Title')}</option>
+            <option value="__tag">{tr('Tag')}</option>
             {type.properties.map((p) => (
               <option key={p.key} value={p.key}>
-                {p.name}
+                {propertyLabel(type, p, tr)}
               </option>
             ))}
           </select>
@@ -287,11 +296,11 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
 
       {items.length === 0 && (
         <div className="empty-inline center">
-          <strong>There’s nothing here (yet).</strong>
+          <strong>{tr('There’s nothing here (yet).')}</strong>
           <span>
             {activeCol
-              ? `Create a new ${type.name.toLowerCase()} in “${activeCol.name}” with the button above, or add existing ones from their Collections row.`
-              : `Create your first ${type.name.toLowerCase()} with the button above.`}
+              ? tr('Create a new {type} in “{name}” or add an existing note from its Collections row.', { type: typeName, name: activeCol.name })
+              : tr('Create your first {type} with the button above.', { type: typeName })}
           </span>
         </div>
       )}
@@ -306,7 +315,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
       {view === 'list' && (
         <div className="row-list">
           {items.map((o) => (
-            <ObjectRow key={o.id} obj={o} type={type} right={<span className="muted small">{formatDistanceToNow(o.updatedAt, { addSuffix: true })}</span>} />
+            <ObjectRow key={o.id} obj={o} type={type} right={<span className="muted small">{relativeTime(o.updatedAt, tr)}</span>} />
           ))}
         </div>
       )}
@@ -315,25 +324,25 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
           <table className="obj-table">
             <thead>
               <tr>
-                <th>Title</th>
+                <th>{tr('Title')}</th>
                 {type.properties.map((p) => (
-                  <th key={p.key}>{p.name}</th>
+                  <th key={p.key}>{propertyLabel(type, p, tr)}</th>
                 ))}
-                <th>Tags</th>
-                <th>Edited</th>
+                <th>{tr('Tags')}</th>
+                <th>{tr('Edited')}</th>
               </tr>
             </thead>
             <tbody>
               {items.map((o) => (
                 <tr key={o.id} onClick={(e) => open(objPath(o.id), e)}>
                   <td className="t-title">
-                    {o.icon || type.icon} {displayTitle(o)}
+                    {o.icon || type.icon} {displayTitle(o, tr)}
                   </td>
                   {type.properties.map((p) => (
-                    <td key={p.key}>{formatPropValue(p, o.props[p.key], objects)}</td>
+                    <td key={p.key}>{formatPropValue(p, o.props[p.key], objectMap, type, tr)}</td>
                   ))}
                   <td className="muted">{o.tags.map((t) => '#' + t).join(' ')}</td>
-                  <td className="muted nowrap">{formatDistanceToNow(o.updatedAt, { addSuffix: true })}</td>
+                  <td className="muted nowrap">{relativeTime(o.updatedAt, tr)}</td>
                 </tr>
               ))}
             </tbody>

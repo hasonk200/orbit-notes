@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PaneContext, type PaneCtx } from './store/pane';
-import { useUI } from './store/uiStore';
+import { useT, useUI } from './store/uiStore';
 import { useData } from './store/dataStore';
 import { Sidebar } from './components/Sidebar';
 import { Pane } from './components/SplitPane';
@@ -11,8 +11,10 @@ import { TypeEditorModal } from './components/TypeEditorModal';
 import { BackupBanner } from './components/BackupBanner';
 import { getOrCreateDaily } from './db/indexers';
 import { todayISO } from './lib/dates';
+import { isComposing } from './lib/keyboard';
 
 export default function App() {
+  const tr = useT();
   const location = useLocation();
   const navigate = useNavigate();
   const { sidebarOpen, setSidebar, paletteOpen, setPalette, split, splitGo, splitReplace, splitBack, splitForward, typeEditor, toggleSidebar } = useUI();
@@ -66,6 +68,7 @@ export default function App() {
   // global shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (isComposing(e)) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -86,7 +89,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [navigate, setPalette, toggleSidebar]);
 
-  if (!ready) return <div className="boot">Loading Orbit…</div>;
+  if (!ready) return <div className="boot">{tr('Loading Orbit…')}</div>;
 
   return (
     <PaneContext.Provider value={mainCtx}>

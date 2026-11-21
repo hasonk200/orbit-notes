@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { isComposing } from '../lib/keyboard';
 
 /** Floating panel anchored to an element (or a rect), rendered in <body>. Closes on outside click / Escape. */
 export function Popover({
@@ -44,7 +45,7 @@ export function Popover({
       if (ref.current?.contains(t) || anchor?.contains(t)) return;
       onClose();
     };
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const key = (e: KeyboardEvent) => !isComposing(e) && e.key === 'Escape' && onClose();
     const t = window.setTimeout(() => document.addEventListener('mousedown', down), 0);
     document.addEventListener('keydown', key);
     return () => {
@@ -69,15 +70,15 @@ export function Popover({
   );
 }
 
-export function Modal({ onClose, children, className }: { onClose: () => void; children: ReactNode; className?: string }) {
+export function Modal({ onClose, children, className, label }: { onClose: () => void; children: ReactNode; className?: string; label: string }) {
   useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const key = (e: KeyboardEvent) => !isComposing(e) && e.key === 'Escape' && onClose();
     document.addEventListener('keydown', key);
     return () => document.removeEventListener('keydown', key);
   }, [onClose]);
   return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${className ?? ''}`}>{children}</div>
+      <div className={`modal ${className ?? ''}`} role="dialog" aria-modal="true" aria-label={label}>{children}</div>
     </div>,
     document.body,
   );

@@ -8,13 +8,18 @@ import { TrashView } from './views/TrashView';
 import { Settings } from './views/Settings';
 import { HomeView } from './views/HomeView';
 import { todayISO } from './lib/dates';
+import type { Translate } from './lib/i18n';
 
 const GraphView = lazy(() => import('./views/GraphView').then((m) => ({ default: m.GraphView })));
 
+export function decodePathSegment(part: string) {
+  try { return decodeURIComponent(part); } catch { return part; }
+}
+
 /** Path → view. Used by both the main pane (router location) and the split pane (own history). */
-export function renderPath(path: string) {
+export function renderPath(path: string, tr: Translate) {
   const url = new URL(path, 'http://orbit.local');
-  const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+  const parts = url.pathname.split('/').filter(Boolean).map(decodePathSegment);
   const [a, b] = parts;
   const q = url.searchParams;
   switch (a) {
@@ -32,7 +37,7 @@ export function renderPath(path: string) {
       return <TasksView />;
     case 'graph':
       return (
-        <Suspense fallback={<div className="empty-state muted">Loading graph…</div>}>
+        <Suspense fallback={<div className="empty-state muted">{tr('Loading graph…')}</div>}>
           <GraphView />
         </Suspense>
       );
@@ -47,7 +52,7 @@ export function renderPath(path: string) {
     default:
       return (
         <div className="empty-state">
-          <h2>Page not found</h2>
+          <h2>{tr('Page not found')}</h2>
         </div>
       );
   }

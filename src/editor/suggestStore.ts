@@ -1,3 +1,4 @@
+import { isComposing } from '../lib/keyboard';
 import { create } from 'zustand';
 import type { Editor, Range } from '@tiptap/core';
 import type { SuggestionKeyDownProps, SuggestionOptions, SuggestionProps } from '@tiptap/suggestion';
@@ -43,7 +44,7 @@ export function suggestRender(title: string): SuggestionOptions<SuggestItem, Sug
       onExit: () => useSuggest.setState({ open: false, items: [], select: null }),
       onKeyDown: ({ event }: SuggestionKeyDownProps) => {
         const s = useSuggest.getState();
-        if (!s.open) return false;
+        if (!s.open || isComposing(event)) return false;
         if (event.key === 'Escape') {
           useSuggest.setState({ open: false });
           return true;

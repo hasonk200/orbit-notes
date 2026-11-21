@@ -4,21 +4,24 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { ensureSeed } from './db/seed';
 import { startDataSync } from './store/dataStore';
-import { applyTheme, useUI } from './store/uiStore';
+import { applyTheme, getT, useUI } from './store/uiStore';
 import { autoBackupIfDue } from './db/fsSync';
 import { initSync } from './sync/engine';
 import './styles/tokens.css';
 import './styles/app.css';
 
 applyTheme(useUI.getState().theme);
+document.documentElement.lang = getT().language;
 
 async function boot() {
   try {
     await ensureSeed();
   } catch (e) {
     console.error('Orbit: could not open the database', e);
-    document.getElementById('root')!.innerHTML =
-      '<div class="boot">Orbit could not open its local database. Private windows or blocked site data can cause this.</div>';
+    const message = document.createElement('div');
+    message.className = 'boot';
+    message.textContent = getT()('Orbit could not open its local database. Private windows or blocked site data can cause this.');
+    document.getElementById('root')!.replaceChildren(message);
     return;
   }
   startDataSync();
