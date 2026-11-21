@@ -4,3 +4,7 @@ dist
 .firebase/
 *.log
 .claude/
+/functions/lib/
+/functions/.env
+/functions/.env.*
+!/functions/.env.example

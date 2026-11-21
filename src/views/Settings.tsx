@@ -8,6 +8,7 @@ import { relativeTime } from '../lib/dates';
 import { localizeError } from '../lib/i18n';
 import { useData } from '../store/dataStore';
 import { useT, useUI, type Theme } from '../store/uiStore';
+import { AiAccessSettings } from '../components/AiAccessSettings';
 import { CloudSyncSettings, SyncConflicts } from '../components/CloudSync';
 
 export function Settings() {
@@ -76,6 +77,7 @@ export function Settings() {
 
       <CloudSyncSettings />
       <SyncConflicts />
+      <AiAccessSettings />
 
       <section className="card-section">
         <h3>{tr('Backup & restore')}</h3>
