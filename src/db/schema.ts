@@ -141,8 +141,7 @@ class OrbitDB extends Dexie {
 
 export const db = new OrbitDB();
 
-export const uid = () =>
-  (crypto as any).randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
+export { uid } from '../lib/uid';
 
 export async function getMeta<T = any>(key: string): Promise<T | undefined> {
   return (await db.meta.get(key))?.value;

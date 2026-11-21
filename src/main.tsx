@@ -13,6 +13,11 @@ import './styles/app.css';
 applyTheme(useUI.getState().theme);
 document.documentElement.lang = getT().language;
 
+const basePath = import.meta.env.BASE_URL;
+if (window.location.pathname === basePath && new URLSearchParams(window.location.hash.slice(1)).has('ai_request')) {
+  window.history.replaceState(window.history.state, '', basePath + 'settings' + window.location.hash);
+}
+
 async function boot() {
   try {
     await ensureSeed();

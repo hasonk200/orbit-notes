@@ -3160,3 +3160,18 @@ span.olink-card {
     min-height: 40px;
   }
 }
+
+.orbit-ai-form input {
+  min-width: 0;
+  max-width: 100%;
+}
+.orbit-ai-change {
+  border-top: 1px solid var(--line);
+  padding: 12px 0;
+}
+.orbit-ai-preview p {
+  max-height: 16rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
