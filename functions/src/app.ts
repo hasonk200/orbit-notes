@@ -138,8 +138,16 @@ export function createApp(options: {
     if (req.method === 'OPTIONS') return void res.sendStatus(204);
     next();
   });
+  // Tokens issued in Orbit settings also work on /mcp, so header-based clients
+  // (e.g. Claude Code) can connect without the OAuth flow. Scopes still apply.
+  const mcpVerifier = {
+    async verifyAccessToken(value: string) {
+      const info = await access.provider.verifyAccessToken(value);
+      return info.resource?.href === apiResource.href ? { ...info, resource } : info;
+    },
+  };
   app.all('/mcp', requireBearerAuth({
-    verifier: access.provider, expectedResource: resource, requiredScopes: [READ],
+    verifier: mcpVerifier, expectedResource: resource, requiredScopes: [READ],
     resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(resource),
   }), async (req, res) => {
     const actor = req.auth!.extra as Actor;

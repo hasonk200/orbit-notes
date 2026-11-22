@@ -121,6 +121,11 @@ test('API isolates Firebase accounts and records recallable, versioned and retry
   assert.match(day.text, /第二段/);
   assert.match(day.url, /orbit-notes\/calendar/);
   assert.equal((await api(reader, 'list_changes', { limit: 1 })).changes.length, 1);
+  const viaToken = await connectMcp(reader);
+  const toolNames = (await viaToken.listTools()).tools.map((t) => t.name);
+  assert.ok(toolNames.includes('search_notes'));
+  assert.ok(!toolNames.includes('create_note'));
+  await viaToken.close();
   const { grants } = await manage(alice.idToken, '/connections');
   const grant = grants.find((g: { name: string }) => g.name === 'Test assistant');
   await request('DELETE', '/manage/connections/' + grant.id, bob.idToken, undefined, 404);
