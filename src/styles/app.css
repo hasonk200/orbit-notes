@@ -383,6 +383,13 @@ h4 {
   display: flex;
   align-items: center;
 }
+.sb-version {
+  padding: 4px 10px 2px;
+  font-size: 11px;
+  color: var(--text-3, var(--text-2));
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
 .sb-foot-row .nav-item {
   flex: 1;
 }

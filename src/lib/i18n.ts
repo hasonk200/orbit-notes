@@ -84,6 +84,7 @@ const zhHant: Record<string, string> = {
   "Empty": "無內容",
   "Explore": "探索",
   "Home": "回到首頁",
+  "Built": "建置日期",
   "Jump back in, or start something new.": "繼續上次的內容，或建立新筆記。",
   "Search": "搜尋",
   "Search (Ctrl+K)": "搜尋（Ctrl+K）",

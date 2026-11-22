@@ -166,6 +166,9 @@ export function Sidebar() {
             {theme === 'light' ? <Sun size={16} /> : theme === 'dark' ? <Moon size={16} /> : <Monitor size={16} />}
           </button>
         </div>
+        <div className="sb-version" title={`${tr('Built')} ${__APP_BUILT__}${__APP_COMMIT__ ? ` · ${__APP_COMMIT__}` : ''}`}>
+          Orbit v{__APP_VERSION__}{__APP_COMMIT__ && ` · ${__APP_COMMIT__}`}
+        </div>
       </div>
     </aside>
   );
