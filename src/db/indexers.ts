@@ -1,5 +1,5 @@
-import { db, uid, type CollectionRec, type JSONContent, type LinkRec, type Obj, type ObjType, type TaskPriority, type TaskRec } from './schema';
-import { assignTaskIds, emptyDoc, extractBlobIds, extractLinkIds, extractTags, extractTasks, patchTaskInDoc } from '../lib/content';
+import { db, uid, type CollectionRec, type JSONContent, type LinkRec, type Obj, type ObjType, type TaskPriority, type TaskRec, type TaskStatus } from './schema';
+import { assignTaskIds, emptyDoc, extractBlobIds, extractLinkIds, extractTags, extractTasks, patchTaskInDoc, removeTaskFromDoc, type TaskPatch } from '../lib/content';
 import { dailyTitle, toISODate } from '../lib/dates';
 
 /** Rebuild links / tasks / tags for one object. Must be called inside a rw transaction on objects, links, tasks. */
@@ -32,14 +32,24 @@ async function reindex(obj: Obj, type?: ObjType) {
   const now = Date.now();
   const rows: TaskRec[] = extracted.map((t) => {
     const prev = oldMap.get(t.id);
-    const changed = !prev || prev.text !== t.text || prev.done !== t.done || (prev.due ?? null) !== t.due || (prev.priority ?? null) !== t.priority;
+    const changed =
+      !prev ||
+      prev.text !== t.text ||
+      prev.done !== t.done ||
+      prev.status !== t.status ||
+      (prev.due ?? null) !== t.due ||
+      (prev.priority ?? null) !== t.priority ||
+      (prev.contextId ?? null) !== t.contextId;
     return {
       id: t.id,
       objectId: obj.id,
+      contextId: t.contextId,
       text: t.text,
       done: t.done,
+      status: t.status,
       due: t.due,
       priority: t.priority,
+      completedAt: t.done ? (t.completedAt ?? prev?.completedAt ?? now) : null,
       createdAt: prev?.createdAt ?? now,
       updatedAt: changed ? now : prev!.updatedAt,
     };
@@ -211,13 +221,68 @@ export async function toggleObjectCollection(objectId: string, collectionId: str
 }
 
 /** Write a task change back into the exact node of its source object. */
-export async function updateTask(taskId: string, patch: { checked?: boolean; due?: string | null; priority?: TaskPriority | null }) {
+export async function updateTask(taskId: string, patch: TaskPatch) {
   const task = await db.tasks.get(taskId);
   if (!task) return;
   const obj = await db.objects.get(task.objectId);
   if (!obj) return;
   const next = patchTaskInDoc(obj.content, taskId, patch);
   if (next) await saveObject(obj.id, { content: next });
+}
+
+/** Delete a task node cleanly from its source object. */
+export async function deleteTask(taskId: string) {
+  const task = await db.tasks.get(taskId);
+  if (!task) return;
+  const obj = await db.objects.get(task.objectId);
+  if (!obj) return;
+  const next = removeTaskFromDoc(obj.content, taskId);
+  if (next) await saveObject(obj.id, { content: next });
+}
+
+/** Create a new contextual task inside the chosen target object (or Today's Daily Note). */
+export async function createTask(opts: {
+  text: string;
+  targetObjectId?: string | null;
+  contextId?: string | null;
+  status?: TaskStatus;
+  due?: string | null;
+  priority?: TaskPriority | null;
+}): Promise<string | null> {
+  const cleanText = opts.text.trim();
+  if (!cleanText) return null;
+  const targetId = opts.targetObjectId && opts.targetObjectId !== '__today' ? opts.targetObjectId : null;
+  const note = targetId ? await db.objects.get(targetId) : await getOrCreateDaily(toISODate(new Date()));
+  if (!note) return null;
+  const fresh = await db.objects.get(note.id);
+  if (!fresh) return null;
+
+  const status: TaskStatus = opts.status ?? 'open';
+  const checked = status === 'done';
+  const taskId = uid();
+  const content = JSON.parse(JSON.stringify(fresh.content ?? emptyDoc()));
+  content.content = content.content ?? [];
+  const item = {
+    type: 'taskItem',
+    attrs: {
+      checked,
+      taskId,
+      status,
+      due: opts.due ?? null,
+      priority: opts.priority ?? null,
+      contextId: opts.contextId && opts.contextId !== note.id ? opts.contextId : null,
+      completedAt: checked ? Date.now() : null,
+    },
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: cleanText }] }],
+  };
+  const last = content.content[content.content.length - 1];
+  if (last?.type === 'taskList') last.content.push(item);
+  else {
+    if (last?.type === 'paragraph' && !last.content?.length) content.content.pop();
+    content.content.push({ type: 'taskList', content: [item] });
+  }
+  await saveObject(note.id, { content });
+  return taskId;
 }
 
 /** Rebuild links/tasks for these objects without touching updatedAt (used when sync applies remote changes). */

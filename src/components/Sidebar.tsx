@@ -47,7 +47,9 @@ export function Sidebar() {
 
   const openTasks = useMemo(() => {
     const today = todayISO();
-    return tasks.filter((t) => !t.done && t.due && t.due <= today && t.text.trim() && !objMap.get(t.objectId)?.deletedAt).length;
+    return tasks.filter(
+      (t) => !t.done && ((t.due && t.due <= today) || t.status === 'in_progress') && t.text.trim() && !objMap.get(t.objectId)?.deletedAt,
+    ).length;
   }, [tasks, objMap]);
 
   const parsedUrl = new URL(path, 'http://orbit.local');

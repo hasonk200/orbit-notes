@@ -8,6 +8,7 @@ import { saveImage, useBlobUrl } from '../db/blobs';
 import { ObjectEditor } from '../editor/Editor';
 import { PropertyPanel } from '../components/PropertyPanel';
 import { Backlinks } from '../components/Backlinks';
+import { TaskRow } from '../components/TaskRow';
 import { EmojiPicker, TypeBadge } from '../components/TypeIcon';
 import { ConvertTypeMenu } from '../components/ConvertTypeMenu';
 
@@ -64,6 +65,11 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
   const type = useData((s) => s.types.find((t) => t.id === obj?.typeId));
   const pinned = useData((s) => s.pinned.includes(id));
   const ready = useData((s) => s.ready);
+  const tasks = useData((s) => s.tasks);
+  const objects = useData((s) => s.objects);
+  const linkedTasks = tasks.filter(
+    (t) => t.contextId === id && t.objectId !== id && t.text.trim() !== '' && !objects.find((o) => o.id === t.objectId)?.deletedAt,
+  );
   const cover = useBlobUrl(obj?.cover);
   const { pane, replace } = usePane();
   const open = useOpen();
@@ -165,6 +171,16 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
         <div className="obj-editor">
           <ObjectEditor key={obj.id} obj={obj} />
         </div>
+        {linkedTasks.length > 0 && (
+          <section className="ctx-tasks-section">
+            <h3>
+              Linked Tasks <span className="count">{linkedTasks.length}</span>
+            </h3>
+            {linkedTasks.map((t) => (
+              <TaskRow key={t.id} task={t} />
+            ))}
+          </section>
+        )}
         <Backlinks objectId={obj.id} />
       </div>
     </div>

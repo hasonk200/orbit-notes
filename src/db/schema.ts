@@ -78,14 +78,18 @@ export interface LinkRec {
 }
 
 export type TaskPriority = 'high' | 'medium' | 'low';
+export type TaskStatus = 'open' | 'not_started' | 'next_up' | 'in_progress' | 'done';
 
 export interface TaskRec {
   id: string; // taskId (stable UUID on the TipTap node)
   objectId: string;
+  contextId?: string | null; // optional explicit context object (defaults to objectId)
   text: string;
   done: boolean;
+  status: TaskStatus;
   due?: string | null; // yyyy-MM-dd
   priority?: TaskPriority | null;
+  completedAt?: number | null;
   createdAt: number;
   updatedAt: number;
 }

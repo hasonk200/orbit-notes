@@ -3,27 +3,51 @@ import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNode
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import { addDays } from 'date-fns';
 import { useRef, useState } from 'react';
-import { uid, type TaskPriority } from '../../db/schema';
+import { uid, type TaskPriority, type TaskStatus } from '../../db/schema';
 import { shortDate, todayISO, toISODate } from '../../lib/dates';
-import { useOpen } from '../../store/pane';
+import { PRIO_MAP, resolveTaskStatus, STATUS_MAP, TASK_PRIORITIES, TASK_STATUSES } from '../../lib/tasks';
+import { displayTitle, useActiveObjects, useData } from '../../store/dataStore';
+import { objPath, useOpen } from '../../store/pane';
 import { Popover } from '../../components/Popover';
 
-const PRIORITIES: { id: TaskPriority; label: string; short: string }[] = [
-  { id: 'high', label: 'High', short: 'P1' },
-  { id: 'medium', label: 'Medium', short: 'P2' },
-  { id: 'low', label: 'Low', short: 'P3' },
-];
-
 function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
-  const checked = !!node.attrs.checked;
+  const checked = !!node.attrs.checked || node.attrs.status === 'done';
+  const status = resolveTaskStatus(checked, node.attrs.status);
   const due = node.attrs.due as string | null;
   const priority = (node.attrs.priority as TaskPriority | null) ?? null;
+  const contextId = (node.attrs.contextId as string | null) ?? null;
+
   const [pickerOpen, setPickerOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const open = useOpen();
+  const activeObjects = useActiveObjects();
+  const types = useData((s) => s.types);
+
   const overdue = !!due && !checked && due < todayISO();
   const isToday = !!due && due === todayISO();
   const set = (attrs: Record<string, any>) => updateAttributes(attrs as any);
+
+  const setChecked = (nextChecked: boolean) => {
+    set({
+      checked: nextChecked,
+      status: nextChecked ? 'done' : status === 'done' ? 'open' : status,
+      completedAt: nextChecked ? Date.now() : null,
+    });
+  };
+
+  const setStatus = (nextStatus: TaskStatus) => {
+    const isDone = nextStatus === 'done';
+    set({
+      status: nextStatus,
+      checked: isDone,
+      completedAt: isDone ? Date.now() : null,
+    });
+  };
+
+  const statusDef = STATUS_MAP.get(status);
+  const prioDef = priority ? PRIO_MAP.get(priority) : null;
+  const ctxObj = contextId ? activeObjects.find((o) => o.id === contextId) : null;
+  const ctxType = ctxObj ? types.find((t) => t.id === ctxObj.typeId) : null;
 
   const today = todayISO();
   const tomorrow = toISODate(addDays(new Date(), 1));
@@ -36,20 +60,41 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
           type="checkbox"
           checked={checked}
           disabled={!editor.isEditable}
-          onChange={(e) => set({ checked: e.target.checked })}
+          onChange={(e) => setChecked(e.target.checked)}
         />
-        <span className="task-box" />
+        <span className="task-box round" />
       </label>
       <NodeViewContent className="task-content" />
       <span className="task-meta" contentEditable={false}>
-        {priority && (
+        {status !== 'open' && status !== 'done' && statusDef && (
           <button
             type="button"
-            className={`prio-chip prio-${priority}`}
-            title="Change priority or due date"
+            className={`status-pill tone-${statusDef.tone} compact`}
+            title="Change task status, date or priority"
             onClick={() => editor.isEditable && setPickerOpen((v) => !v)}
           >
-            {priority === 'high' ? 'P1' : priority === 'medium' ? 'P2' : 'P3'}
+            {statusDef.label}
+          </button>
+        )}
+        {prioDef && (
+          <button
+            type="button"
+            className={`prio-chip prio-${prioDef.id}`}
+            title={`Priority: ${prioDef.label}`}
+            onClick={() => editor.isEditable && setPickerOpen((v) => !v)}
+          >
+            {prioDef.bang}
+          </button>
+        )}
+        {ctxObj && (
+          <button
+            type="button"
+            className="ctx-mini-chip"
+            style={{ ['--type-color' as any]: ctxType?.color }}
+            title={`Context: ${displayTitle(ctxObj)}`}
+            onClick={(e) => open(objPath(ctxObj.id), e)}
+          >
+            {ctxObj.icon || ctxType?.icon} {displayTitle(ctxObj)}
           </button>
         )}
         {due ? (
@@ -58,7 +103,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
               ref={triggerRef}
               type="button"
               className="due-chip-label"
-              title="Change due date or priority (Alt+Click opens the day)"
+              title="Change due date, status or priority (Alt+Click opens the day)"
               onClick={(e) => {
                 if (e.altKey) return open(`/calendar?mode=day&date=${due}`, e);
                 if (editor.isEditable) setPickerOpen((v) => !v);
@@ -78,7 +123,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
               ref={triggerRef}
               type="button"
               className="due-add"
-              title="Set due date or priority (or type @today)"
+              title="Set status, due date, priority or context (or type @today)"
               onClick={() => setPickerOpen((v) => !v)}
             >
               ◷
@@ -87,7 +132,23 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
         )}
         {pickerOpen && (
           <Popover anchor={triggerRef.current} onClose={() => setPickerOpen(false)} className="task-popover">
-            <div className="tp-section">Due date</div>
+            <div className="tp-section">Status</div>
+            <div className="tp-statuses">
+              {TASK_STATUSES.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`status-pill tone-${s.tone}${status === s.id ? ' active' : ''}`}
+                  onClick={() => {
+                    setStatus(s.id);
+                    setPickerOpen(false);
+                  }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <div className="tp-section">Scheduled date</div>
             <div className="tp-quick">
               <button
                 type="button"
@@ -143,7 +204,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
             )}
             <div className="tp-section">Priority</div>
             <div className="tp-prios">
-              {PRIORITIES.map((p) => (
+              {TASK_PRIORITIES.map((p) => (
                 <button
                   key={p.id}
                   type="button"
@@ -153,10 +214,33 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
                     setPickerOpen(false);
                   }}
                 >
-                  {p.short} {p.label}
+                  {p.bang} {p.label}
                 </button>
               ))}
             </div>
+            <div className="tp-section">Context</div>
+            <select
+              className="tp-select"
+              value={contextId ?? ''}
+              onChange={(e) => {
+                set({ contextId: e.target.value || null });
+                setPickerOpen(false);
+              }}
+            >
+              <option value="">This note (default)</option>
+              {activeObjects
+                .filter((o) => o.typeId !== 'daily')
+                .sort((a, b) => b.updatedAt - a.updatedAt)
+                .slice(0, 40)
+                .map((o) => {
+                  const tp = types.find((t) => t.id === o.typeId);
+                  return (
+                    <option key={o.id} value={o.id}>
+                      {o.icon || tp?.icon || '📄'} {displayTitle(o)}
+                    </option>
+                  );
+                })}
+            </select>
           </Popover>
         )}
       </span>
@@ -164,7 +248,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   );
 }
 
-/** TaskItem with a stable UUID (taskId), due date, and priority. */
+/** TaskItem with stable UUID (taskId), status, scheduled date, priority, contextId & completedAt. */
 export const OrbitTaskItem = BaseTaskItem.extend({
   addAttributes() {
     return {
@@ -174,6 +258,12 @@ export const OrbitTaskItem = BaseTaskItem.extend({
         keepOnSplit: false,
         parseHTML: (el: HTMLElement) => el.getAttribute('data-task-id'),
         renderHTML: (a: Record<string, any>) => (a.taskId ? { 'data-task-id': a.taskId } : {}),
+      },
+      status: {
+        default: 'open',
+        keepOnSplit: false,
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-status') || 'open',
+        renderHTML: (a: Record<string, any>) => (a.status && a.status !== 'open' ? { 'data-status': a.status } : {}),
       },
       due: {
         default: null,
@@ -186,6 +276,21 @@ export const OrbitTaskItem = BaseTaskItem.extend({
         keepOnSplit: false,
         parseHTML: (el: HTMLElement) => el.getAttribute('data-priority'),
         renderHTML: (a: Record<string, any>) => (a.priority ? { 'data-priority': a.priority } : {}),
+      },
+      contextId: {
+        default: null,
+        keepOnSplit: false,
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-context-id'),
+        renderHTML: (a: Record<string, any>) => (a.contextId ? { 'data-context-id': a.contextId } : {}),
+      },
+      completedAt: {
+        default: null,
+        keepOnSplit: false,
+        parseHTML: (el: HTMLElement) => {
+          const v = el.getAttribute('data-completed-at');
+          return v ? Number(v) : null;
+        },
+        renderHTML: (a: Record<string, any>) => (a.completedAt ? { 'data-completed-at': String(a.completedAt) } : {}),
       },
     };
   },

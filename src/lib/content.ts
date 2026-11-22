@@ -1,5 +1,6 @@
-import type { JSONContent, TaskPriority } from '../db/schema';
+import type { JSONContent, TaskPriority, TaskStatus } from '../db/schema';
 import { uid } from '../db/schema';
+import { resolveTaskStatus } from './tasks';
 
 export const emptyDoc = (): JSONContent => ({ type: 'doc', content: [{ type: 'paragraph' }] });
 
@@ -60,8 +61,11 @@ export interface ExtractedTask {
   id: string;
   text: string;
   done: boolean;
+  status: TaskStatus;
   due: string | null;
   priority: TaskPriority | null;
+  contextId: string | null;
+  completedAt: number | null;
 }
 
 /** Text of a task item, without nested task lists. */
@@ -77,12 +81,16 @@ export function extractTasks(doc: JSONContent | undefined, titleOf?: (id: string
   const out: ExtractedTask[] = [];
   walk(doc, (n) => {
     if (n.type === 'taskItem' && n.attrs?.taskId) {
+      const done = !!n.attrs.checked || n.attrs.status === 'done';
       out.push({
         id: n.attrs.taskId,
         text: taskOwnText(n, titleOf),
-        done: !!n.attrs.checked,
+        done,
+        status: resolveTaskStatus(done, n.attrs.status),
         due: n.attrs.due || null,
         priority: (n.attrs.priority as TaskPriority) || null,
+        contextId: n.attrs.contextId || null,
+        completedAt: typeof n.attrs.completedAt === 'number' ? n.attrs.completedAt : null,
       });
     }
   });
@@ -103,21 +111,81 @@ export function assignTaskIds(doc: JSONContent, fresh = false): JSONContent {
   return copy;
 }
 
-/** Update the attrs of the task node with this id. Returns a new doc, or null if not found. */
-export function patchTaskInDoc(
-  doc: JSONContent,
-  taskId: string,
-  patch: { checked?: boolean; due?: string | null; priority?: TaskPriority | null },
-): JSONContent | null {
+export interface TaskPatch {
+  checked?: boolean;
+  status?: TaskStatus;
+  due?: string | null;
+  priority?: TaskPriority | null;
+  contextId?: string | null;
+  text?: string;
+}
+
+/** Update the attrs (and optionally text) of the task node with this id. Returns a new doc, or null if not found. */
+export function patchTaskInDoc(doc: JSONContent, taskId: string, patch: TaskPatch): JSONContent | null {
   const copy: JSONContent = JSON.parse(JSON.stringify(doc));
   let found = false;
   walk(copy, (n) => {
     if (n.type === 'taskItem' && n.attrs?.taskId === taskId) {
-      n.attrs = { ...n.attrs, ...patch };
+      const attrs = { ...(n.attrs ?? {}) };
+      if (patch.status !== undefined) {
+        attrs.status = patch.status;
+        if (patch.status === 'done') {
+          attrs.checked = true;
+          attrs.completedAt = attrs.completedAt ?? Date.now();
+        } else {
+          attrs.checked = false;
+          attrs.completedAt = null;
+        }
+      }
+      if (patch.checked !== undefined) {
+        attrs.checked = patch.checked;
+        if (patch.checked) {
+          attrs.status = 'done';
+          attrs.completedAt = Date.now();
+        } else {
+          if (attrs.status === 'done') attrs.status = 'open';
+          attrs.completedAt = null;
+        }
+      }
+      if (patch.due !== undefined) attrs.due = patch.due;
+      if (patch.priority !== undefined) attrs.priority = patch.priority;
+      if (patch.contextId !== undefined) attrs.contextId = patch.contextId;
+      n.attrs = attrs;
+
+      if (patch.text !== undefined) {
+        const rest = (n.content ?? []).filter((c) => c.type === 'taskList' || c.type === 'bulletList' || c.type === 'orderedList');
+        const trimmed = patch.text;
+        n.content = [{ type: 'paragraph', content: trimmed ? [{ type: 'text', text: trimmed }] : [] }, ...rest];
+      }
       found = true;
     }
   });
   return found ? copy : null;
+}
+
+/** Remove the task node with this id from a TipTap document (also cleans up now-empty taskLists). */
+export function removeTaskFromDoc(doc: JSONContent, taskId: string): JSONContent | null {
+  const copy: JSONContent = JSON.parse(JSON.stringify(doc));
+  let removed = false;
+  const prune = (node: JSONContent): JSONContent[] | null => {
+    if (!node.content) return null;
+    const next: JSONContent[] = [];
+    for (const child of node.content) {
+      if (child.type === 'taskItem' && child.attrs?.taskId === taskId) {
+        removed = true;
+        continue;
+      }
+      const sub = prune(child);
+      if (sub) child.content = sub;
+      if (child.type === 'taskList' && (!child.content || child.content.length === 0)) continue;
+      next.push(child);
+    }
+    return next;
+  };
+  const nextRoot = prune(copy);
+  if (!removed) return null;
+  copy.content = nextRoot && nextRoot.length ? nextRoot : [{ type: 'paragraph' }];
+  return copy;
 }
 
 /** For backlinks: the text of each block that mentions `targetId`. */
