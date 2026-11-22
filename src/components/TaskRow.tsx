@@ -4,11 +4,13 @@ import type { TaskRec, TaskStatus } from '../db/schema';
 import { deleteTask, updateTask } from '../db/indexers';
 import { displayTitle, useObject, useTypeMap } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
+import { useT } from '../store/uiStore';
 import { shortDate, todayISO } from '../lib/dates';
 import { NEXT_PRIO, PRIO_MAP, resolveTaskStatus, STATUS_MAP, TASK_STATUSES } from '../lib/tasks';
 import { Popover } from './Popover';
 
 export function TaskRow({ task, showSource = true }: { task: TaskRec; showSource?: boolean }) {
+  const tr = useT();
   const ctxObj = useObject(task.contextId || task.objectId);
   const typeMap = useTypeMap();
   const open = useOpen();
@@ -68,9 +70,9 @@ export function TaskRow({ task, showSource = true }: { task: TaskRec; showSource
               setDraft(task.text);
               setEditing(true);
             }}
-            title="Double-click to edit"
+            title={tr('Double-click to edit')}
           >
-            {task.text || <span className="muted">Empty task</span>}
+            {task.text || <span className="muted">{tr('Empty task')}</span>}
           </div>
         )}
         {showSource && ctxObj && (
@@ -80,7 +82,7 @@ export function TaskRow({ task, showSource = true }: { task: TaskRec; showSource
             style={{ ['--type-color' as any]: t?.color }}
             onClick={(e) => open(objPath(ctxObj.id), e)}
           >
-            {ctxObj.icon || t?.icon} {displayTitle(ctxObj)}
+            {ctxObj.icon || t?.icon} {displayTitle(ctxObj, tr)}
           </button>
         )}
       </div>
@@ -90,10 +92,10 @@ export function TaskRow({ task, showSource = true }: { task: TaskRec; showSource
           ref={statusRef}
           type="button"
           className={`status-pill tone-${statusDef.tone} compact`}
-          title="Change status"
+          title={tr('Change status')}
           onClick={() => setStatusOpen((v) => !v)}
         >
-          {statusDef.label}
+          {tr(statusDef.label)}
         </button>
       )}
       {statusOpen && (
@@ -108,7 +110,7 @@ export function TaskRow({ task, showSource = true }: { task: TaskRec; showSource
                 setStatusOpen(false);
               }}
             >
-              {s.label}
+              {tr(s.label)}
             </button>
           ))}
         </Popover>
@@ -118,20 +120,20 @@ export function TaskRow({ task, showSource = true }: { task: TaskRec; showSource
         type="button"
         className={`prio-chip${prioDef ? ` prio-${prioDef.id}` : ' prio-none'}`}
         onClick={cyclePrio}
-        title={prioDef ? `Priority: ${prioDef.label} (click to cycle)` : 'Set priority'}
+        title={tr('Click to cycle priority (P1 High → P2 Med → P3 Low → None)')}
       >
         {prioDef ? prioDef.bang : <Flag size={11} />}
       </button>
 
-      <label className={`task-due${overdue ? ' overdue' : ''}${task.due === todayISO() ? ' today' : ''}`} title="Scheduled date">
-        <span>{task.due ? shortDate(task.due) : 'No date'}</span>
+      <label className={`task-due${overdue ? ' overdue' : ''}${task.due === todayISO() ? ' today' : ''}`} title={tr('Due date')}>
+        <span>{task.due ? shortDate(task.due, tr) : tr('No date')}</span>
         <input type="date" value={task.due ?? ''} onChange={(e) => void updateTask(task.id, { due: e.target.value || null })} />
       </label>
 
       <button
         type="button"
         className="icon-btn tiny danger task-row-del"
-        title="Delete task"
+        title={tr('Delete')}
         onClick={() => void deleteTask(task.id)}
       >
         <Trash2 size={13} />

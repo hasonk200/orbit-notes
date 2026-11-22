@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import MiniSearch from 'minisearch';
 import { Search } from 'lucide-react';
 import { createObject, getOrCreateDaily } from '../db/indexers';
 import { displayTitle, useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
-import { useUI } from '../store/uiStore';
+import { useT, useUI } from '../store/uiStore';
 import { docText } from '../lib/content';
+import { buildNoteSearch, includesText, normalizeText } from '../lib/search';
+import { isComposing } from '../lib/keyboard';
+import { propertyLabel, typeLabel } from '../lib/typeLabels';
 import { dailyTitle, parseQuickDate, todayISO } from '../lib/dates';
 import { formatPropValue } from './PropertyPanel';
 import { Modal } from './Popover';
@@ -21,7 +23,7 @@ interface Cmd {
 }
 
 function snippetAround(text: string, terms: string[], len = 110) {
-  const lower = text.toLowerCase();
+  const lower = normalizeText(text);
   let i = -1;
   for (const t of terms) {
     i = lower.indexOf(t.toLowerCase());
@@ -33,6 +35,7 @@ function snippetAround(text: string, terms: string[], len = 110) {
 }
 
 export function CommandPalette() {
+  const tr = useT();
   const setPalette = useUI((s) => s.setPalette);
   const objects = useData((s) => s.objects);
   const types = useData((s) => s.types);
@@ -43,14 +46,10 @@ export function CommandPalette() {
   const listRef = useRef<HTMLDivElement>(null);
   const close = () => setPalette(false);
 
-  const { search, texts } = useMemo(() => {
+  const { search, texts, objectMap } = useMemo(() => {
     const typeMap = new Map(types.map((t) => [t.id, t]));
-    const titleOf = (id: string) => displayTitle(objects.find((o) => o.id === id));
-    const ms = new MiniSearch({
-      fields: ['title', 'props', 'body', 'tags'],
-      storeFields: ['id'],
-      searchOptions: { boost: { title: 4, tags: 2, props: 1.5 }, prefix: true, fuzzy: 0.2, combineWith: 'AND' },
-    });
+    const objectMap = new Map(objects.map((o) => [o.id, o]));
+    const titleOf = (id: string) => displayTitle(objectMap.get(id), tr);
     const texts = new Map<string, string>();
     const docs = objects
       .filter((o) => !o.deletedAt)
@@ -58,12 +57,18 @@ export function CommandPalette() {
         const body = docText(o.content, titleOf);
         texts.set(o.id, body);
         const type = typeMap.get(o.typeId);
-        const props = (type?.properties ?? []).map((d) => formatPropValue(d, o.props[d.key], objects)).join(' ');
-        return { id: o.id, title: displayTitle(o), props, body, tags: o.tags.join(' ') };
+        const props = (type?.properties ?? []).flatMap((def) => {
+          const value = o.props[def.key];
+          const label = propertyLabel(type, def, tr);
+          const formatted = formatPropValue(def, value, objectMap, type, tr);
+          const original = typeof value === 'string' && def.kind !== 'relation' ? value : '';
+          return [...new Set([label, def.name, formatted, original])].filter(Boolean);
+        }).join(' ');
+        const title = displayTitle(o, tr);
+        return { id: o.id, title: title === o.title ? title : `${title} ${o.title}`, props, body, tags: o.tags.join(' ') };
       });
-    ms.addAll(docs);
-    return { search: ms, texts };
-  }, [objects, types]);
+    return { search: buildNoteSearch(docs), texts, objectMap };
+  }, [objects, types, tr]);
 
   const cmds = useMemo<Cmd[]>(() => {
     const typeMap = new Map(types.map((t) => [t.id, t]));
@@ -74,18 +79,18 @@ export function CommandPalette() {
       open(path, { altKey: alt });
     };
     if (query) {
-      const res = search.search(query).slice(0, 12);
+      const res = search(query);
       for (const r of res) {
-        const o = objects.find((x) => x.id === r.id);
+        const o = objectMap.get(r.id);
         if (!o) continue;
         const t = typeMap.get(o.typeId);
         out.push({
           key: o.id,
           icon: o.icon || t?.icon,
-          label: displayTitle(o),
-          hint: t?.name,
+          label: displayTitle(o, tr),
+          hint: t && typeLabel(t, tr),
           snippet: snippetAround(texts.get(o.id) ?? '', r.terms),
-          section: 'Objects',
+          section: tr('Objects'),
           run: go(objPath(o.id)),
         });
       }
@@ -94,9 +99,9 @@ export function CommandPalette() {
         out.push({
           key: 'date',
           icon: '◷',
-          label: dailyTitle(date),
-          hint: 'Open day',
-          section: 'Jump to',
+          label: dailyTitle(date, tr),
+          hint: tr('Open day'),
+          section: tr('Jump to'),
           run: async (alt) => {
             await getOrCreateDaily(date);
             go(`/calendar?mode=day&date=${date}`)(alt);
@@ -107,8 +112,8 @@ export function CommandPalette() {
         out.push({
           key: 'new-' + t.id,
           icon: t.icon,
-          label: `New ${t.name}: “${query}”`,
-          section: 'Create',
+          label: tr('New {type}: “{title}”', { type: typeLabel(t, tr), title: query }),
+          section: tr('Create'),
           run: async (alt) => {
             const o = await createObject(t.id, { title: query });
             go(objPath(o.id))(alt);
@@ -122,32 +127,31 @@ export function CommandPalette() {
         .slice(0, 6);
       for (const o of recent) {
         const t = typeMap.get(o.typeId);
-        out.push({ key: o.id, icon: o.icon || t?.icon, label: displayTitle(o), hint: t?.name, section: 'Recent', run: go(objPath(o.id)) });
+        out.push({ key: o.id, icon: o.icon || t?.icon, label: displayTitle(o, tr), hint: t && typeLabel(t, tr), section: tr('Recent'), run: go(objPath(o.id)) });
       }
     }
     const views: [string, string, string][] = [
-      ['📅', 'Today’s note', 'today'],
-      ['🗓️', 'Calendar', '/calendar'],
-      ['☑', 'Tasks', '/tasks'],
-      ['🕸', 'Graph', '/graph'],
-      ['#', 'Tags', '/tags'],
-      ['🧭', 'Explore', '/home'],
-      ['🗑', 'Trash', '/trash'],
-      ['⚙', 'Settings', '/settings'],
-      ...types.map((t) => [t.icon, `All ${t.name}s`, `/type/${t.id}`] as [string, string, string]),
+      ['📅', tr('Today’s note'), 'today'],
+      ['🗓️', tr('Calendar'), '/calendar'],
+      ['☑', tr('Tasks'), '/tasks'],
+      ['🕸', tr('Graph'), '/graph'],
+      ['#', tr('Tags'), '/tags'],
+      ['🧭', tr('Explore'), '/home'],
+      ['🗑', tr('Trash'), '/trash'],
+      ['⚙', tr('Settings'), '/settings'],
+      ...types.map((t): [string, string, string] => [t.icon, tr('All {type}', { type: typeLabel(t, tr) }), `/type/${t.id}`]),
       ...collections.map((c) => {
         const t = typeMap.get(c.typeId);
-        return [c.icon || '📁', `${t?.name ?? ''} / ${c.name}`, `/type/${c.typeId}?collection=${c.id}`] as [string, string, string];
+        return [c.icon || '📁', `${t ? typeLabel(t, tr) + ' / ' : ''}${c.name}`, `/type/${c.typeId}?collection=${c.id}`] as [string, string, string];
       }),
     ];
-    const lq = query.toLowerCase();
     for (const [icon, label, path] of views) {
-      if (lq && !label.toLowerCase().includes(lq)) continue;
+      if (query && !includesText(label, query)) continue;
       out.push({
         key: 'view-' + path,
         icon,
         label,
-        section: 'Go to',
+        section: tr('Go to'),
         run:
           path === 'today'
             ? async (alt) => {
@@ -159,7 +163,7 @@ export function CommandPalette() {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, search, texts, objects, types, collections]);
+  }, [q, search, texts, objectMap, objects, types, collections, tr]);
 
   useEffect(() => setIndex(0), [q]);
   useEffect(() => {
@@ -168,18 +172,20 @@ export function CommandPalette() {
 
   let last = '';
   return (
-    <Modal onClose={close} className="palette">
+    <Modal onClose={close} className="palette" label={tr('Search and commands')}>
       <div className="palette-input">
         <Search size={18} />
         <input
           autoFocus
-          placeholder="Search everything, jump to a date (tomorrow, 2026-12-24), or create…"
+          aria-label={tr('Search and commands')}
+          placeholder={tr('Search everything, jump to a date (tomorrow, 2026-12-24), or create…')}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
+            if (isComposing(e.nativeEvent)) return;
             if (e.key === 'ArrowDown') {
               e.preventDefault();
-              setIndex((i) => Math.min(i + 1, cmds.length - 1));
+              setIndex((i) => Math.min(i + 1, Math.max(0, cmds.length - 1)));
             } else if (e.key === 'ArrowUp') {
               e.preventDefault();
               setIndex((i) => Math.max(i - 1, 0));
@@ -214,9 +220,9 @@ export function CommandPalette() {
             </div>
           );
         })}
-        {cmds.length === 0 && <div className="muted pad">No results.</div>}
+        {cmds.length === 0 && <div className="muted pad">{tr('No results.')}</div>}
       </div>
-      <div className="palette-foot muted small">↑↓ to move · Enter to open · Alt+Enter opens in split view</div>
+      <div className="palette-foot muted small">{tr('↑↓ to move · Enter to open · Alt+Enter opens in split view')}</div>
     </Modal>
   );
 }

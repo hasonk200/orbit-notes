@@ -1,4 +1,4 @@
-import { addDays, formatDistanceToNow, isToday as isDateToday, isYesterday as isDateYesterday } from 'date-fns';
+import { addDays, isToday as isDateToday, isYesterday as isDateYesterday } from 'date-fns';
 import {
   CalendarCheck,
   CalendarClock,
@@ -20,7 +20,10 @@ import type { TaskPriority, TaskRec, TaskStatus } from '../db/schema';
 import { createTask, updateTask } from '../db/indexers';
 import { displayTitle, useActiveObjects, useData, useObjMap, useTypeMap } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
-import { shortDate, todayISO, toISODate } from '../lib/dates';
+import { useT } from '../store/uiStore';
+import { relativeTime, shortDate, todayISO, toISODate } from '../lib/dates';
+import { includesText } from '../lib/search';
+import { typeLabel } from '../lib/typeLabels';
 import { parseQuickTaskInput, PRIO_MAP, PRIO_RANK, resolveTaskStatus, STATUS_MAP, STATUS_RANK, TASK_PRIORITIES, TASK_STATUSES } from '../lib/tasks';
 import { TaskRow } from '../components/TaskRow';
 import { TaskCard } from '../components/TaskCard';
@@ -47,6 +50,7 @@ function dayBucket(ts: number): 'Today' | 'Yesterday' | 'Earlier' {
 }
 
 export function TasksView() {
+  const tr = useT();
   const tasks = useData((s) => s.tasks);
   const types = useData((s) => s.types);
   const activeObjects = useActiveObjects();
@@ -115,22 +119,18 @@ export function TasksView() {
       }));
   }, [tasks, objMap]);
 
-  // Apply search & filter bar
+  // Apply search & filter bar (supports CJK + Latin via includesText)
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     return allTasks.filter((t) => {
       const ctxObj = objMap.get(t.contextId || t.objectId) ?? objMap.get(t.objectId);
       if (filterPrio && (t.priority ?? 'none') !== filterPrio) return false;
       if (filterStatus && t.status !== filterStatus) return false;
       if (filterType && ctxObj?.typeId !== filterType) return false;
-      if (q) {
-        const titleHit = t.text.toLowerCase().includes(q);
-        const ctxHit = ctxObj ? displayTitle(ctxObj).toLowerCase().includes(q) : false;
-        if (!titleHit && !ctxHit) return false;
-      }
+      if (q && !includesText(t.text, q) && !(ctxObj && includesText(displayTitle(ctxObj, tr), q))) return false;
       return true;
     });
-  }, [allTasks, objMap, search, filterPrio, filterStatus, filterType]);
+  }, [allTasks, objMap, search, filterPrio, filterStatus, filterType, tr]);
 
   const today = todayISO();
   const tomorrow = toISODate(addDays(new Date(), 1));
@@ -142,7 +142,7 @@ export function TasksView() {
     (a.due ?? '9999').localeCompare(b.due ?? '9999') ||
     b.updatedAt - a.updatedAt;
 
-  // Per-tab computed counts (from unfiltered allTasks so badges stay stable)
+  // Per-tab computed counts
   const counts = useMemo(() => {
     let inbox = 0;
     let todayC = 0;
@@ -162,7 +162,7 @@ export function TasksView() {
     return { inbox, today: todayC, scheduled, open: openC, completed, all: allTasks.length };
   }, [allTasks, today]);
 
-  // Tab datasets (from filtered)
+  // Tab datasets
   const inboxGroups = useMemo(() => {
     const list = filtered.filter((t) => !t.done && !t.due && t.status === 'open').sort((a, b) => b.createdAt - a.createdAt);
     const map = new Map<string, TaskRec[]>();
@@ -171,9 +171,9 @@ export function TasksView() {
       map.set(k, [...(map.get(k) ?? []), t]);
     }
     return (['Today', 'Yesterday', 'Earlier'] as const)
-      .map((label) => ({ key: label, label, items: map.get(label) ?? [] }))
+      .map((label) => ({ key: label, label: tr(label), items: map.get(label) ?? [] }))
       .filter((g) => g.items.length > 0);
-  }, [filtered]);
+  }, [filtered, tr]);
 
   const todayGroups = useMemo(() => {
     const list = filtered.filter((t) => !t.done && ((t.due && t.due <= today) || t.status === 'in_progress'));
@@ -181,28 +181,28 @@ export function TasksView() {
     const rest = list.filter((t) => !(t.due && t.due < today));
     const statusOrder: TaskStatus[] = ['in_progress', 'next_up', 'not_started', 'open'];
     const out: { key: string; label: string; tone?: string; items: TaskRec[] }[] = [];
-    if (overdue.length) out.push({ key: 'overdue', label: 'Overdue', tone: 'rose', items: overdue });
+    if (overdue.length) out.push({ key: 'overdue', label: tr('Overdue'), tone: 'rose', items: overdue });
     for (const st of statusOrder) {
       const items = rest.filter((t) => t.status === st).sort(byPrioThenDue);
       if (items.length) {
         const def = STATUS_MAP.get(st)!;
-        out.push({ key: st, label: def.label, tone: def.tone, items });
+        out.push({ key: st, label: tr(def.label), tone: def.tone, items });
       }
     }
     return out;
-  }, [filtered, today]);
+  }, [filtered, today, tr]);
 
   const scheduledGroups = useMemo(() => {
     const list = filtered.filter((t) => !t.done && !!t.due);
     const byDue = (a: TaskRec, b: TaskRec) => (a.due ?? '').localeCompare(b.due ?? '') || byPrioThenDue(a, b);
     return [
-      { key: 'overdue', label: 'Overdue', tone: 'rose', items: list.filter((t) => t.due! < today).sort(byDue) },
-      { key: 'today', label: 'Today', tone: 'amber', items: list.filter((t) => t.due === today).sort(byDue) },
-      { key: 'tomorrow', label: 'Tomorrow', tone: 'blue', items: list.filter((t) => t.due === tomorrow).sort(byDue) },
-      { key: 'week', label: 'Next 7 days', tone: 'neutral', items: list.filter((t) => t.due! > tomorrow && t.due! <= nextWeekEnd).sort(byDue) },
-      { key: 'later', label: 'Later', tone: 'neutral', items: list.filter((t) => t.due! > nextWeekEnd).sort(byDue) },
+      { key: 'overdue', label: tr('Overdue'), tone: 'rose', items: list.filter((t) => t.due! < today).sort(byDue) },
+      { key: 'today', label: tr('Today'), tone: 'amber', items: list.filter((t) => t.due === today).sort(byDue) },
+      { key: 'tomorrow', label: tr('Tomorrow'), tone: 'blue', items: list.filter((t) => t.due === tomorrow).sort(byDue) },
+      { key: 'week', label: tr('Next 7 days'), tone: 'neutral', items: list.filter((t) => t.due! > tomorrow && t.due! <= nextWeekEnd).sort(byDue) },
+      { key: 'later', label: tr('Later'), tone: 'neutral', items: list.filter((t) => t.due! > nextWeekEnd).sort(byDue) },
     ].filter((g) => g.items.length > 0);
-  }, [filtered, today, tomorrow, nextWeekEnd]);
+  }, [filtered, today, tomorrow, nextWeekEnd, tr]);
 
   const statusColumns = useMemo(() => {
     return TASK_STATUSES.map((s) => ({
@@ -232,14 +232,14 @@ export function TasksView() {
           id: cid,
           obj,
           type: tp,
-          title: obj ? displayTitle(obj) : 'Unknown',
+          title: obj ? displayTitle(obj, tr) : tr('Unknown'),
           icon: obj?.icon || tp?.icon || '📄',
           color: tp?.color ?? '#8b8a86',
           items: items.sort(byPrioThenDue),
         };
       })
       .sort((a, b) => b.items.length - a.items.length || a.title.localeCompare(b.title));
-  }, [filtered, objMap, typeMap]);
+  }, [filtered, objMap, typeMap, tr]);
 
   const openList = useMemo(() => filtered.filter((t) => !t.done).sort(byPrioThenDue), [filtered]);
 
@@ -253,9 +253,9 @@ export function TasksView() {
       map.set(k, [...(map.get(k) ?? []), t]);
     }
     return (['Today', 'Yesterday', 'Earlier'] as const)
-      .map((label) => ({ key: label, label, items: map.get(label) ?? [] }))
+      .map((label) => ({ key: label, label: tr(label), items: map.get(label) ?? [] }))
       .filter((g) => g.items.length > 0);
-  }, [filtered]);
+  }, [filtered, tr]);
 
   const visibleCount = useMemo(() => {
     switch (tab) {
@@ -346,14 +346,14 @@ export function TasksView() {
   const hasActiveFilter = !!(filterPrio || filterStatus || filterType || search.trim());
 
   const TABS: { id: DashTab; label: string; icon: React.ReactNode; badge?: number }[] = [
-    { id: 'inbox', label: 'Inbox', icon: <Inbox size={14} />, badge: counts.inbox },
-    { id: 'today', label: 'Today', icon: <CalendarCheck size={14} />, badge: counts.today },
-    { id: 'scheduled', label: 'Scheduled', icon: <CalendarClock size={14} />, badge: counts.scheduled },
-    { id: 'status', label: 'Status', icon: <Columns3 size={14} /> },
-    { id: 'context', label: 'Context', icon: <Compass size={14} /> },
-    { id: 'open', label: 'Open', icon: <Circle size={14} />, badge: counts.open },
-    { id: 'completed', label: 'Completed', icon: <CheckCircle2 size={14} />, badge: counts.completed },
-    { id: 'all', label: 'All', icon: <List size={14} /> },
+    { id: 'inbox', label: tr('Inbox'), icon: <Inbox size={14} />, badge: counts.inbox },
+    { id: 'today', label: tr('Today'), icon: <CalendarCheck size={14} />, badge: counts.today },
+    { id: 'scheduled', label: tr('Scheduled'), icon: <CalendarClock size={14} />, badge: counts.scheduled },
+    { id: 'status', label: tr('Status'), icon: <Columns3 size={14} /> },
+    { id: 'context', label: tr('Context'), icon: <Compass size={14} /> },
+    { id: 'open', label: tr('Open'), icon: <Circle size={14} />, badge: counts.open },
+    { id: 'completed', label: tr('Completed'), icon: <CheckCircle2 size={14} />, badge: counts.completed },
+    { id: 'all', label: tr('All'), icon: <List size={14} /> },
   ];
 
   const renderKanban = () => (
@@ -377,7 +377,7 @@ export function TasksView() {
             onDrop={(e) => void handleDropOnColumn(col.id, e)}
           >
             <div className="kanban-col-head">
-              <span className={`status-pill tone-${col.tone}`}>{col.label}</span>
+              <span className={`status-pill tone-${col.tone}`}>{tr(col.label)}</span>
               <span className="kanban-col-count">{col.items.length}</span>
             </div>
 
@@ -405,25 +405,25 @@ export function TasksView() {
               >
                 <input
                   autoFocus
-                  placeholder="Task title… (@today, !p1)"
+                  placeholder={tr('Task title… (@today, !p1)')}
                   value={colDraft}
                   onChange={(e) => setColDraft(e.target.value)}
                   onKeyDown={(e) => e.key === 'Escape' && setAddingInCol(null)}
                 />
                 <div className="kanban-composer-foot">
-                  <select value={colContext} onChange={(e) => setColContext(e.target.value)} title="Context object">
-                    <option value="__today">📅 Today’s Note</option>
+                  <select value={colContext} onChange={(e) => setColContext(e.target.value)} title={tr('Context')}>
+                    <option value="__today">📅 {tr('Today’s Daily Note')}</option>
                     {targetChoices.map((o) => {
                       const tp = typeMap.get(o.typeId);
                       return (
                         <option key={o.id} value={o.id}>
-                          {o.icon || tp?.icon || '📄'} {displayTitle(o)}
+                          {o.icon || tp?.icon || '📄'} {displayTitle(o, tr)}
                         </option>
                       );
                     })}
                   </select>
                   <button type="submit" className="btn small primary" disabled={!colDraft.trim()}>
-                    Add
+                    {tr('Add')}
                   </button>
                   <button type="button" className="icon-btn tiny" onClick={() => setAddingInCol(null)}>
                     <X size={13} />
@@ -439,7 +439,7 @@ export function TasksView() {
                   setAddingInCol(col.id);
                 }}
               >
-                <Plus size={14} /> New
+                <Plus size={14} /> {tr('New')}
               </button>
             )}
           </div>
@@ -454,11 +454,11 @@ export function TasksView() {
         <thead>
           <tr>
             <th style={{ width: 36 }} />
-            <th>Task</th>
-            <th>Status</th>
-            <th>Priority</th>
-            <th>Scheduled</th>
-            <th>Context</th>
+            <th>{tr('Task')}</th>
+            <th>{tr('Status')}</th>
+            <th>{tr('Priority')}</th>
+            <th>{tr('Scheduled')}</th>
+            <th>{tr('Context')}</th>
           </tr>
         </thead>
         <tbody>
@@ -481,10 +481,10 @@ export function TasksView() {
                 </td>
                 <td className={`t-title${t.done ? ' task-done-txt' : ''}`}>{t.text}</td>
                 <td>
-                  <span className={`status-pill tone-${st.tone} compact`}>{st.label}</span>
+                  <span className={`status-pill tone-${st.tone} compact`}>{tr(st.label)}</span>
                 </td>
-                <td>{pr ? <span className={`prio-chip prio-${pr.id}`}>{pr.bang} {pr.label}</span> : <span className="muted">—</span>}</td>
-                <td className="nowrap">{t.due ? shortDate(t.due) : <span className="muted">—</span>}</td>
+                <td>{pr ? <span className={`prio-chip prio-${pr.id}`}>{pr.bang} {tr(pr.label)}</span> : <span className="muted">—</span>}</td>
+                <td className="nowrap">{t.due ? shortDate(t.due, tr) : <span className="muted">—</span>}</td>
                 <td>
                   {ctxObj && (
                     <button
@@ -493,7 +493,7 @@ export function TasksView() {
                       style={{ ['--type-color' as any]: ctxType?.color ?? '#8b8a86' }}
                       onClick={(e) => open(objPath(ctxObj.id), e)}
                     >
-                      <span>{ctxObj.icon || ctxType?.icon}</span> {displayTitle(ctxObj)}
+                      <span>{ctxObj.icon || ctxType?.icon}</span> {displayTitle(ctxObj, tr)}
                     </button>
                   )}
                 </td>
@@ -512,7 +512,7 @@ export function TasksView() {
           <span className="tasks-brand-icon">
             <CheckCircle2 size={20} />
           </span>
-          <h1>Tasks</h1>
+          <h1>{tr('Tasks')}</h1>
         </div>
         <div className="tasks-head-right">
           {searchOpen ? (
@@ -520,7 +520,7 @@ export function TasksView() {
               <Search size={14} />
               <input
                 autoFocus
-                placeholder="Search tasks or context…"
+                placeholder={tr('Filter tasks…')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {
@@ -542,20 +542,20 @@ export function TasksView() {
               </button>
             </label>
           ) : (
-            <button type="button" className="icon-btn" title="Search tasks" onClick={() => setSearchOpen(true)}>
+            <button type="button" className="icon-btn" title={tr('Search tasks')} onClick={() => setSearchOpen(true)}>
               <Search size={16} />
             </button>
           )}
           <button
             type="button"
             className={`icon-btn${filtersOpen || hasActiveFilter ? ' is-accent' : ''}`}
-            title="Filter tasks"
+            title={tr('Filter tasks')}
             onClick={() => setFiltersOpen((v) => !v)}
           >
             <Filter size={16} />
           </button>
           <button type="button" className="btn primary tasks-new-cta" onClick={openNewModalForTab}>
-            <Plus size={15} /> New
+            <Plus size={15} /> {tr('New')}
           </button>
         </div>
       </header>
@@ -581,13 +581,13 @@ export function TasksView() {
           <span className="muted small nowrap"># {visibleCount}</span>
           {tab === 'all' && (
             <div className="segmented small">
-              <button type="button" className={allLayout === 'list' ? 'active' : ''} onClick={() => setAllLayout('list')} title="List">
+              <button type="button" className={allLayout === 'list' ? 'active' : ''} onClick={() => setAllLayout('list')} title={tr('List')}>
                 <List size={14} />
               </button>
-              <button type="button" className={allLayout === 'board' ? 'active' : ''} onClick={() => setAllLayout('board')} title="Kanban Board">
+              <button type="button" className={allLayout === 'board' ? 'active' : ''} onClick={() => setAllLayout('board')} title={tr('Board')}>
                 <LayoutGrid size={14} />
               </button>
-              <button type="button" className={allLayout === 'table' ? 'active' : ''} onClick={() => setAllLayout('table')} title="Table">
+              <button type="button" className={allLayout === 'table' ? 'active' : ''} onClick={() => setAllLayout('table')} title={tr('Table')}>
                 <Table size={14} />
               </button>
             </div>
@@ -598,27 +598,27 @@ export function TasksView() {
       {filtersOpen && (
         <div className="tasks-filter-bar">
           <select className="control-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-            <option value="">All statuses</option>
+            <option value="">{tr('All statuses')}</option>
             {TASK_STATUSES.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.label}
+                {tr(s.label)}
               </option>
             ))}
           </select>
           <select className="control-select" value={filterPrio} onChange={(e) => setFilterPrio(e.target.value)}>
-            <option value="">All priorities</option>
+            <option value="">{tr('All priorities')}</option>
             {TASK_PRIORITIES.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.bang} {p.label}
+                {p.bang} {tr(p.label)}
               </option>
             ))}
-            <option value="none">No priority</option>
+            <option value="none">{tr('No priority')}</option>
           </select>
           <select className="control-select" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-            <option value="">All context types</option>
+            <option value="">{tr('All types')}</option>
             {types.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.icon} {t.name}
+                {t.icon} {typeLabel(t, tr)}
               </option>
             ))}
           </select>
@@ -633,7 +633,7 @@ export function TasksView() {
                 setSearch('');
               }}
             >
-              Clear filters
+              {tr('Clear filters')}
             </button>
           )}
         </div>
@@ -646,12 +646,12 @@ export function TasksView() {
       {tab === 'inbox' && (
         <div className="tasks-section-wrap">
           <p className="muted small tasks-tab-hint">
-            Undated tasks without a status yet. Assign a date or move them to a status (Not Started / Next Up / In Progress) to process your inbox.
+            {tr('Undated tasks without a status yet. Assign a date or move them to a status to process your inbox.')}
           </p>
           {inboxGroups.length === 0 ? (
             <div className="empty-inline center">
-              <strong>Inbox zero!</strong>
-              <span>Every task has been scheduled or assigned a status.</span>
+              <strong>{tr('Inbox zero!')}</strong>
+              <span>{tr('Every task has been scheduled or assigned a status.')}</span>
             </div>
           ) : (
             inboxGroups.map((g) => (
@@ -672,12 +672,12 @@ export function TasksView() {
       {tab === 'today' && (
         <div className="tasks-section-wrap">
           <p className="muted small tasks-tab-hint">
-            Tasks due today, overdue tasks, and anything currently In Progress — grouped by status and ordered by priority.
+            {tr('Tasks due today, overdue tasks, and anything currently In Progress — grouped by status and ordered by priority.')}
           </p>
           {todayGroups.length === 0 ? (
             <div className="empty-inline center">
-              <strong>All clear for today.</strong>
-              <span>Schedule a task for today or drag one into “In Progress” on the Status board.</span>
+              <strong>{tr('All clear for today.')}</strong>
+              <span>{tr('Schedule a task for today or drag one into “In Progress” on the Status board.')}</span>
             </div>
           ) : (
             todayGroups.map((g) => (
@@ -700,8 +700,8 @@ export function TasksView() {
         <div className="tasks-section-wrap">
           {scheduledGroups.length === 0 ? (
             <div className="empty-inline center">
-              <strong>No scheduled tasks yet.</strong>
-              <span>Add a date to any task (or type @tomorrow inside a note) to see it here.</span>
+              <strong>{tr('No scheduled tasks yet.')}</strong>
+              <span>{tr('Add a date to any task (or type @tomorrow inside a note) to see it here.')}</span>
             </div>
           ) : (
             scheduledGroups.map((g) => (
@@ -713,7 +713,7 @@ export function TasksView() {
                   </h3>
                   {g.key === 'overdue' && (
                     <button type="button" className="btn small" onClick={() => void rescheduleOverdueToToday()}>
-                      Reschedule all to Today
+                      {tr('Reschedule all to Today')}
                     </button>
                   )}
                 </div>
@@ -730,12 +730,12 @@ export function TasksView() {
       {tab === 'context' && (
         <div className="tasks-section-wrap">
           <p className="muted small tasks-tab-hint">
-            Open tasks grouped by the Project, Book, Person, Meeting, or Note they belong to.
+            {tr('Open tasks grouped by the Project, Book, Person, Meeting, or Note they belong to.')}
           </p>
           {contextGroups.length === 0 ? (
             <div className="empty-inline center">
-              <strong>No open tasks in any context yet.</strong>
-              <span>Create tasks inside your notes or link a task’s context object.</span>
+              <strong>{tr('No open tasks in any context yet.')}</strong>
+              <span>{tr('Create tasks inside your notes or link a task’s context object.')}</span>
             </div>
           ) : (
             <div className="context-groups">
@@ -749,7 +749,7 @@ export function TasksView() {
                     >
                       <span className="context-group-icon">{g.icon}</span>
                       <span>{g.title}</span>
-                      {g.type && <span className="context-group-type">{g.type.name}</span>}
+                      {g.type && <span className="context-group-type">{typeLabel(g.type, tr)}</span>}
                     </button>
                     <span className="count">{g.items.length}</span>
                     <div className="spacer" />
@@ -761,7 +761,7 @@ export function TasksView() {
                         setAddingInCtx(addingInCtx === g.id ? null : g.id);
                       }}
                     >
-                      <Plus size={13} /> Add task
+                      <Plus size={13} /> {tr('Add task')}
                     </button>
                   </div>
                   {addingInCtx === g.id && (
@@ -774,13 +774,13 @@ export function TasksView() {
                     >
                       <input
                         autoFocus
-                        placeholder={`New task in ${g.title}… (@today, !p1)`}
+                        placeholder={tr('Task title… (@today, !p1)')}
                         value={ctxDraft}
                         onChange={(e) => setCtxDraft(e.target.value)}
                         onKeyDown={(e) => e.key === 'Escape' && setAddingInCtx(null)}
                       />
                       <button type="submit" className="btn small primary" disabled={!ctxDraft.trim()}>
-                        Add
+                        {tr('Add')}
                       </button>
                     </form>
                   )}
@@ -801,8 +801,8 @@ export function TasksView() {
         <div className="tasks-section-wrap">
           {openList.length === 0 ? (
             <div className="empty-inline center">
-              <strong>No open tasks.</strong>
-              <span>Click “New” above to capture a task.</span>
+              <strong>{tr('No open tasks.')}</strong>
+              <span>{tr('Click “New” above to capture a task.')}</span>
             </div>
           ) : (
             <div className="task-group">
@@ -819,8 +819,8 @@ export function TasksView() {
         <div className="tasks-section-wrap">
           {completedGroups.length === 0 ? (
             <div className="empty-inline center">
-              <strong>No completed tasks yet.</strong>
-              <span>Check off a task or drag it into Done on the Status board.</span>
+              <strong>{tr('No completed tasks yet.')}</strong>
+              <span>{tr('Check off a task or drag it into Done on the Status board.')}</span>
             </div>
           ) : (
             completedGroups.map((g) => (
@@ -833,7 +833,7 @@ export function TasksView() {
                     <TaskRow task={t} />
                     {t.completedAt && (
                       <span className="completed-time muted small">
-                        Done {formatDistanceToNow(t.completedAt, { addSuffix: true })}
+                        {tr('Done')} {relativeTime(t.completedAt, tr)}
                       </span>
                     )}
                   </div>
@@ -854,8 +854,8 @@ export function TasksView() {
           <div className="tasks-section-wrap">
             {filtered.length === 0 ? (
               <div className="empty-inline center">
-                <strong>No matching tasks.</strong>
-                <span>Clear your filters or create a new task.</span>
+                <strong>{tr('No matching open tasks.')}</strong>
+                <span>{tr('Add one above or clear your filters.')}</span>
               </div>
             ) : (
               <div className="task-group">
@@ -870,9 +870,9 @@ export function TasksView() {
 
       {/* ---------- NEW TASK MODAL ---------- */}
       {newModalOpen && (
-        <Modal onClose={() => setNewModalOpen(false)} className="new-task-modal">
+        <Modal onClose={() => setNewModalOpen(false)} className="new-task-modal" label={tr('New Task')}>
           <div className="modal-head">
-            <h2>New Task</h2>
+            <h2>{tr('New Task')}</h2>
             <button type="button" className="icon-btn" onClick={() => setNewModalOpen(false)}>
               <X size={18} />
             </button>
@@ -887,45 +887,45 @@ export function TasksView() {
             <input
               className="ntm-title"
               autoFocus
-              placeholder="What needs to be done? (supports @tomorrow, !p1)"
+              placeholder={tr('What needs to be done? (supports @tomorrow, !p1)')}
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
             />
             <div className="ntm-grid">
               <label>
-                <span>Status</span>
+                <span>{tr('Status')}</span>
                 <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as TaskStatus)}>
                   {TASK_STATUSES.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.label}
+                      {tr(s.label)}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                <span>Priority</span>
+                <span>{tr('Priority')}</span>
                 <select value={newPrio} onChange={(e) => setNewPrio(e.target.value as TaskPriority | '')}>
-                  <option value="">None</option>
+                  <option value="">{tr('No priority')}</option>
                   {TASK_PRIORITIES.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.bang} {p.label}
+                      {p.bang} {tr(p.label)}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                <span>Scheduled date</span>
+                <span>{tr('Due date')}</span>
                 <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} />
               </label>
               <label>
-                <span>Context / Note</span>
+                <span>{tr('Context')}</span>
                 <select value={newTarget} onChange={(e) => setNewTarget(e.target.value)}>
-                  <option value="__today">📅 Today’s Daily Note</option>
+                  <option value="__today">📅 {tr('Today’s Daily Note')}</option>
                   {targetChoices.map((o) => {
                     const tp = typeMap.get(o.typeId);
                     return (
                       <option key={o.id} value={o.id}>
-                        {o.icon || tp?.icon || '📄'} {displayTitle(o)}
+                        {o.icon || tp?.icon || '📄'} {displayTitle(o, tr)}
                       </option>
                     );
                   })}
@@ -935,10 +935,10 @@ export function TasksView() {
             <div className="modal-foot">
               <div className="spacer" />
               <button type="button" className="btn" onClick={() => setNewModalOpen(false)}>
-                Cancel
+                {tr('Cancel')}
               </button>
               <button type="submit" className="btn primary" disabled={!newTitle.trim()}>
-                Create Task
+                {tr('Create Task')}
               </button>
             </div>
           </form>

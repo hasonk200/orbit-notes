@@ -1,3 +1,4 @@
+import { getT, useT } from '../../store/uiStore';
 import { mergeAttributes, Node, type Editor, type Range } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { PluginKey } from '@tiptap/pm/state';
@@ -8,16 +9,17 @@ import { useOpen } from '../../store/pane';
 import { runItem, suggestRender, type SuggestItem } from '../suggestStore';
 
 function DateRefView({ node, selected }: ReactNodeViewProps) {
+  const tr = useT();
   const open = useOpen();
   const date = node.attrs.date as string;
   return (
     <NodeViewWrapper
       as="span"
       className={`date-chip${selected ? ' is-selected' : ''}`}
-      title={dailyTitle(date)}
+      title={dailyTitle(date, tr)}
       onClick={(e: React.MouseEvent) => open(`/calendar?mode=day&date=${date}`, e)}
     >
-      ◷ {shortDate(date)}
+      ◷ {shortDate(date, tr)}
     </NodeViewWrapper>
   );
 }
@@ -60,6 +62,7 @@ function applyDate(date: string) {
 }
 
 const dateItems = ({ query, editor }: { query: string; editor: Editor }): SuggestItem[] => {
+  const tr = getT();
   const inTask = !!enclosingTask(editor);
   const section = inTask ? 'Set due date' : 'Insert date';
   const now = new Date();
@@ -73,11 +76,11 @@ const dateItems = ({ query, editor }: { query: string; editor: Editor }): Sugges
   const parsed = parseQuickDate(q);
   const items: SuggestItem[] = [];
   if (parsed && !base.some(([, d]) => d === parsed)) {
-    items.push({ key: 'p' + parsed, label: dailyTitle(parsed), icon: '◷', section, run: applyDate(parsed) });
+    items.push({ key: 'p' + parsed, label: dailyTitle(parsed, tr), icon: '◷', section, run: applyDate(parsed) });
   }
   for (const [label, d] of base) {
-    if (!q || label.toLowerCase().startsWith(q) || d === parsed) {
-      items.push({ key: label, label, hint: dailyTitle(d), icon: '◷', section, run: applyDate(d) });
+    if (!q || label.toLowerCase().startsWith(q) || tr(label).startsWith(q) || d === parsed) {
+      items.push({ key: label, label: tr(label), hint: dailyTitle(d, tr), icon: '◷', section, run: applyDate(d) });
     }
   }
   return items;

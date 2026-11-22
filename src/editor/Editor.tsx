@@ -1,3 +1,4 @@
+import { useT } from '../store/uiStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -16,8 +17,9 @@ import { SlashMenu } from './SlashMenu';
 import { BlockDragHandle } from './BlockDragHandle';
 import type { JSONContent, Obj } from '../db/schema';
 import { saveObject } from '../db/indexers';
+import { registerDraft } from '../db/drafts';
 
-export function buildExtensions(placeholder: string) {
+function buildExtensions(getPlaceholder: (heading: boolean) => string) {
   return [
     StarterKit.configure({
       listItem: false,
@@ -26,7 +28,7 @@ export function buildExtensions(placeholder: string) {
     }),
     OutlinerListItem,
     Placeholder.configure({
-      placeholder: ({ node }) => (node.type.name === 'heading' ? 'Heading' : placeholder),
+      placeholder: ({ node }) => getPlaceholder(node.type.name === 'heading'),
       showOnlyCurrent: true,
     }),
     TaskList,
@@ -45,26 +47,27 @@ export function buildExtensions(placeholder: string) {
 }
 
 function TableToolbar({ editor }: { editor: Editor }) {
+  const tr = useT();
   return (
     <div className="table-bar" contentEditable={false}>
-      <span className="table-bar-label">Table</span>
+      <span className="table-bar-label">{tr('Table')}</span>
       <button type="button" onClick={() => editor.chain().focus().addRowAfter().run()}>
-        + Row
+        {tr('+ Row')}
       </button>
       <button type="button" onClick={() => editor.chain().focus().addColumnAfter().run()}>
-        + Col
+        {tr('+ Col')}
       </button>
       <button type="button" onClick={() => editor.chain().focus().deleteRow().run()}>
-        − Row
+        {tr('− Row')}
       </button>
       <button type="button" onClick={() => editor.chain().focus().deleteColumn().run()}>
-        − Col
+        {tr('− Col')}
       </button>
       <button type="button" onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
-        Header
+        {tr('Header')}
       </button>
       <button type="button" className="danger" onClick={() => editor.chain().focus().deleteTable().run()}>
-        Delete
+        {tr('Delete')}
       </button>
     </div>
   );
@@ -94,14 +97,19 @@ export function RichEditor({
   showGutter = true,
   onReady,
 }: RichEditorProps) {
+  const tr = useT();
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const emptyText = placeholder ?? tr('Write something, or type / for commands, [[ to link, # to tag, @ for dates');
+  const headingText = tr('Heading');
+  const placeholderText = useRef({ emptyText, headingText });
+  placeholderText.current = { emptyText, headingText };
   const wrapRef = useRef<HTMLDivElement>(null);
   const [inTable, setInTable] = useState(false);
 
   const editor = useEditor(
     {
-      extensions: buildExtensions(placeholder ?? 'Write something, or type / for commands, [[ to link, # to tag, @ for dates'),
+      extensions: buildExtensions((heading) => heading ? placeholderText.current.headingText : placeholderText.current.emptyText),
       content,
       editable,
       autofocus: autofocus ? 'end' : false,
@@ -118,6 +126,10 @@ export function RichEditor({
   useEffect(() => {
     editor?.setEditable(editable, false);
   }, [editor, editable]);
+  useEffect(() => {
+    // Refresh the decoration without recreating the editor or resetting undo history.
+    if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr);
+  }, [editor, emptyText, headingText]);
 
   return (
     <div ref={wrapRef} className={`editor-shell${showGutter && editable ? ' with-gutter' : ''}`}>
@@ -137,37 +149,48 @@ export function ObjectEditor({ obj, autofocus, placeholder }: { obj: Obj; autofo
   const lastSaved = useRef(JSON.stringify(obj.content));
   const pending = useRef<JSONContent | null>(null);
   const timer = useRef<number>(0);
+  const write = useRef(Promise.resolve());
   const id = obj.id;
 
   const flush = useCallback(() => {
     window.clearTimeout(timer.current);
     const c = pending.current;
-    if (!c) return;
+    if (!c) return write.current;
     pending.current = null;
     lastSaved.current = JSON.stringify(c);
-    void saveObject(id, { content: c });
+    const retryable = write.current.catch(() => {}).then(() => saveObject(id, { content: c })).catch((error: unknown) => {
+      if (!pending.current && write.current === retryable) pending.current = c;
+      throw error;
+    });
+    write.current = retryable;
+    return retryable;
   }, [id]);
+  const flushInBackground = useCallback(() => {
+    void flush().catch((error) => console.error('Orbit could not save the note', error));
+  }, [flush]);
 
   const onChange = useCallback(
     (json: JSONContent) => {
       pending.current = json;
       window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(flush, 400);
+      timer.current = window.setTimeout(flushInBackground, 400);
     },
-    [flush],
+    [flushInBackground],
   );
 
   // flush when leaving the object / closing the tab
   useEffect(() => {
-    const onHide = () => flush();
+    const unregister = registerDraft(id, flush);
+    const onHide = () => flushInBackground();
     window.addEventListener('beforeunload', onHide);
     document.addEventListener('visibilitychange', onHide);
     return () => {
       window.removeEventListener('beforeunload', onHide);
       document.removeEventListener('visibilitychange', onHide);
-      flush();
+      flushInBackground();
+      unregister();
     };
-  }, [flush]);
+  }, [flush, flushInBackground, id]);
 
   // apply changes made elsewhere
   useEffect(() => {

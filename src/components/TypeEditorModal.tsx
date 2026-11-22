@@ -1,9 +1,11 @@
+import { typeLabel } from '../lib/typeLabels';
+import { normalizeText } from '../lib/search';
 import { useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Trash, X } from 'lucide-react';
 import { db, uid, type JSONContent, type ObjType, type PropertyDef, type PropertyKind } from '../db/schema';
 import { convertType, reindexAll } from '../db/indexers';
 import { useData } from '../store/dataStore';
-import { useUI } from '../store/uiStore';
+import { useT, useUI } from '../store/uiStore';
 import { RichEditor } from '../editor/Editor';
 import { emptyDoc } from '../lib/content';
 import { EmojiPicker } from './TypeIcon';
@@ -27,6 +29,7 @@ const slug = (s: string) =>
     .replace(/^-|-$/g, '') || 'prop';
 
 export function TypeEditorModal({ typeId }: { typeId: string }) {
+  const tr = useT();
   const types = useData((s) => s.types);
   const objects = useData((s) => s.objects);
   const setTypeEditor = useUI((s) => s.setTypeEditor);
@@ -64,8 +67,8 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
 
   const save = async () => {
     const name = draft.name.trim();
-    if (!name) return setErr('Give the type a name.');
-    if (types.some((t) => t.id !== existing?.id && t.name.toLowerCase() === name.toLowerCase())) return setErr('A type with this name already exists.');
+    if (!name) return setErr(tr('Give the type a name.'));
+    if (types.some((t) => t.id !== existing?.id && [t.name, typeLabel(t, tr)].some((label) => normalizeText(label) === normalizeText(name)))) return setErr(tr('A type with this name already exists.'));
     const props: PropertyDef[] = [];
     for (const p of draft.properties) {
       const pname = p.name.trim();
@@ -93,16 +96,17 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
   const remove = async () => {
     if (!existing || existing.builtin) return;
     const all = objects.filter((o) => o.typeId === existing.id);
-    if (!confirm(all.length ? `Delete “${existing.name}”? Its ${all.length} object(s) will be converted to Pages.` : `Delete “${existing.name}”?`)) return;
+    const name = typeLabel(existing, tr);
+    if (!confirm(all.length ? tr('Delete “{name}”? Its {count} object(s) will be converted to Pages.', { name, count: all.length }) : tr('Delete “{name}”?', { name }))) return;
     for (const o of all) await convertType(o.id, 'page');
     await db.types.delete(existing.id);
     close();
   };
 
   return (
-    <Modal onClose={close} className="type-editor">
+    <Modal onClose={close} className="type-editor" label={existing ? tr("Edit {type}", { type: typeLabel(existing, tr) }) : tr('New object type')}>
       <div className="modal-head">
-        <h2>{existing ? `Edit ${existing.name}` : 'New object type'}</h2>
+        <h2>{existing ? tr('Edit {type}', { type: typeLabel(existing, tr) }) : tr('New object type')}</h2>
         <button type="button" className="icon-btn" onClick={close}>
           <X size={18} />
         </button>
@@ -112,7 +116,7 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
           <button type="button" ref={iconBtn} className="te-icon" style={{ ['--type-color' as any]: draft.color }} onClick={() => setEmoji(true)}>
             {draft.icon}
           </button>
-          <input className="te-name" placeholder="Type name, e.g. Recipe" value={draft.name} autoFocus onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+          <input className="te-name" placeholder={tr('Type name, e.g. Recipe')} value={draft.name} autoFocus onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
         </div>
         {emoji && (
           <EmojiPicker
@@ -131,52 +135,52 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
           ))}
         </div>
 
-        <h4>Properties</h4>
-        {draft.properties.length === 0 && <p className="muted small">No properties yet. Properties show at the top of every {draft.name || 'object'}.</p>}
+        <h4>{tr('Properties')}</h4>
+        {draft.properties.length === 0 && <p className="muted small">{tr('No properties yet. Properties show at the top of every {type}.', { type: draft.name || tr('object') })}</p>}
         <div className="te-props">
           {draft.properties.map((p, i) => (
             <div key={i} className="te-prop">
-              <input placeholder="Property name" value={p.name} onChange={(e) => setProp(i, { name: e.target.value })} />
+              <input placeholder={tr('Property name')} value={p.name} onChange={(e) => setProp(i, { name: e.target.value })} />
               <select value={p.kind} onChange={(e) => setProp(i, { kind: e.target.value as PropertyKind })}>
                 {KINDS.map(([k, l]) => (
                   <option key={k} value={k}>
-                    {l}
+                    {tr(l)}
                   </option>
                 ))}
               </select>
               {p.kind === 'select' && (
                 <input
                   className="te-wide"
-                  placeholder="Options, comma separated"
+                  placeholder={tr('Options, comma separated')}
                   value={(p.options ?? []).join(', ')}
-                  onChange={(e) => setProp(i, { options: e.target.value.split(',').map((x) => x.trimStart()) })}
+                  onChange={(e) => setProp(i, { options: e.target.value.split(/[,，]/).map((x) => x.trimStart()) })}
                 />
               )}
               {p.kind === 'relation' && (
                 <>
                   <select value={p.targetTypeId ?? ''} onChange={(e) => setProp(i, { targetTypeId: e.target.value || null })}>
-                    <option value="">Any type</option>
+                    <option value="">{tr('Any type')}</option>
                     {types
                       .filter((t) => t.id !== 'daily')
                       .map((t) => (
                         <option key={t.id} value={t.id}>
-                          {t.icon} {t.name}
+                          {t.icon} {typeLabel(t, tr)}
                         </option>
                       ))}
                   </select>
                   <label className="te-check">
-                    <input type="checkbox" checked={!!p.multi} onChange={(e) => setProp(i, { multi: e.target.checked })} /> Multiple
+                    <input type="checkbox" checked={!!p.multi} onChange={(e) => setProp(i, { multi: e.target.checked })} /> {tr('Multiple')}
                   </label>
                 </>
               )}
               <div className="te-prop-actions">
-                <button type="button" className="icon-btn tiny" onClick={() => move(i, -1)} title="Move up">
+                <button type="button" className="icon-btn tiny" onClick={() => move(i, -1)} title={tr('Move up')}>
                   <ArrowUp size={14} />
                 </button>
-                <button type="button" className="icon-btn tiny" onClick={() => move(i, 1)} title="Move down">
+                <button type="button" className="icon-btn tiny" onClick={() => move(i, 1)} title={tr('Move down')}>
                   <ArrowDown size={14} />
                 </button>
-                <button type="button" className="icon-btn tiny danger" onClick={() => setDraft((d) => ({ ...d, properties: d.properties.filter((_, j) => j !== i) }))} title="Remove">
+                <button type="button" className="icon-btn tiny danger" onClick={() => setDraft((d) => ({ ...d, properties: d.properties.filter((_, j) => j !== i) }))} title={tr('Remove')}>
                   <Trash size={14} />
                 </button>
               </div>
@@ -184,14 +188,14 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
           ))}
         </div>
         <button type="button" className="btn-ghost" onClick={addProp}>
-          <Plus size={14} /> Add property
+          <Plus size={14} /> {tr('Add property')}
         </button>
 
         {draft.id !== 'daily' && (
           <>
             <h4>
               <label className="te-check">
-                <input type="checkbox" checked={useTemplate} onChange={(e) => setUseTemplate(e.target.checked)} /> Default template
+                <input type="checkbox" checked={useTemplate} onChange={(e) => setUseTemplate(e.target.checked)} /> {tr('Default template')}
               </label>
             </h4>
             {useTemplate && (
@@ -201,7 +205,7 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
                   content={template.current}
                   onChange={(j) => (template.current = j)}
                   showGutter={false}
-                  placeholder="Write the starting content for every new object of this type…"
+                  placeholder={tr('Write the starting content for every new object of this type…')}
                 />
               </div>
             )}
@@ -212,15 +216,15 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
       <div className="modal-foot">
         {existing && !existing.builtin && (
           <button type="button" className="btn danger" onClick={remove}>
-            <Trash size={14} /> Delete type{count ? ` (${count})` : ''}
+            <Trash size={14} /> {tr('Delete type')}{count ? ` (${count})` : ''}
           </button>
         )}
         <div className="spacer" />
         <button type="button" className="btn" onClick={close}>
-          Cancel
+          {tr('Cancel')}
         </button>
         <button type="button" className="btn primary" onClick={save}>
-          {existing ? 'Save' : 'Create type'}
+          {existing ? tr('Save') : tr('Create type')}
         </button>
       </div>
     </Modal>

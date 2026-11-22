@@ -1,3 +1,4 @@
+import { getT } from '../../store/uiStore';
 import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { PluginKey } from '@tiptap/pm/state';
@@ -49,7 +50,7 @@ const tagItems = ({ query }: { query: string }): SuggestItem[] => {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
     .map(([t, n]) => ({ key: t, label: '#' + t, hint: `${n}`, section: 'Tags', run: insert(t) }));
-  if (q && !counts.has(q)) items.unshift({ key: 'new:' + q, label: `Create #${q}`, icon: '＋', section: 'Tags', run: insert(q) });
+  if (q && !counts.has(q)) items.unshift({ key: 'new:' + q, label: getT()('Create #{tag}', { tag: q }), icon: '＋', section: 'Tags', run: insert(q) });
   return items;
 };
 

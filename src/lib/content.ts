@@ -1,5 +1,5 @@
 import type { JSONContent, TaskPriority, TaskStatus } from '../db/schema';
-import { uid } from '../db/schema';
+import { uid } from './uid';
 import { resolveTaskStatus } from './tasks';
 
 export const emptyDoc = (): JSONContent => ({ type: 'doc', content: [{ type: 'paragraph' }] });

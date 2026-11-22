@@ -1,9 +1,16 @@
 import { db, uid, type CollectionRec, type JSONContent, type LinkRec, type Obj, type ObjType, type TaskPriority, type TaskRec, type TaskStatus } from './schema';
 import { assignTaskIds, emptyDoc, extractBlobIds, extractLinkIds, extractTags, extractTasks, patchTaskInDoc, removeTaskFromDoc, type TaskPatch } from '../lib/content';
 import { dailyTitle, toISODate } from '../lib/dates';
+import { defaultTemplate } from '../lib/typeLabels';
+import { getT } from '../store/uiStore';
 
 /** Rebuild links / tasks / tags for one object. Must be called inside a rw transaction on objects, links, tasks. */
 async function reindex(obj: Obj, type?: ObjType) {
+  if (obj.syncConflictOf) {
+    await db.links.where('fromId').equals(obj.id).delete();
+    await db.tasks.where('objectId').equals(obj.id).delete();
+    return;
+  }
   type = type ?? (await db.types.get(obj.typeId));
   // ---- links (content + relation properties)
   const links: LinkRec[] = [];
@@ -60,6 +67,7 @@ async function reindex(obj: Obj, type?: ObjType) {
 
 export async function createObject(typeId: string, init: Partial<Obj> = {}): Promise<Obj> {
   const type = await db.types.get(typeId);
+  const template = defaultTemplate(type, getT());
   const now = Date.now();
   const obj: Obj = {
     id: uid(),
@@ -68,7 +76,7 @@ export async function createObject(typeId: string, init: Partial<Obj> = {}): Pro
     icon: null,
     cover: null,
     props: {},
-    content: type?.defaultTemplate ? assignTaskIds(type.defaultTemplate, true) : emptyDoc(),
+    content: template ? assignTaskIds(template, true) : emptyDoc(),
     tags: [],
     createdAt: now,
     updatedAt: now,
@@ -89,6 +97,7 @@ export async function saveObject(id: string, patchOrFn: Partial<Obj> | ((cur: Ob
     const cur = await db.objects.get(id);
     if (!cur) return;
     const patch = typeof patchOrFn === 'function' ? patchOrFn(cur) : patchOrFn;
+    if (!Object.keys(patch).length) return;
     const next: Obj = { ...cur, ...patch, updatedAt: Date.now() };
     if (patch.content) next.tags = extractTags(patch.content);
     await db.objects.put(next);
@@ -182,7 +191,8 @@ export async function convertType(id: string, newTypeId: string) {
 }
 
 export async function createCollection(typeId: string, name: string, icon?: string | null): Promise<CollectionRec> {
-  const existing = await db.collections.where('typeId').equals(typeId).toArray();
+  const existing = await db.collections.where('typeId').equals(typeId).filter((c) => !c.deletedAt).toArray();
+  const now = Date.now();
   const col: CollectionRec = {
     id: uid(),
     typeId,
@@ -190,25 +200,53 @@ export async function createCollection(typeId: string, name: string, icon?: stri
     icon: icon ?? '📁',
     color: null,
     order: existing.length,
-    createdAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
   };
   await db.collections.add(col);
   return col;
 }
 
 export async function updateCollection(id: string, patch: Partial<Pick<CollectionRec, 'name' | 'icon' | 'color' | 'order'>>) {
-  await db.collections.update(id, patch);
+  await db.collections.where('id').equals(id).filter((c) => !c.deletedAt).modify((c) => {
+    Object.assign(c, patch, { updatedAt: Math.max(Date.now(), (c.updatedAt ?? c.createdAt) + 1) });
+  });
 }
 
 export async function deleteCollection(id: string) {
   await db.transaction('rw', [db.collections, db.objects], async () => {
-    await db.collections.delete(id);
+    const c = await db.collections.get(id);
+    if (!c || c.deletedAt) return;
+    const updatedAt = Math.max(Date.now(), (c.updatedAt ?? c.createdAt) + 1);
+    await db.collections.update(id, { updatedAt, deletedAt: updatedAt });
     const objs = await db.objects.toArray();
     for (const o of objs) {
       if (o.collectionIds?.includes(id)) {
-        await db.objects.put({ ...o, collectionIds: o.collectionIds.filter((c) => c !== id) });
+        await db.objects.put({ ...o, collectionIds: o.collectionIds.filter((c) => c !== id), updatedAt: Date.now() });
       }
     }
+  });
+}
+
+export async function resolveObjectConflict(copyId: string, useCopy: boolean) {
+  await db.transaction('rw', db.objects, db.links, db.tasks, db.types, async () => {
+    const copy = await db.objects.get(copyId);
+    if (!copy?.syncConflictOf || copy.deletedAt) return;
+    const { syncConflictOf: id, syncConflictDeleted, ...version } = copy;
+    if (useCopy) {
+      const original = await db.objects.get(id);
+      const restored: Obj = {
+        ...version,
+        id,
+        dailyDate: original?.dailyDate ?? (id.startsWith('daily-') ? id.slice(6) : null),
+        deletedAt: syncConflictDeleted ? Date.now() : null,
+        updatedAt: Date.now(),
+      };
+      await db.objects.put(restored);
+      await reindex(restored);
+    }
+    const now = Date.now();
+    await db.objects.put({ ...copy, deletedAt: now, updatedAt: now });
   });
 }
 
@@ -224,10 +262,10 @@ export async function toggleObjectCollection(objectId: string, collectionId: str
 export async function updateTask(taskId: string, patch: TaskPatch) {
   const task = await db.tasks.get(taskId);
   if (!task) return;
-  const obj = await db.objects.get(task.objectId);
-  if (!obj) return;
-  const next = patchTaskInDoc(obj.content, taskId, patch);
-  if (next) await saveObject(obj.id, { content: next });
+  await saveObject(task.objectId, (cur) => {
+    const content = patchTaskInDoc(cur.content, taskId, patch);
+    return content ? { content } : {};
+  });
 }
 
 /** Delete a task node cleanly from its source object. */

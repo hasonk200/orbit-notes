@@ -1,10 +1,13 @@
+import { useT } from '../store/uiStore';
 import { RotateCcw, Trash } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { relativeTime } from '../lib/dates';
+import { typeLabel } from '../lib/typeLabels';
 import { deletePermanently, emptyTrash, restoreObject } from '../db/indexers';
 import { displayTitle, useData, useTypeMap } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 
 export function TrashView() {
+  const tr = useT();
   const objects = useData((s) => s.objects);
   const typeMap = useTypeMap();
   const open = useOpen();
@@ -14,8 +17,8 @@ export function TrashView() {
     <div className="page">
       <header className="page-head row">
         <div>
-          <h1>Trash</h1>
-          <p className="muted">Deleted objects stay here until you remove them for good. Their links show as “Deleted object”.</p>
+          <h1>{tr('Trash')}</h1>
+          <p className="muted">{tr('Deleted objects stay here until you remove them for good. Their links show as “Deleted object”.')}</p>
         </div>
         <div className="spacer" />
         {trashed.length > 0 && (
@@ -23,16 +26,16 @@ export function TrashView() {
             type="button"
             className="btn danger"
             onClick={async () => {
-              if (confirm(`Permanently delete ${trashed.length} object(s)? This cannot be undone.`)) await emptyTrash();
+              if (confirm(tr('Permanently delete {count} object(s)? This cannot be undone.', { count: trashed.length }))) await emptyTrash();
             }}
           >
-            <Trash size={14} /> Empty Trash
+            <Trash size={14} /> {tr('Empty Trash')}
           </button>
         )}
       </header>
       {trashed.length === 0 && (
         <div className="empty-inline center">
-          <strong>Trash is empty.</strong>
+          <strong>{tr('Trash is empty.')}</strong>
         </div>
       )}
       <div className="row-list">
@@ -44,22 +47,22 @@ export function TrashView() {
                 <span className="obj-row-icon" style={{ ['--type-color' as any]: t?.color }}>
                   {o.icon || t?.icon}
                 </span>
-                <span className="obj-row-title">{displayTitle(o)}</span>
+                <span className="obj-row-title">{displayTitle(o, tr)}</span>
                 <span className="obj-row-type">
-                  {t?.name} · deleted {formatDistanceToNow(o.deletedAt!, { addSuffix: true })}
+                  {t && typeLabel(t, tr)} · {tr('Deleted {time}', { time: relativeTime(o.deletedAt!, tr) })}
                 </span>
               </button>
               <button type="button" className="btn small" onClick={() => restoreObject(o.id)}>
-                <RotateCcw size={13} /> Restore
+                <RotateCcw size={13} /> {tr('Restore')}
               </button>
               <button
                 type="button"
                 className="btn small danger"
                 onClick={async () => {
-                  if (confirm(`Permanently delete “${displayTitle(o)}”? This cannot be undone.`)) await deletePermanently(o.id);
+                  if (confirm(tr('Permanently delete “{title}”? This cannot be undone.', { title: displayTitle(o, tr) }))) await deletePermanently(o.id);
                 }}
               >
-                Delete
+                {tr('Delete')}
               </button>
             </div>
           );

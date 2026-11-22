@@ -322,7 +322,16 @@ h4 {
   gap: 8px;
   font-weight: 700;
   font-size: 15px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
 }
+.brand:hover { background: var(--surface-2); }
 .sb-actions {
   display: flex;
   gap: 6px;
@@ -373,6 +382,13 @@ h4 {
 .sb-foot-row {
   display: flex;
   align-items: center;
+}
+.sb-version {
+  padding: 4px 10px 2px;
+  font-size: 11px;
+  color: var(--text-3, var(--text-2));
+  font-variant-numeric: tabular-nums;
+  user-select: text;
 }
 .sb-foot-row .nav-item {
   flex: 1;
@@ -1793,6 +1809,12 @@ span.olink-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
 }
 .month-num {
   display: inline-grid;
@@ -3144,7 +3166,6 @@ span.olink-card {
   to { transform: rotate(360deg); }
 }
 
-
 /* ---------- Capacities-Style Tasks Dashboard & Kanban ---------- */
 .task-box.round {
   border-radius: 50%;
@@ -3833,4 +3854,31 @@ span.olink-card {
   .ntm-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.pane-top-actions .mobile-quick {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .pane-top-actions .mobile-quick {
+    display: inline-flex;
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+.orbit-ai-form input {
+  min-width: 0;
+  max-width: 100%;
+}
+.orbit-ai-change {
+  border-top: 1px solid var(--line);
+  padding: 12px 0;
+}
+.orbit-ai-preview p {
+  max-height: 16rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

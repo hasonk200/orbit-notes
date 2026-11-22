@@ -3,25 +3,12 @@ import { Calendar, CheckCircle2, ExternalLink, Flag, FolderOpen, MoreHorizontal,
 import { useRef, useState } from 'react';
 import type { TaskRec, TaskStatus } from '../db/schema';
 import { deleteTask, updateTask } from '../db/indexers';
-import { todayISO, toISODate } from '../lib/dates';
+import { dateLabel, todayISO, toISODate } from '../lib/dates';
 import { NEXT_PRIO, PRIO_MAP, resolveTaskStatus, TASK_STATUSES } from '../lib/tasks';
 import { displayTitle, useActiveObjects, useObject, useTypeMap } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
+import { useT } from '../store/uiStore';
 import { Popover } from './Popover';
-
-function formatCardDate(iso: string): string {
-  const today = todayISO();
-  if (iso === today) return 'Today';
-  const tomorrow = toISODate(addDays(new Date(), 1));
-  if (iso === tomorrow) return 'Tomorrow';
-  const yesterday = toISODate(addDays(new Date(), -1));
-  if (iso === yesterday) return 'Yesterday';
-  try {
-    return format(parseISO(iso), 'MMMM d, yyyy');
-  } catch {
-    return iso;
-  }
-}
 
 export function TaskCard({
   task,
@@ -32,6 +19,7 @@ export function TaskCard({
   onDragStart?: (taskId: string) => void;
   onDragEnd?: () => void;
 }) {
+  const tr = useT();
   const ctxObj = useObject(task.contextId || task.objectId);
   const srcObj = useObject(task.objectId);
   const activeObjects = useActiveObjects();
@@ -55,7 +43,20 @@ export function TaskCard({
 
   const today = todayISO();
   const tomorrow = toISODate(addDays(new Date(), 1));
+  const yesterday = toISODate(addDays(new Date(), -1));
   const nextWeek = toISODate(addDays(new Date(), 7));
+
+  const formatCardDate = (iso: string) => {
+    if (iso === today) return tr('Today');
+    if (iso === tomorrow) return tr('Tomorrow');
+    if (iso === yesterday) return tr('Yesterday');
+    try {
+      const d = parseISO(iso);
+      return dateLabel(d, tr, 'MMMM d, yyyy', 'yyyy年M月d日');
+    } catch {
+      return format(new Date(), 'MMMM d, yyyy');
+    }
+  };
 
   const commitTitle = () => {
     setEditing(false);
@@ -82,13 +83,13 @@ export function TaskCard({
     >
       <div className="tcard-top">
         <span className="tcard-badge">
-          <CheckCircle2 size={11} /> Task
+          <CheckCircle2 size={11} /> {tr('Task')}
         </span>
         <button
           ref={menuBtnRef}
           type="button"
           className="tcard-more"
-          title="Task actions"
+          title={tr('Task actions')}
           onClick={() => setMenuOpen((v) => !v)}
         >
           <MoreHorizontal size={14} />
@@ -126,7 +127,7 @@ export function TaskCard({
               setDraft(task.text);
               setEditing(true);
             }}
-            title="Double-click to edit"
+            title={tr('Double-click to edit')}
           >
             {task.text}
           </div>
@@ -138,7 +139,7 @@ export function TaskCard({
           ref={dateBtnRef}
           type="button"
           className={`tcard-meta-btn${task.due ? ' has-date' : ''}${overdue ? ' overdue' : ''}${isToday ? ' today' : ''}`}
-          title={task.due ? `Scheduled: ${task.due}` : 'Schedule date'}
+          title={task.due ? task.due : tr('Due date')}
           onClick={() => setDateOpen((v) => !v)}
         >
           {task.due && <span>{formatCardDate(task.due)}</span>}
@@ -148,7 +149,7 @@ export function TaskCard({
         <button
           type="button"
           className={`tcard-meta-btn${prioDef ? ` has-prio prio-${prioDef.id}` : ''}`}
-          title={prioDef ? `Priority: ${prioDef.label} (click to cycle)` : 'Set priority'}
+          title={tr('Click to cycle priority (P1 High → P2 Med → P3 Low → None)')}
           onClick={cyclePriority}
         >
           {prioDef ? <span className="tcard-bang">{prioDef.bang}</span> : <Flag size={13} />}
@@ -162,18 +163,18 @@ export function TaskCard({
             type="button"
             className="tcard-ctx"
             style={{ ['--type-color' as any]: ctxType?.color ?? '#8b8a86' }}
-            title={`Open ${displayTitle(ctxObj)} (Alt+Click for Split View)`}
+            title={displayTitle(ctxObj, tr)}
             onClick={(e) => open(objPath(ctxObj.id), e)}
           >
             <span className="tcard-ctx-icon">{ctxObj.icon || ctxType?.icon || '📄'}</span>
-            <span className="tcard-ctx-name">{displayTitle(ctxObj)}</span>
+            <span className="tcard-ctx-name">{displayTitle(ctxObj, tr)}</span>
           </button>
         </div>
       )}
 
       {dateOpen && (
         <Popover anchor={dateBtnRef.current} onClose={() => setDateOpen(false)} className="task-popover">
-          <div className="tp-section">Scheduled date</div>
+          <div className="tp-section">{tr('Due date')}</div>
           <div className="tp-quick">
             <button
               type="button"
@@ -183,7 +184,7 @@ export function TaskCard({
                 setDateOpen(false);
               }}
             >
-              Today
+              {tr('Today')}
             </button>
             <button
               type="button"
@@ -193,7 +194,7 @@ export function TaskCard({
                 setDateOpen(false);
               }}
             >
-              Tomorrow
+              {tr('Tomorrow')}
             </button>
             <button
               type="button"
@@ -203,7 +204,7 @@ export function TaskCard({
                 setDateOpen(false);
               }}
             >
-              Next week
+              {tr('Next week')}
             </button>
           </div>
           <input
@@ -224,7 +225,7 @@ export function TaskCard({
                 setDateOpen(false);
               }}
             >
-              Clear date
+              {tr('Clear date')}
             </button>
           )}
         </Popover>
@@ -240,7 +241,7 @@ export function TaskCard({
               setMenuOpen(false);
             }}
           >
-            <Pencil size={13} /> Edit title
+            <Pencil size={13} /> {tr('Edit title')}
           </button>
           <button
             type="button"
@@ -249,7 +250,7 @@ export function TaskCard({
               setCtxOpen(true);
             }}
           >
-            <FolderOpen size={13} /> Change context
+            <FolderOpen size={13} /> {tr('Change context')}
           </button>
           {srcObj && (
             <button
@@ -259,7 +260,7 @@ export function TaskCard({
                 open(objPath(srcObj.id), e);
               }}
             >
-              <ExternalLink size={13} /> Open source note
+              <ExternalLink size={13} /> {tr('Open source note')}
             </button>
           )}
           <div className="tcard-menu-sep" />
@@ -274,7 +275,7 @@ export function TaskCard({
                   setMenuOpen(false);
                 }}
               >
-                {s.label}
+                {tr(s.label)}
               </button>
             ))}
           </div>
@@ -287,14 +288,14 @@ export function TaskCard({
               void deleteTask(task.id);
             }}
           >
-            <Trash2 size={13} /> Delete task
+            <Trash2 size={13} /> {tr('Delete')}
           </button>
         </Popover>
       )}
 
       {ctxOpen && (
         <Popover anchor={ctxBtnRef.current || menuBtnRef.current} onClose={() => setCtxOpen(false)} className="task-popover">
-          <div className="tp-section">Link context object</div>
+          <div className="tp-section">{tr('Context')}</div>
           <select
             className="tp-select"
             autoFocus
@@ -304,7 +305,7 @@ export function TaskCard({
               setCtxOpen(false);
             }}
           >
-            <option value="">Source note ({srcObj ? displayTitle(srcObj) : 'default'})</option>
+            <option value="">{srcObj ? displayTitle(srcObj, tr) : tr('Default')}</option>
             {activeObjects
               .filter((o) => o.typeId !== 'daily')
               .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -313,7 +314,7 @@ export function TaskCard({
                 const tp = typeMap.get(o.typeId);
                 return (
                   <option key={o.id} value={o.id}>
-                    {o.icon || tp?.icon || '📄'} {displayTitle(o)}
+                    {o.icon || tp?.icon || '📄'} {displayTitle(o, tr)}
                   </option>
                 );
               })}

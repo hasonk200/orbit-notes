@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useT } from '../store/uiStore';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Columns2, ImagePlus, Pin, PinOff, RotateCcw, Trash, X } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { relativeTime } from '../lib/dates';
+import { isComposing } from '../lib/keyboard';
 import { togglePinned, useData, useObject } from '../store/dataStore';
 import { objPath, useOpen, usePane } from '../store/pane';
 import { restoreObject, saveObject, softDelete } from '../db/indexers';
+import { registerDraft } from '../db/drafts';
 import { saveImage, useBlobUrl } from '../db/blobs';
 import { ObjectEditor } from '../editor/Editor';
 import { PropertyPanel } from '../components/PropertyPanel';
@@ -13,10 +16,38 @@ import { EmojiPicker, TypeBadge } from '../components/TypeIcon';
 import { ConvertTypeMenu } from '../components/ConvertTypeMenu';
 
 function TitleInput({ id, value, autoFocus, disabled }: { id: string; value: string; autoFocus?: boolean; disabled?: boolean }) {
+  const tr = useT();
   const [v, setV] = useState(value);
   const ref = useRef<HTMLTextAreaElement>(null);
   const t = useRef<number>(0);
   const focused = useRef(false);
+  const composing = useRef(false);
+  const latestValue = useRef(value);
+  latestValue.current = value;
+  const pending = useRef<string | null>(null);
+  const write = useRef(Promise.resolve());
+  const flush = useCallback(() => {
+    window.clearTimeout(t.current);
+    const title = pending.current;
+    if (title === null) return write.current;
+    pending.current = null;
+    const next = write.current.catch(() => {}).then(() => saveObject(id, { title })).catch((error: unknown) => {
+      if (pending.current === null && write.current === next) pending.current = title;
+      throw error;
+    });
+    write.current = next;
+    return next;
+  }, [id]);
+  const flushInBackground = useCallback(() => {
+    void flush().catch((error) => console.error('Orbit could not save the title', error));
+  }, [flush]);
+  useEffect(() => {
+    const unregister = registerDraft(id, flush);
+    return () => {
+      flushInBackground();
+      unregister();
+    };
+  }, [flush, flushInBackground, id]);
   useEffect(() => {
     if (!focused.current) setV(value);
   }, [value]);
@@ -29,29 +60,41 @@ function TitleInput({ id, value, autoFocus, disabled }: { id: string; value: str
   useEffect(() => {
     if (autoFocus) ref.current?.focus();
   }, [autoFocus]);
-  const commit = (nv: string) => saveObject(id, { title: nv.replace(/\n/g, ' ') });
+  const updateTitle = (title: string) => {
+    const next = title.replace(/\n/g, '');
+    setV(next);
+    if (composing.current) return;
+    pending.current = next;
+    window.clearTimeout(t.current);
+    t.current = window.setTimeout(flushInBackground, 400);
+  };
   return (
     <textarea
       ref={ref}
       className="obj-title"
       rows={1}
-      placeholder="Untitled"
+      placeholder={tr('Untitled')}
+      aria-label={tr('Title')}
       value={v}
       disabled={disabled}
       onFocus={() => (focused.current = true)}
       onBlur={() => {
         focused.current = false;
-        window.clearTimeout(t.current);
-        if (v !== value) commit(v);
+        if (pending.current === null) {
+          void write.current.then(() => {
+            if (!focused.current && pending.current === null) setV(latestValue.current);
+          }).catch(() => {});
+        }
+        flushInBackground();
       }}
-      onChange={(e) => {
-        const nv = e.target.value.replace(/\n/g, '');
-        setV(nv);
-        window.clearTimeout(t.current);
-        t.current = window.setTimeout(() => commit(nv), 400);
+      onChange={(e) => updateTitle(e.currentTarget.value)}
+      onCompositionStart={() => { composing.current = true; }}
+      onCompositionEnd={(e) => {
+        composing.current = false;
+        updateTitle(e.currentTarget.value);
       }}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !isComposing(e.nativeEvent)) {
           e.preventDefault();
           (e.currentTarget.closest('.obj-page')?.querySelector('.ProseMirror') as HTMLElement | null)?.focus();
         }
@@ -61,6 +104,7 @@ function TitleInput({ id, value, autoFocus, disabled }: { id: string; value: str
 }
 
 export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
+  const tr = useT();
   const obj = useObject(id);
   const type = useData((s) => s.types.find((t) => t.id === obj?.typeId));
   const pinned = useData((s) => s.pinned.includes(id));
@@ -80,12 +124,11 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
 
   // drop ?new=1 from the URL once used
   useEffect(() => {
-    if (isNew) replace(`/o/${id}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (isNew && obj) replace(`/o/${id}`);
+  }, [id, isNew, obj, replace]);
 
   if (!obj) {
-    return <div className="empty-state">{ready ? <h2>This object doesn’t exist anymore.</h2> : null}</div>;
+    return <div className="empty-state">{ready ? <h2>{tr('This object doesn’t exist anymore.')}</h2> : null}</div>;
   }
 
   const addCover = () => {
@@ -101,11 +144,17 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
 
   return (
     <div className="obj-page" style={{ ['--type-color' as any]: type?.color }}>
+      {obj.syncConflictOf && !obj.deletedAt && (
+        <div className="banner warn">
+          {tr('Recovered version from a sync conflict.')}
+          <button type="button" className="btn" onClick={(e) => open('/settings', e)}>{tr('Review versions')}</button>
+        </div>
+      )}
       {obj.deletedAt && (
         <div className="banner warn">
-          This object is in the Trash.
+          {tr('This object is in the Trash.')}
           <button type="button" className="btn" onClick={() => restoreObject(obj.id)}>
-            <RotateCcw size={14} /> Restore
+            <RotateCcw size={14} /> {tr('Restore')}
           </button>
         </div>
       )}
@@ -114,10 +163,10 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
           <img src={cover} alt="" />
           <div className="obj-cover-actions">
             <button type="button" className="btn small" onClick={addCover}>
-              Change cover
+              {tr('Change cover')}
             </button>
             <button type="button" className="btn small" onClick={() => saveObject(obj.id, { cover: null })}>
-              <X size={13} /> Remove
+              <X size={13} /> {tr('Remove')}
             </button>
           </div>
         </div>
@@ -127,33 +176,33 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
           <div ref={typeBtn}>
             <TypeBadge type={type} onClick={() => setConvertOpen(true)} />
           </div>
-          <span className="muted small">Edited {formatDistanceToNow(obj.updatedAt, { addSuffix: true })}</span>
+          <span className="muted small">{tr('Edited {time}', { time: relativeTime(obj.updatedAt, tr) })}</span>
           <div className="spacer" />
           {!cover && (
-            <button type="button" className="icon-btn" title="Add cover image" onClick={addCover}>
+            <button type="button" className="icon-btn" title={tr('Add cover image')} onClick={addCover}>
               <ImagePlus size={16} />
             </button>
           )}
-          <button type="button" className="icon-btn" title={pinned ? 'Unpin' : 'Pin to sidebar'} onClick={() => togglePinned(obj.id)}>
+          <button type="button" className="icon-btn" title={pinned ? tr('Unpin') : tr('Pin to sidebar')} onClick={() => togglePinned(obj.id)}>
             {pinned ? <PinOff size={16} /> : <Pin size={16} />}
           </button>
           {pane === 'main' && (
-            <button type="button" className="icon-btn" title="Open in split view" onClick={() => open(objPath(obj.id), null, { split: true })}>
+            <button type="button" className="icon-btn" title={tr('Open in split view')} onClick={() => open(objPath(obj.id), null, { split: true })}>
               <Columns2 size={16} />
             </button>
           )}
           {!obj.deletedAt && (
-            <button type="button" className="icon-btn danger" title="Move to Trash" onClick={() => softDelete(obj.id)}>
+            <button type="button" className="icon-btn danger" title={tr('Move to Trash')} onClick={() => softDelete(obj.id)}>
               <Trash size={16} />
             </button>
           )}
         </div>
 
         <div className="obj-head">
-          <button type="button" ref={iconBtn} className="obj-icon" onClick={() => setEmojiOpen(true)} title="Change icon">
+          <button type="button" ref={iconBtn} className="obj-icon" onClick={() => setEmojiOpen(true)} title={tr('Change icon')}>
             {obj.icon || type?.icon || '📄'}
           </button>
-          <TitleInput id={obj.id} value={obj.title} autoFocus={isNew} disabled={!!obj.deletedAt} />
+          <TitleInput key={obj.id} id={obj.id} value={obj.title} autoFocus={isNew} disabled={!!obj.deletedAt} />
         </div>
         {emojiOpen && (
           <EmojiPicker

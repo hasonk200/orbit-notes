@@ -1,9 +1,12 @@
+import { useT } from '../store/uiStore';
 import { useState } from 'react';
 import { Cloud, CloudCheck, CloudOff, LogIn, LogOut, RefreshCw } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { relativeTime } from '../lib/dates';
 import { syncNow, useSync, type SyncStatus } from '../sync/engine';
-import { signInWithGoogle, signOutOfCloud } from '../sync/firebase';
-import { useOpen } from '../store/pane';
+import { googleDirectAvailable, signInWithFirebasePopup, signInWithGoogle, signOutOfCloud } from '../sync/firebase';
+import { resolveObjectConflict } from '../db/indexers';
+import { displayTitle, useData } from '../store/dataStore';
+import { objPath, useOpen } from '../store/pane';
 
 const LABEL: Record<SyncStatus, string> = {
   unconfigured: 'Cloud sync not set up',
@@ -24,19 +27,23 @@ function StatusIcon({ status, size = 15 }: { status: SyncStatus; size?: number }
 
 /** Small status line for the sidebar. */
 export function SyncIndicator() {
+  const tr = useT();
   const status = useSync((s) => s.status);
+  const conflicts = useData((s) => s.objects.filter((o) => o.syncConflictOf && !o.deletedAt).length);
   const open = useOpen();
-  if (status === 'unconfigured') return null;
+  if (status === 'unconfigured' && !conflicts) return null;
+  const label = conflicts ? tr(conflicts === 1 ? '{count} sync conflict' : '{count} sync conflicts', { count: conflicts }) : tr(LABEL[status]);
   return (
-    <button type="button" className={`sync-ind sync-${status}`} title={LABEL[status]} onClick={(e) => open('/settings', e)}>
+    <button type="button" className={`sync-ind sync-${status}`} title={label} onClick={(e) => open('/settings', e)}>
       <StatusIcon status={status} size={14} />
-      <span>{LABEL[status]}</span>
+      <span>{label}</span>
     </button>
   );
 }
 
 /** Settings section. */
 export function CloudSyncSettings() {
+  const tr = useT();
   const { status, user, error, lastSyncAt, skipped } = useSync();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -49,8 +56,12 @@ export function CloudSyncSettings() {
     } catch (e: any) {
       const code = e?.code as string | undefined;
       if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return;
+      if (code === 'popup_failed_to_open') {
+        setMsg(tr('The browser blocked the sign-in window. Allow pop-ups for this site and try again.'));
+        return;
+      }
       if (code === 'auth/operation-not-allowed' || code === 'auth/configuration-not-found')
-        setMsg('Google sign-in is not enabled for this Firebase project yet. Enable it in Firebase console → Authentication → Sign-in method → Google.');
+        setMsg(tr('Google sign-in is not enabled for this Firebase project yet. Enable it in Firebase console → Authentication → Sign-in method → Google.'));
       else setMsg(e?.message ?? String(e));
     } finally {
       setBusy(false);
@@ -59,18 +70,23 @@ export function CloudSyncSettings() {
 
   return (
     <section className="card-section">
-      <h3>Cloud sync</h3>
+      <h3>{tr('Cloud sync')}</h3>
       {status === 'unconfigured' ? (
-        <p className="muted small">Firebase isn’t configured. Copy .env.example to .env.local, fill in your Firebase web config and restart the dev server.</p>
+        <p className="muted small">{tr('Firebase isn’t configured. Copy .env.example to .env.local, fill in your Firebase web config and restart the dev server.')}</p>
       ) : !user ? (
         <>
           <p className="muted small">
-            Sign in to keep your notes, types, pins and images in sync across your devices. Your data stays in this browser too, so Orbit keeps working offline.
+            {tr('Sign in to sync notes, types, collections, pins and images across devices. Your data also stays in this browser for offline use.')}
           </p>
           <div className="btn-row">
             <button type="button" className="btn primary" disabled={busy} onClick={() => run(signInWithGoogle)}>
-              <LogIn size={15} /> Sign in with Google
+              <LogIn size={15} /> {tr('Sign in with Google')}
             </button>
+            {googleDirectAvailable && (
+              <button type="button" className="btn-ghost" disabled={busy} onClick={() => run(signInWithFirebasePopup)} title={tr('Firebase\'s own popup. Use this if the main button doesn\'t work.')}>
+                {tr('Other sign-in method')}
+              </button>
+            )}
           </div>
         </>
       ) : (
@@ -83,25 +99,77 @@ export function CloudSyncSettings() {
             </div>
           </div>
           <p className={`sync-line sync-${status}`}>
-            <StatusIcon status={status} /> {LABEL[status]}
-            {lastSyncAt && status === 'synced' && <span className="muted"> · {formatDistanceToNow(lastSyncAt, { addSuffix: true })}</span>}
+            <StatusIcon status={status} /> {tr(LABEL[status])}
+            {lastSyncAt && status === 'synced' && <span className="muted"> · {relativeTime(lastSyncAt, tr)}</span>}
           </p>
           {error && status === 'error' && <div className="banner warn">{error}</div>}
           {skipped.length > 0 && (
-            <p className="muted small">{skipped.length} image(s) are too large (over 700 KB) to sync and stay on this device only.</p>
+            <p className="muted small">{tr('{count} image(s) are larger than 700 KB and stay on this device.', { count: skipped.length })}</p>
           )}
           <div className="btn-row">
             <button type="button" className="btn" disabled={busy} onClick={() => run(syncNow)}>
-              <RefreshCw size={15} /> Sync now
+              <RefreshCw size={15} /> {tr('Sync now')}
             </button>
             <button type="button" className="btn-ghost" disabled={busy} onClick={() => run(signOutOfCloud)}>
-              <LogOut size={15} /> Sign out
+              <LogOut size={15} /> {tr('Sign out')}
             </button>
           </div>
-          <p className="muted small">Signing out stops syncing. Notes already on this device stay here.</p>
+          <p className="muted small">{tr('Signing out stops syncing. Notes already on this device stay here.')}</p>
         </>
       )}
       {msg && <div className="banner warn">{msg}</div>}
+    </section>
+  );
+}
+
+export function SyncConflicts() {
+  const tr = useT();
+  const objects = useData((s) => s.objects);
+  const conflicts = objects.filter((o) => o.syncConflictOf && !o.deletedAt);
+  const open = useOpen();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const choose = async (id: string, useCopy: boolean) => {
+    if (useCopy && !window.confirm(tr('Replace the current version with the recovered version?'))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await resolveObjectConflict(id, useCopy);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!conflicts.length) return null;
+  return (
+    <section className="card-section">
+      <h3>{tr('Sync conflicts')}</h3>
+      <p className="muted small">{tr('Orbit kept both versions. Review them before choosing which version to use.')}</p>
+      {conflicts.map((copy) => {
+        const current = objects.find((o) => o.id === copy.syncConflictOf);
+        return (
+          <div key={copy.id}>
+            <h4>{displayTitle(copy, tr)}</h4>
+            {copy.syncConflictDeleted && <p className="muted small">{tr('This recovered version was moved to Trash.')}</p>}
+            <div className="btn-row">
+              {current && !current.deletedAt && (
+                <button type="button" className="btn" onClick={(e) => open(objPath(current.id), e)}>{tr('Open current version')}</button>
+              )}
+              <button type="button" className="btn" onClick={(e) => open(objPath(copy.id), e)}>{tr('Open recovered version')}</button>
+            </div>
+            <div className="btn-row">
+              <button type="button" className="btn" disabled={busy} onClick={() => choose(copy.id, false)}>
+                {current && !current.deletedAt ? tr('Keep current version') : tr('Keep deletion')}
+              </button>
+              <button type="button" className="btn" disabled={busy} onClick={() => choose(copy.id, true)}>{tr('Use recovered version')}</button>
+            </div>
+          </div>
+        );
+      })}
+      {error && <div className="banner warn" role="alert">{error}</div>}
     </section>
   );
 }

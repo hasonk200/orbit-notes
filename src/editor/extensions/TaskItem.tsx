@@ -8,9 +8,11 @@ import { shortDate, todayISO, toISODate } from '../../lib/dates';
 import { PRIO_MAP, resolveTaskStatus, STATUS_MAP, TASK_PRIORITIES, TASK_STATUSES } from '../../lib/tasks';
 import { displayTitle, useActiveObjects, useData } from '../../store/dataStore';
 import { objPath, useOpen } from '../../store/pane';
+import { useT } from '../../store/uiStore';
 import { Popover } from '../../components/Popover';
 
 function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
+  const tr = useT();
   const checked = !!node.attrs.checked || node.attrs.status === 'done';
   const status = resolveTaskStatus(checked, node.attrs.status);
   const due = node.attrs.due as string | null;
@@ -70,17 +72,17 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
           <button
             type="button"
             className={`status-pill tone-${statusDef.tone} compact`}
-            title="Change task status, date or priority"
+            title={tr('Change due date or priority (Alt+Click opens the day)')}
             onClick={() => editor.isEditable && setPickerOpen((v) => !v)}
           >
-            {statusDef.label}
+            {tr(statusDef.label)}
           </button>
         )}
         {prioDef && (
           <button
             type="button"
             className={`prio-chip prio-${prioDef.id}`}
-            title={`Priority: ${prioDef.label}`}
+            title={tr('Change priority or due date')}
             onClick={() => editor.isEditable && setPickerOpen((v) => !v)}
           >
             {prioDef.bang}
@@ -91,10 +93,10 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
             type="button"
             className="ctx-mini-chip"
             style={{ ['--type-color' as any]: ctxType?.color }}
-            title={`Context: ${displayTitle(ctxObj)}`}
+            title={displayTitle(ctxObj, tr)}
             onClick={(e) => open(objPath(ctxObj.id), e)}
           >
-            {ctxObj.icon || ctxType?.icon} {displayTitle(ctxObj)}
+            {ctxObj.icon || ctxType?.icon} {displayTitle(ctxObj, tr)}
           </button>
         )}
         {due ? (
@@ -103,16 +105,16 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
               ref={triggerRef}
               type="button"
               className="due-chip-label"
-              title="Change due date, status or priority (Alt+Click opens the day)"
+              title={tr('Change due date or priority (Alt+Click opens the day)')}
               onClick={(e) => {
                 if (e.altKey) return open(`/calendar?mode=day&date=${due}`, e);
                 if (editor.isEditable) setPickerOpen((v) => !v);
               }}
             >
-              ◷ {shortDate(due)}
+              ◷ {shortDate(due, tr)}
             </button>
             {editor.isEditable && (
-              <button type="button" className="due-chip-x" title="Remove date" onClick={() => set({ due: null })}>
+              <button type="button" className="due-chip-x" title={tr('Remove date')} onClick={() => set({ due: null })}>
                 ×
               </button>
             )}
@@ -123,7 +125,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
               ref={triggerRef}
               type="button"
               className="due-add"
-              title="Set status, due date, priority or context (or type @today)"
+              title={tr('Set due date or priority (or type @today)')}
               onClick={() => setPickerOpen((v) => !v)}
             >
               ◷
@@ -132,7 +134,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
         )}
         {pickerOpen && (
           <Popover anchor={triggerRef.current} onClose={() => setPickerOpen(false)} className="task-popover">
-            <div className="tp-section">Status</div>
+            <div className="tp-section">{tr('Status')}</div>
             <div className="tp-statuses">
               {TASK_STATUSES.map((s) => (
                 <button
@@ -144,11 +146,11 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
                     setPickerOpen(false);
                   }}
                 >
-                  {s.label}
+                  {tr(s.label)}
                 </button>
               ))}
             </div>
-            <div className="tp-section">Scheduled date</div>
+            <div className="tp-section">{tr('Due date')}</div>
             <div className="tp-quick">
               <button
                 type="button"
@@ -158,7 +160,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
                   setPickerOpen(false);
                 }}
               >
-                Today
+                {tr('Today')}
               </button>
               <button
                 type="button"
@@ -168,7 +170,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
                   setPickerOpen(false);
                 }}
               >
-                Tomorrow
+                {tr('Tomorrow')}
               </button>
               <button
                 type="button"
@@ -178,7 +180,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
                   setPickerOpen(false);
                 }}
               >
-                Next week
+                {tr('Next week')}
               </button>
             </div>
             <input
@@ -199,10 +201,10 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
                   setPickerOpen(false);
                 }}
               >
-                Clear date
+                {tr('Clear date')}
               </button>
             )}
-            <div className="tp-section">Priority</div>
+            <div className="tp-section">{tr('Priority')}</div>
             <div className="tp-prios">
               {TASK_PRIORITIES.map((p) => (
                 <button
@@ -214,11 +216,11 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
                     setPickerOpen(false);
                   }}
                 >
-                  {p.bang} {p.label}
+                  {p.bang} {tr(p.label)}
                 </button>
               ))}
             </div>
-            <div className="tp-section">Context</div>
+            <div className="tp-section">{tr('Context')}</div>
             <select
               className="tp-select"
               value={contextId ?? ''}
@@ -227,7 +229,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
                 setPickerOpen(false);
               }}
             >
-              <option value="">This note (default)</option>
+              <option value="">{tr('This note (default)')}</option>
               {activeObjects
                 .filter((o) => o.typeId !== 'daily')
                 .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -236,7 +238,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
                   const tp = types.find((t) => t.id === o.typeId);
                   return (
                     <option key={o.id} value={o.id}>
-                      {o.icon || tp?.icon || '📄'} {displayTitle(o)}
+                      {o.icon || tp?.icon || '📄'} {displayTitle(o, tr)}
                     </option>
                   );
                 })}

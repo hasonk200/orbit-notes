@@ -1,7 +1,8 @@
+import { typeLabel } from '../lib/typeLabels';
 import { useMemo, useRef } from 'react';
 import { CalendarDays, Compass, Hash, Moon, Network, PanelLeft, Plus, Search, Settings, SquareCheckBig, Sun, Monitor, Trash } from 'lucide-react';
 import { displayTitle, useData, useObjMap } from '../store/dataStore';
-import { useUI } from '../store/uiStore';
+import { useT, useUI } from '../store/uiStore';
 import { objPath, useOpen, usePane } from '../store/pane';
 import { getOrCreateDaily } from '../db/indexers';
 import { todayISO } from '../lib/dates';
@@ -20,6 +21,7 @@ function NavItem({ icon, label, path, active, badge, onClick }: { icon: React.Re
 }
 
 export function Sidebar() {
+  const tr = useT();
   const { path } = usePane();
   const objects = useData((s) => s.objects);
   const types = useData((s) => s.types);
@@ -56,53 +58,55 @@ export function Sidebar() {
   const p = parsedUrl.pathname;
   const activeColId = parsedUrl.searchParams.get('collection');
   const isCal = p === '/' || p.startsWith('/calendar') || p.startsWith('/daily');
+  const themeLabel = { light: tr('Light'), dark: tr('Dark'), system: tr('System') };
   const nextTheme = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light';
 
   return (
     <aside className="sidebar">
       <div className="sb-head">
-        <div className="brand">
+        <button type="button" className="brand" onClick={(e) => open('/', e)} title={tr('Home')}>
           <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden>
-            <circle cx="16" cy="16" r="6.5" fill="var(--accent)" />
-            <ellipse cx="16" cy="16" rx="14" ry="5.2" fill="none" stroke="var(--accent)" strokeWidth="2" transform="rotate(-25 16 16)" />
+            <ellipse cx="16" cy="16" rx="14" ry="5.2" fill="none" stroke="var(--accent)" strokeWidth="2.6" transform="rotate(-22 16 16)" />
+            <circle cx="16" cy="16" r="8" fill="var(--accent)" />
+            <circle cx="28.6" cy="10.4" r="2.2" fill="var(--accent)" />
           </svg>
           Orbit
-        </div>
-        <button type="button" className="icon-btn" onClick={toggleSidebar} title="Hide sidebar (Ctrl+\)">
+        </button>
+        <button type="button" className="icon-btn" onClick={toggleSidebar} title={tr('Hide sidebar (Ctrl+\\)')}>
           <PanelLeft size={17} />
         </button>
       </div>
 
       <div className="sb-actions">
         <button type="button" ref={newBtn} className="sb-new" onClick={() => setNewMenu(!newMenuOpen)}>
-          <Plus size={16} /> New
+          <Plus size={16} /> {tr('New')}
         </button>
-        <button type="button" className="sb-search" onClick={() => setPalette(true)} title="Search (Ctrl+K)">
+        <button type="button" className="sb-search" onClick={() => setPalette(true)} title={tr('Search (Ctrl+K)')}>
           <Search size={16} />
         </button>
         {newMenuOpen && <NewMenu anchor={newBtn.current} onClose={() => setNewMenu(false)} />}
       </div>
 
       <nav className="sb-nav">
-        <NavItem icon={<CalendarDays size={16} />} label="Calendar" path="/calendar" active={isCal} />
+        <NavItem icon={<CalendarDays size={16} />} label={tr('Calendar')} path="/calendar" active={isCal} />
         <NavItem
           icon={<span className="nav-today">{new Date().getDate()}</span>}
-          label="Today"
+          label={tr('Today')}
           onClick={async (e) => {
             const altKey = e.altKey;
             await getOrCreateDaily(todayISO());
             open(`/calendar?mode=day&date=${todayISO()}`, { altKey });
           }}
         />
-        <NavItem icon={<SquareCheckBig size={16} />} label="Tasks" path="/tasks" active={p === '/tasks'} badge={openTasks || null} />
-        <NavItem icon={<Compass size={16} />} label="Explore" path="/home" active={p === '/home'} />
-        <NavItem icon={<Network size={16} />} label="Graph" path="/graph" active={p === '/graph'} />
-        <NavItem icon={<Hash size={16} />} label="Tags" path="/tags" active={p.startsWith('/tags')} />
+        <NavItem icon={<SquareCheckBig size={16} />} label={tr('Tasks')} path="/tasks" active={p === '/tasks'} badge={openTasks || null} />
+        <NavItem icon={<Compass size={16} />} label={tr('Explore')} path="/home" active={p === '/home'} />
+        <NavItem icon={<Network size={16} />} label={tr('Graph')} path="/graph" active={p === '/graph'} />
+        <NavItem icon={<Hash size={16} />} label={tr('Tags')} path="/tags" active={p.startsWith('/tags')} />
       </nav>
 
       <div className="sb-scroll">
-        <div className="sb-section">Pinned</div>
-        {pinned.filter((id) => objMap.get(id) && !objMap.get(id)!.deletedAt).length === 0 && <div className="sb-empty">No pinned objects</div>}
+        <div className="sb-section">{tr('Pinned')}</div>
+        {pinned.filter((id) => objMap.get(id) && !objMap.get(id)!.deletedAt).length === 0 && <div className="sb-empty">{tr('No pinned objects')}</div>}
         {pinned.map((id) => {
           const o = objMap.get(id);
           if (!o || o.deletedAt) return null;
@@ -111,7 +115,7 @@ export function Sidebar() {
             <NavItem
               key={id}
               icon={<span className="nav-emoji">{o.icon || t?.icon}</span>}
-              label={displayTitle(o)}
+              label={displayTitle(o, tr)}
               path={objPath(id)}
               active={p === `/o/${id}`}
             />
@@ -119,8 +123,8 @@ export function Sidebar() {
         })}
 
         <div className="sb-section">
-          Object Types
-          <button type="button" className="icon-btn tiny" title="New object type" onClick={() => setTypeEditor('new')}>
+          {tr('Object Types')}
+          <button type="button" className="icon-btn tiny" title={tr('New object type')} onClick={() => setTypeEditor('new')}>
             <Plus size={14} />
           </button>
         </div>
@@ -134,7 +138,7 @@ export function Sidebar() {
                     {t.icon}
                   </span>
                 }
-                label={t.name}
+                label={typeLabel(t, tr)}
                 path={`/type/${t.id}`}
                 active={p === `/type/${t.id}` && !activeColId}
                 badge={<span className="muted">{counts.c.get(t.id) ?? 0}</span>}
@@ -157,12 +161,15 @@ export function Sidebar() {
 
       <div className="sb-foot">
         <SyncIndicator />
-        <NavItem icon={<Trash size={16} />} label="Trash" path="/trash" active={p === '/trash'} badge={counts.trash || null} />
+        <NavItem icon={<Trash size={16} />} label={tr('Trash')} path="/trash" active={p === '/trash'} badge={counts.trash || null} />
         <div className="sb-foot-row">
-          <NavItem icon={<Settings size={16} />} label="Settings" path="/settings" active={p === '/settings'} />
-          <button type="button" className="icon-btn" title={`Theme: ${theme} (click for ${nextTheme})`} onClick={() => setTheme(nextTheme)}>
+          <NavItem icon={<Settings size={16} />} label={tr('Settings')} path="/settings" active={p === '/settings'} />
+          <button type="button" className="icon-btn" title={tr('Theme: {current} (click for {next})', { current: themeLabel[theme], next: themeLabel[nextTheme] })} onClick={() => setTheme(nextTheme)}>
             {theme === 'light' ? <Sun size={16} /> : theme === 'dark' ? <Moon size={16} /> : <Monitor size={16} />}
           </button>
+        </div>
+        <div className="sb-version" title={`${tr('Built')} ${__APP_BUILT__}${__APP_COMMIT__ ? ` · ${__APP_COMMIT__}` : ''}`}>
+          Orbit v{__APP_VERSION__}{__APP_COMMIT__ && ` · ${__APP_COMMIT__}`}
         </div>
       </div>
     </aside>

@@ -1,15 +1,26 @@
 import { create } from 'zustand';
+import { resolveLanguage, translators, type Language } from '../lib/i18n';
 
 export type Theme = 'light' | 'dark' | 'system';
 
 function readTheme(): Theme {
   try {
-    const t = localStorage.getItem('orbit-theme');
+    const t = typeof window === 'undefined' ? null : window.localStorage.getItem('orbit-theme');
     if (t === 'light' || t === 'dark' || t === 'system') return t;
   } catch {
     /* ignore */
   }
   return 'system';
+}
+
+function readLanguage(): Language {
+  const preferred = typeof navigator === 'undefined' ? [] : navigator.languages ?? [navigator.language];
+  try {
+    const saved = typeof window === 'undefined' ? null : window.localStorage.getItem('orbit-language');
+    return resolveLanguage(saved, preferred);
+  } catch {
+    return resolveLanguage(null, preferred);
+  }
 }
 
 export function applyTheme(t: Theme) {
@@ -27,6 +38,7 @@ interface UIState {
   sidebarOpen: boolean;
   paletteOpen: boolean;
   theme: Theme;
+  language: Language;
   split: SplitState | null;
   typeEditor: string | null; // type id, or 'new'
   newMenuOpen: boolean;
@@ -36,6 +48,7 @@ interface UIState {
   setSidebar: (v: boolean) => void;
   setPalette: (v: boolean) => void;
   setTheme: (t: Theme) => void;
+  setLanguage: (language: Language) => void;
   openSplit: (path: string) => void;
   splitGo: (path: string) => void;
   splitReplace: (path: string) => void;
@@ -52,6 +65,7 @@ export const useUI = create<UIState>((set, get) => ({
   sidebarOpen: !narrow(),
   paletteOpen: false,
   theme: readTheme(),
+  language: readLanguage(),
   split: null,
   typeEditor: null,
   newMenuOpen: false,
@@ -68,6 +82,15 @@ export const useUI = create<UIState>((set, get) => ({
     }
     applyTheme(t);
     set({ theme: t });
+  },
+  setLanguage: (language) => {
+    try {
+      localStorage.setItem('orbit-language', language);
+    } catch {
+      /* ignore */
+    }
+    document.documentElement.lang = language;
+    set({ language });
   },
   openSplit: (path) => {
     const s = get().split;
@@ -98,3 +121,6 @@ export const useUI = create<UIState>((set, get) => ({
   setTypeEditor: (id) => set({ typeEditor: id }),
   setNewMenu: (v) => set({ newMenuOpen: v }),
 }));
+
+export const useT = () => useUI((state) => translators[state.language]);
+export const getT = () => translators[useUI.getState().language];

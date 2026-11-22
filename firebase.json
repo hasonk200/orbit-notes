@@ -2,5 +2,20 @@
   "firestore": {
     "rules": "firestore.rules",
     "location": "northamerica-northeast2"
+  },
+  "functions": {
+    "source": "functions",
+    "codebase": "orbit-ai",
+    "predeploy": [
+      "npm --prefix \"$RESOURCE_DIR\" run build"
+    ]
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    }
   }
 }
