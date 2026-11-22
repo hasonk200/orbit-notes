@@ -322,7 +322,16 @@ h4 {
   gap: 8px;
   font-weight: 700;
   font-size: 15px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
 }
+.brand:hover { background: var(--surface-2); }
 .sb-actions {
   display: flex;
   gap: 6px;

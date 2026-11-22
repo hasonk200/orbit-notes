@@ -62,13 +62,14 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sb-head">
-        <div className="brand">
+        <button type="button" className="brand" onClick={(e) => open('/', e)} title={tr('Home')}>
           <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden>
-            <circle cx="16" cy="16" r="6.5" fill="var(--accent)" />
-            <ellipse cx="16" cy="16" rx="14" ry="5.2" fill="none" stroke="var(--accent)" strokeWidth="2" transform="rotate(-25 16 16)" />
+            <ellipse cx="16" cy="16" rx="14" ry="5.2" fill="none" stroke="var(--accent)" strokeWidth="2.6" transform="rotate(-22 16 16)" />
+            <circle cx="16" cy="16" r="8" fill="var(--accent)" />
+            <circle cx="28.6" cy="10.4" r="2.2" fill="var(--accent)" />
           </svg>
           Orbit
-        </div>
+        </button>
         <button type="button" className="icon-btn" onClick={toggleSidebar} title={tr('Hide sidebar (Ctrl+\\)')}>
           <PanelLeft size={17} />
         </button>
