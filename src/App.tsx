@@ -9,6 +9,7 @@ import { CommandPalette } from './components/CommandPalette';
 import { SuggestPopup } from './components/SuggestPopup';
 import { TypeEditorModal } from './components/TypeEditorModal';
 import { BackupBanner } from './components/BackupBanner';
+import { UpdateNotice } from './components/AppInstall';
 import { getOrCreateDaily } from './db/indexers';
 import { todayISO } from './lib/dates';
 import { isComposing } from './lib/keyboard';
@@ -108,6 +109,7 @@ export default function App() {
         {typeEditor && <TypeEditorModal key={typeEditor} typeId={typeEditor} />}
         <SuggestPopup />
         <BackupBanner />
+        <UpdateNotice />
       </div>
     </PaneContext.Provider>
   );

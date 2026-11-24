@@ -158,7 +158,8 @@
 }
 
 /* ---------- banners and progress ---------- */
-.backup-banner {
+.backup-banner,
+.update-notice {
   animation: orbit-banner-in 320ms var(--ease-out) backwards;
 }
 .banner {

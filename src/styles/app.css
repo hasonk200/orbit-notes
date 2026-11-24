@@ -4102,3 +4102,35 @@ span.olink-card {
     padding-inline: 8px;
   }
 }
+
+/* ---------- installed app ---------- */
+.install-steps svg {
+  vertical-align: -2px;
+}
+.update-notice {
+  position: fixed;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 41;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  white-space: nowrap;
+  max-width: calc(100vw - 24px);
+}
+/* Keep content clear of the notch and home bar when opened from the home screen */
+@media (display-mode: standalone) {
+  .app {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}

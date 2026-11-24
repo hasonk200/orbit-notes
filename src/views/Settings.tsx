@@ -10,6 +10,7 @@ import { useData } from '../store/dataStore';
 import { useT, useUI, type Theme } from '../store/uiStore';
 import { AiAccessSettings } from '../components/AiAccessSettings';
 import { CloudSyncSettings, SyncConflicts } from '../components/CloudSync';
+import { AppInstallSettings } from '../components/AppInstall';
 
 export function Settings() {
   const tr = useT();
@@ -75,6 +76,7 @@ export function Settings() {
         </div>
       </section>
 
+      <AppInstallSettings />
       <CloudSyncSettings />
       <SyncConflicts />
       <AiAccessSettings />
