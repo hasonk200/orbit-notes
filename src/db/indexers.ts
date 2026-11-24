@@ -1,4 +1,4 @@
-import { db, uid, type CollectionRec, type JSONContent, type LinkRec, type Obj, type ObjType, type TaskKind, type TaskPriority, type TaskRec, type TaskStatus } from './schema';
+import { db, getMeta, setMeta, uid, type CollectionRec, type JSONContent, type LinkRec, type Obj, type ObjType, type TaskKind, type TaskPriority, type TaskRec, type TaskStatus } from './schema';
 import { assignTaskIds, emptyDoc, extractBlobIds, extractLinkIds, extractTags, extractTasks, patchTaskInDoc, patchTasksInDoc, removeTaskFromDoc, type TaskPatch } from '../lib/content';
 import { dailyTitle, toISODate } from '../lib/dates';
 import { classifyTaskKind } from '../lib/tasks';
@@ -369,6 +369,23 @@ export async function reindexObjects(ids: string[]) {
       }
     }
   });
+}
+
+const TASK_INDEX_VERSION = 1; // bump when derived task fields change (1: task kind)
+
+/**
+ * Rebuild derived links/tasks once after an upgrade, so tasks indexed before
+ * a new derived field existed get it. Notes themselves are not rewritten,
+ * so nothing is re-uploaded to the cloud.
+ */
+export async function upgradeTaskIndex() {
+  if (((await getMeta<number>('taskIndexVersion')) ?? 0) >= TASK_INDEX_VERSION) return;
+  const objs = await db.objects.toArray();
+  const types = new Map((await db.types.toArray()).map((t) => [t.id, t]));
+  await db.transaction('rw', db.objects, db.links, db.tasks, db.types, async () => {
+    for (const o of objs) await reindex(o, types.get(o.typeId));
+  });
+  await setMeta('taskIndexVersion', TASK_INDEX_VERSION);
 }
 
 export async function reindexAll() {
