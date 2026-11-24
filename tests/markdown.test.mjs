@@ -45,10 +45,10 @@ test('bare https and file URLs become links, without trailing punctuation', () =
 
 test('tables, quotes, code blocks and rules', () => {
   const blocks = markdownToBlocks('| 卡 | 欠 |\n|---|---|\n| Rogers | $422.62 |\n\n> 提醒\n\n```js\nconst a = 1;\n```\n\n---');
-  assert.deepEqual(blocks.map((b) => b.type), ['table', 'paragraph', 'blockquote', 'paragraph', 'codeBlock', 'paragraph', 'horizontalRule']);
+  assert.deepEqual(blocks.map((b) => b.type), ['table', 'blockquote', 'codeBlock', 'horizontalRule']);
   assert.equal(blocks[0].content[0].content[0].type, 'tableHeader');
   assert.equal(docText({ type: 'doc', content: [blocks[0]] }), '卡 | 欠\nRogers | $422.62');
-  assert.equal(blocks[4].content[0].text, 'const a = 1;');
+  assert.equal(blocks[2].content[0].text, 'const a = 1;');
 });
 
 test('plain text stays plain and only Markdown-looking text is detected', () => {
@@ -57,4 +57,15 @@ test('plain text stays plain and only Markdown-looking text is detected', () => 
   assert.equal(looksLikeMarkdown('## 標題\n內容'), true);
   assert.equal(looksLikeMarkdown('- [ ] 買牛奶'), true);
   assert.equal(markdownToBlocks('').length, 0);
+});
+
+test('a code span holding only a URL becomes a link; other code stays code', () => {
+  const nodes = parseInline('網址：`file:///C:/Users/Dicky/index.html` 檔案：`finance-data.js`');
+  assert.deepEqual(nodes.filter((n) => n.marks).map((n) => n.marks[0].type), ['link', 'code']);
+  assert.equal(nodes[1].marks[0].attrs.href, 'file:///C:/Users/Dicky/index.html');
+});
+
+test('blank lines next to rules, tables and code blocks add no extra empty line', () => {
+  const blocks = markdownToBlocks('前言\n\n---\n\n## 標題\n- 項目\n\n```\ncode\n```\n\n段落');
+  assert.deepEqual(blocks.map((b) => b.type), ['paragraph', 'horizontalRule', 'heading', 'bulletList', 'codeBlock', 'paragraph']);
 });
