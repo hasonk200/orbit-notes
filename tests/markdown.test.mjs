@@ -108,3 +108,69 @@ test('emphasis markers inside code spans do not close bold or italic', () => {
   const view = nodes.map((n) => (n.marks ?? []).map((m) => m.type).join('+') + ':' + n.text);
   assert.deepEqual(view, ['bold:不要在 ', 'code:**', 'bold: 的內側留空格', ':。', 'code:** 文字 **', ': 不會變粗體，', 'italic:斜體 ', 'code:*', 'italic: 也是']);
 });
+
+// ---------- markdown-it based converter: cases that broke the hand-written one ----------
+const marked = (nodes, type) => nodes.filter((n) => n.marks?.some((m) => m.type === type)).map((n) => n.text);
+const hrefs = (nodes) => nodes.flatMap((n) => (n.marks ?? []).filter((m) => m.type === 'link').map((m) => m.attrs.href));
+const blockTypes = (blocks) => blocks.map((b) => b.type);
+
+test('bold next to Chinese punctuation works (CJK-friendly emphasis)', () => {
+  const nodes = parseInline('這是一份**「這個網站是怎麼運作的？」的說明手冊**。把**「截圖」＋「data.js」**丟給 AI。');
+  assert.deepEqual(marked(nodes, 'bold'), ['「這個網站是怎麼運作的？」的說明手冊', '「截圖」＋「data.js」']);
+});
+
+test('bold wrapping code keeps the code; addresses with brackets stay whole', () => {
+  assert.deepEqual(marked(parseInline('**`index.html`** 和 **核心資料檔**（所有數字）'), 'code'), ['index.html']);
+  const nodes = parseInline('[維基](https://en.wikipedia.org/wiki/Foo_(bar)) 和 https://en.wikipedia.org/wiki/Foo_(bar) 還有（https://example.com）(see https://example.org/a)');
+  assert.deepEqual(hrefs(nodes), ['https://en.wikipedia.org/wiki/Foo_(bar)', 'https://en.wikipedia.org/wiki/Foo_(bar)', 'https://example.com', 'https://example.org/a']);
+});
+
+test('file names are not mistaken for web addresses, and unsafe links are refused', () => {
+  assert.deepEqual(hrefs(parseInline('dicky-finance-tracker.md 和 update.bat、www.example.com')), []);
+  assert.deepEqual(hrefs(parseInline('[x](javascript:alert(1))')), []);
+  assert.deepEqual(hrefs(parseInline('![截圖](https://example.com/a.png)')), ['https://example.com/a.png']);
+});
+
+test('nested lists keep their levels, and to-dos split into their own list', () => {
+  const blocks = markdownToBlocks('- 一\n  - 二\n    - 三\n  1. 甲\n  2. 乙\n- [ ] 待辦\n  - 子項目');
+  assert.deepEqual(blockTypes(blocks), ['bulletList', 'taskList']);
+  const one = blocks[0].content[0];
+  assert.deepEqual(blockTypes(one.content), ['paragraph', 'bulletList', 'orderedList']);
+  assert.equal(one.content[1].content[0].content[1].content[0].content[0].content[0].text, '三');
+  assert.equal(blocks[1].content[0].content[1].type, 'bulletList');
+});
+
+test('note habits: lines stay lines, and text after a list or quote is not swallowed', () => {
+  assert.deepEqual(blockTypes(markdownToBlocks('- 甲\n說明文字')), ['bulletList', 'paragraph']);
+  assert.deepEqual(blockTypes(markdownToBlocks('> 引用\n下一行')), ['blockquote', 'paragraph']);
+  assert.deepEqual(blockTypes(markdownToBlocks('前言\n---')), ['paragraph', 'horizontalRule']);
+  const numbered = markdownToBlocks('規則：\n2. 第二點');
+  assert.deepEqual(blockTypes(numbered), ['paragraph', 'orderedList']);
+  assert.equal(numbered[1].attrs.start, 2);
+  assert.equal(markdownToBlocks('- 第一行\n  第二行')[0].content[0].content.length, 2);
+  const quote = markdownToBlocks('> 你負責更新。  \n> 規則：  \n> 1. 只改數字');
+  assert.deepEqual(blockTypes(quote[0].content), ['paragraph', 'paragraph', 'orderedList']);
+  assert.deepEqual(blockTypes(markdownToBlocks('• 甲\n• 乙')), ['bulletList']);
+  assert.deepEqual(blockTypes(markdownToBlocks('✅ 已經裝好')), ['paragraph']);
+});
+
+test('a full manual-style document converts block by block', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const blocks = markdownToBlocks(await readFile(new URL('./fixtures/manual-style.md', import.meta.url), 'utf8'));
+  assert.deepEqual(blockTypes(blocks), [
+    'paragraph', 'horizontalRule', 'heading', 'blockquote', 'horizontalRule',
+    'heading', 'bulletList', 'horizontalRule',
+    'heading', 'paragraph', 'table', 'heading', 'orderedList', 'horizontalRule',
+    'heading', 'codeBlock', 'orderedList', 'horizontalRule',
+    'heading', 'blockquote', 'heading', 'taskList',
+  ]);
+  assert.deepEqual(marked(blocks[0].content, 'bold'), ['「這個網站是怎麼運作的？我之後要怎麼維護它？」的說明手冊']);
+  assert.deepEqual(hrefs(blocks[6].content.flatMap((i) => i.content[0].content)), ['file:///C:/Users/Demo/Documents/My%20Site/index.html', 'https://en.wikipedia.org/wiki/Foo_(bar)']);
+  const table = blocks[10];
+  assert.equal(table.content.length, 4);
+  assert.deepEqual(table.content[1].content[0].content[0].content.map((n) => n.marks?.[0]?.type), ['code']);
+  const prompt = blocks[19].content;
+  assert.deepEqual(blockTypes(prompt), ['paragraph', 'paragraph', 'paragraph', 'paragraph', 'orderedList']);
+  assert.deepEqual(blocks[21].content.map((t) => t.attrs.checked), [false, true]);
+  assert.equal(blocks[16].content[1].content[1].content[0].content[0].content[0].marks[0].type, 'italic');
+});
