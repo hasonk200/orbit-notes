@@ -167,7 +167,7 @@ function DayDetail({ iso, idx }: { iso: string; idx: CalIndex }) {
           <h4>{tr('Due this day')}</h4>
           {due.length === 0 && <p className="muted small">{tr('No tasks due. Add “@” inside a task to set a date.')}</p>}
           {due.map((t) => (
-            <TaskRow key={t.id} task={t} />
+            <TaskRow key={t.id} task={t} showKindBadge />
           ))}
         </section>
       )}
@@ -365,7 +365,7 @@ function UpcomingTasks() {
       <h4>{tr('Next 7 days')}</h4>
       {list.length === 0 && <p className="muted small">{tr('Nothing due. Enjoy the calm.')}</p>}
       {list.map((t) => (
-        <TaskRow key={t.id} task={t} />
+        <TaskRow key={t.id} task={t} showKindBadge showStatus={false} />
       ))}
       {list.some((t) => t.due! < today) && <p className="muted small">{tr('Includes overdue tasks.')}</p>}
     </div>

@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight, Columns2, Compass, Hash, Network, PanelLeft, Plus, Search, Settings, SquareCheckBig, Trash, X } from 'lucide-react';
+import { ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight, CircleCheck, Columns2, Compass, Hash, Network, PanelLeft, Plus, Search, Settings, SquareCheckBig, Trash, X } from 'lucide-react';
 import { displayTitle, useData } from '../store/dataStore';
 import { objPath, PaneContext, useOpen, usePane, type PaneCtx } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
@@ -38,6 +38,7 @@ function usePathTitle(path: string): { icon: ReactNode; title: string } {
       };
     }
     const map: Record<string, [ReactNode, string]> = {
+      todos: [<CircleCheck size={15} />, tr('To-do')],
       tasks: [<SquareCheckBig size={15} />, tr('Tasks')],
       graph: [<Network size={15} />, tr('Graph')],
       tags: [<Hash size={15} />, b ? `#${decodePathSegment(b)}` : tr('Tags')],

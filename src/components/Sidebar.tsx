@@ -1,11 +1,12 @@
 import { typeLabel } from '../lib/typeLabels';
 import { useMemo, useRef } from 'react';
-import { CalendarDays, Compass, Hash, Moon, Network, PanelLeft, Plus, Search, Settings, SquareCheckBig, Sun, Monitor, Trash } from 'lucide-react';
+import { CalendarDays, CircleCheck, Compass, Hash, Moon, Network, PanelLeft, Plus, Search, Settings, SquareCheckBig, Sun, Monitor, Trash } from 'lucide-react';
 import { displayTitle, useData, useObjMap } from '../store/dataStore';
 import { useT, useUI } from '../store/uiStore';
 import { objPath, useOpen, usePane } from '../store/pane';
 import { getOrCreateDaily } from '../db/indexers';
 import { todayISO } from '../lib/dates';
+import { classifyTaskKind } from '../lib/tasks';
 import { NewMenu } from './NewMenu';
 import { SyncIndicator } from './CloudSync';
 
@@ -47,11 +48,29 @@ export function Sidebar() {
     return { c, col, trash };
   }, [objects]);
 
-  const openTasks = useMemo(() => {
+  const { openTodos, openTasks } = useMemo(() => {
     const today = todayISO();
-    return tasks.filter(
-      (t) => !t.done && ((t.due && t.due <= today) || t.status === 'in_progress') && t.text.trim() && !objMap.get(t.objectId)?.deletedAt,
-    ).length;
+    let todosC = 0;
+    let tasksC = 0;
+    for (const t of tasks) {
+      if (t.done || !t.text.trim()) continue;
+      const src = objMap.get(t.objectId);
+      if (!src || src.deletedAt) continue;
+      const k =
+        t.kind ??
+        classifyTaskKind({
+          explicitKind: t.explicitKind,
+          status: t.status,
+          contextId: t.contextId,
+          sourceTypeId: src.typeId,
+        });
+      if (k === 'todo') {
+        if (t.due && t.due <= today) todosC++;
+      } else {
+        if ((t.due && t.due <= today) || t.status === 'in_progress') tasksC++;
+      }
+    }
+    return { openTodos: todosC, openTasks: tasksC };
   }, [tasks, objMap]);
 
   const parsedUrl = new URL(path, 'http://orbit.local');
@@ -98,6 +117,7 @@ export function Sidebar() {
             open(`/calendar?mode=day&date=${todayISO()}`, { altKey });
           }}
         />
+        <NavItem icon={<CircleCheck size={16} />} label={tr('To-do')} path="/todos" active={p === '/todos'} badge={openTodos || null} />
         <NavItem icon={<SquareCheckBig size={16} />} label={tr('Tasks')} path="/tasks" active={p === '/tasks'} badge={openTasks || null} />
         <NavItem icon={<Compass size={16} />} label={tr('Explore')} path="/home" active={p === '/home'} />
         <NavItem icon={<Network size={16} />} label={tr('Graph')} path="/graph" active={p === '/graph'} />
