@@ -10,6 +10,7 @@ import { upgradeTaskIndex } from './db/indexers';
 import { initSync } from './sync/engine';
 import './styles/tokens.css';
 import './styles/app.css';
+import './styles/motion.css';
 
 applyTheme(useUI.getState().theme);
 document.documentElement.lang = getT().language;
