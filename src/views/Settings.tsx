@@ -194,7 +194,7 @@ export function Settings() {
       <section className="card-section">
         <h3>{tr('Shortcuts')}</h3>
         <ul className="shortcuts">
-          <li><kbd>Ctrl</kbd> + <kbd>K</kbd> {tr('Search & commands')}</li>
+          <li><kbd>Ctrl</kbd> + <kbd>K</kbd> {tr('Search & commands')} · {tr('with text selected in a note: add a link')}</li>
           <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>D</kbd> {tr('Today’s note')}</li>
           <li><kbd>Ctrl</kbd> + <kbd>\</kbd> {tr('Toggle sidebar')}</li>
           <li><kbd>Alt</kbd> + {tr('click a link: open in split view')}</li>

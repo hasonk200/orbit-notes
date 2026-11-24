@@ -4134,3 +4134,120 @@ span.olink-card {
     padding-right: env(safe-area-inset-right);
   }
 }
+
+/* Ctrl+K link box */
+.link-box {
+  position: fixed;
+  z-index: 60;
+  width: min(330px, calc(100vw - 16px));
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+.link-box input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 14px;
+}
+.link-box-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.link-box-row button {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.link-box-row button:hover {
+  background: var(--surface-2);
+}
+.link-box-row button.primary {
+  background: var(--accent);
+  color: #fff;
+}
+.link-box-note {
+  margin: 6px 2px 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.link-box-note.danger {
+  color: var(--danger);
+}
+.link-copied {
+  position: fixed;
+  z-index: 60;
+  max-width: 290px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 13px;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+.prose a[href^="file:"] {
+  cursor: copy;
+}
+
+/* Heading outline */
+.note-outline {
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-2);
+  font-size: 13px;
+}
+.note-outline-toggle {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.note-outline-caret {
+  display: inline-block;
+  width: 12px;
+  color: var(--muted);
+}
+.note-outline ul {
+  list-style: none;
+  margin: 4px 0 2px;
+  padding: 0;
+}
+.note-outline li.lvl-2 { padding-left: 14px; }
+.note-outline li.lvl-3 { padding-left: 28px; }
+.note-outline li button {
+  display: block;
+  width: 100%;
+  padding: 2px 6px;
+  border-radius: 5px;
+  text-align: left;
+  color: var(--accent-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-outline li button:hover {
+  background: var(--surface);
+}
+.prose .outline-flash {
+  animation: outline-flash 1.4s ease-out;
+  border-radius: 6px;
+}
+@keyframes outline-flash {
+  0%, 30% { background: var(--accent-soft); }
+  100% { background: transparent; }
+}
+/* Leave room for sticky bars when the outline jumps to a heading. */
+.prose h1,
+.prose h2,
+.prose h3 {
+  scroll-margin-top: 130px;
+}
