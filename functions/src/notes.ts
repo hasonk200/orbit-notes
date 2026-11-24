@@ -5,6 +5,7 @@ import type { JSONContent, Obj, ObjType } from '../../src/db/schema';
 import { assignTaskIds, docText, emptyDoc, extractTags, extractTasks, patchTaskInDoc, walk } from '../../src/lib/content';
 import { dailyTitle } from '../../src/lib/dates';
 import { markdownToBlocks } from '../../src/lib/markdown';
+import { InsertError, insertMarkdown } from '../../src/lib/insertMarkdown';
 import { appendTask } from '../../src/lib/taskInput';
 import { classifyTaskKind } from '../../src/lib/tasks';
 import { objectFingerprint } from '../../src/sync/objectVersions';
@@ -57,14 +58,19 @@ export const operations = {
   append_daily_note: { description: 'Append Markdown text to the daily note for the given local calendar date, creating it if needed.', input: z.object({
     ...request, date, text: markdown,
   }), write: true },
-  append_to_note: { description: 'Append Markdown text to a note, preserving existing content and updating the latest saved version.', input: z.object({
+  append_to_note: { description: 'Append Markdown text to the end of a note, preserving existing content. To add lines elsewhere, use update_note with insert_text.', input: z.object({
     ...request, ...target, text: markdown,
   }), write: true },
-  update_note: { description: 'Rename a note, replace one unique text fragment inside a single editor text node (keeps formatting and links), or rewrite the whole body from Markdown with replace_body. replace_body drops links to other notes, tags, dates and task details (due date, priority) that the new Markdown does not repeat; the change can be undone with undo_change.', input: z.object({
+  update_note: { description: 'Change a note without touching the rest of it. Use exactly one content change: insert_text adds Markdown right after (or before) the line that contains a unique fragment, which is how to add lines in the middle of a note; replace_text swaps one unique text fragment inside a single editor text node (keeps formatting and links); replace_body rewrites the whole body from Markdown and drops links to other notes, tags, dates, supertag fields and task details that the new Markdown does not repeat. title renames the note. Every change can be undone with undo_change.', input: z.object({
     ...request, ...existing, title: title.optional(), replace_text: z.object({ from: text, to: z.string().max(20000) }).optional(),
+    insert_text: z.object({
+      anchor: text.describe('A fragment that appears in exactly one line (paragraph, heading, list or to-do item) of the note.'),
+      text: markdown,
+      position: z.enum(['after', 'before']).default('after').describe('Put the new text after (default) or before that line. Next to a list item, new list items join that list.'),
+    }).optional(),
     replace_body: markdown.optional(),
-  }).refine((input) => input.title !== undefined || input.replace_text !== undefined || input.replace_body !== undefined, 'Supply a title, a text replacement, or a new body.')
-    .refine((input) => !(input.replace_text && input.replace_body), 'Use either replace_text or replace_body, not both.'), write: true },
+  }).refine((input) => input.title !== undefined || input.replace_text !== undefined || input.insert_text !== undefined || input.replace_body !== undefined, 'Supply a title, insert_text, replace_text or replace_body.')
+    .refine((input) => [input.replace_text, input.insert_text, input.replace_body].filter((v) => v !== undefined).length <= 1, 'Use only one of insert_text, replace_text or replace_body per call.'), write: true },
   add_task: { description: 'Add a linked to-do or project task inside a source note so it appears in Orbit.', input: z.object({
     ...request, ...target, text: z.string().trim().min(1).max(2000), ...taskFields,
   }), write: true },
@@ -154,10 +160,21 @@ function replaceText(content: JSONContent, from: string, to: string) {
   if (matches.length !== 1) throw new ApiError(409, 'The text must occur exactly once inside one editor text node.');
   const { parent, node, index } = matches[0];
   const updated = node.text!.slice(0, index) + to + node.text!.slice(index + from.length);
-  if (updated.includes('\n') || updated.includes('\r')) throw new ApiError(400, 'Use append_to_note to add paragraphs.');
+  if (updated.includes('\n') || updated.includes('\r')) throw new ApiError(400, 'To add new lines, use update_note with insert_text (or append_to_note for the end of the note).');
   if (updated) node.text = updated;
   else parent.content = parent.content!.filter((child) => child !== node);
   return next;
+}
+
+function insertText(content: JSONContent, anchor: string, body: string, position: 'after' | 'before') {
+  try {
+    return assignTaskIds(insertMarkdown(content, anchor, body, position));
+  } catch (error) {
+    if (!(error instanceof InsertError)) throw error;
+    if (error.reason === 'not-found') throw new ApiError(409, 'No line in the note contains the anchor text. Read the note again and copy a fragment from the line you mean.');
+    if (error.reason === 'ambiguous') throw new ApiError(409, 'The anchor text appears in more than one line. Use a longer fragment that appears in only one line.');
+    throw new ApiError(400, 'There is no text to insert.');
+  }
 }
 
 function makeNote(noteId: string, typeId: string, noteTitle: string, now: number, dailyDate: string | null, template?: JSONContent | null): Obj {
@@ -378,6 +395,7 @@ export function createNotesService(db: Firestore, appUrl: URL) {
           const replacement = args.replace_text;
           after = { ...before!, title: args.title ?? before!.title,
             content: replacement ? replaceText(before!.content, replacement.from, replacement.to)
+              : args.insert_text ? insertText(before!.content, args.insert_text.anchor, args.insert_text.text, args.insert_text.position)
               : args.replace_body !== undefined ? replaceBody(before!.content, args.replace_body) : before!.content };
           break;
         }
