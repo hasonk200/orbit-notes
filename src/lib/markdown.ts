@@ -98,13 +98,25 @@ export function parseInline(src: string, marks: Mark[] = []): JSONContent[] {
 
 function findClose(src: string, from: number, run: string) {
   let j = from;
-  while ((j = src.indexOf(run, j)) !== -1) {
-    const before = src[j - 1];
-    const after = src[j + run.length] ?? ' ';
-    if (before && !/\s/.test(before) && (run.length === 2 || after !== run[0])) {
-      if (run[0] !== '_' || !/[\p{L}\p{N}]/u.test(after)) return j;
+  while (j < src.length) {
+    // Code spans bind tighter than emphasis: `**` inside backticks never closes bold.
+    if (src[j] === '`') {
+      const code = src.slice(j).match(/^(`+)[\s\S]*?[^`]\1(?!`)/);
+      if (code) {
+        j += code[0].length;
+        continue;
+      }
     }
-    j += run.length;
+    if (src.startsWith(run, j)) {
+      const before = src[j - 1];
+      const after = src[j + run.length] ?? ' ';
+      if (before && !/\s/.test(before) && (run.length === 2 || after !== run[0])) {
+        if (run[0] !== '_' || !/[\p{L}\p{N}]/u.test(after)) return j;
+      }
+      j += run.length;
+      continue;
+    }
+    j += 1;
   }
   return -1;
 }
