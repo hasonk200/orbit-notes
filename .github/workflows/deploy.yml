@@ -32,6 +32,7 @@ jobs:
       - name: Build for GitHub Pages
         env:
           GITHUB_PAGES: 'true'
+          ORBIT_BUILD_NUMBER: ${{ github.run_number }}
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
