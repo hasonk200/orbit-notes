@@ -133,6 +133,7 @@ export function CommandPalette() {
     const views: [string, string, string][] = [
       ['📅', tr('Today’s note'), 'today'],
       ['🗓️', tr('Calendar'), '/calendar'],
+      ['✓', tr('To-do'), '/todos'],
       ['☑', tr('Tasks'), '/tasks'],
       ['🕸', tr('Graph'), '/graph'],
       ['#', tr('Tags'), '/tags'],

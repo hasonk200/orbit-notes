@@ -102,7 +102,8 @@ test('renders the main screens in Traditional Chinese and handles an invalid cal
   const pages = [
     ['Settings', '繁體中文', '備份與還原'],
     ['HomeView', '探索', '快速建立'],
-    ['TasksView', '待辦', '狀態', '進行中'],
+    ['TodosView', '待辦', '隨時', '已完成紀錄'],
+    ['TasksView', '專案任務', '狀態', '進行中'],
     ['CalendarView', '今', '未來 7 天'],
     ['TagsView', '標籤', '還沒有標籤'],
     ['TrashView', '垃圾桶', '垃圾桶沒有內容'],
