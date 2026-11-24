@@ -1,5 +1,5 @@
 import { addDays, format, parseISO } from 'date-fns';
-import { Calendar, CheckCircle2, ExternalLink, Flag, FolderOpen, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, Calendar, CheckCircle2, ExternalLink, Flag, FolderOpen, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { TaskRec, TaskStatus } from '../db/schema';
 import { deleteTask, updateTask } from '../db/indexers';
@@ -279,6 +279,15 @@ export function TaskCard({
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              void updateTask(task.id, { kind: 'todo', status: task.done ? 'done' : 'open', contextId: null });
+            }}
+          >
+            <ArrowDownLeft size={13} /> {tr('Move to To-do')}
+          </button>
           <div className="tcard-menu-sep" />
           <button
             type="button"

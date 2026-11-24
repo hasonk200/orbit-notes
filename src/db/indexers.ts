@@ -1,6 +1,7 @@
-import { db, uid, type CollectionRec, type JSONContent, type LinkRec, type Obj, type ObjType, type TaskPriority, type TaskRec, type TaskStatus } from './schema';
-import { assignTaskIds, emptyDoc, extractBlobIds, extractLinkIds, extractTags, extractTasks, patchTaskInDoc, removeTaskFromDoc, type TaskPatch } from '../lib/content';
+import { db, getMeta, setMeta, uid, type CollectionRec, type JSONContent, type LinkRec, type Obj, type ObjType, type TaskKind, type TaskPriority, type TaskRec, type TaskStatus } from './schema';
+import { assignTaskIds, emptyDoc, extractBlobIds, extractLinkIds, extractTags, extractTasks, patchTaskInDoc, patchTasksInDoc, removeTaskFromDoc, type TaskPatch } from '../lib/content';
 import { dailyTitle, toISODate } from '../lib/dates';
+import { classifyTaskKind } from '../lib/tasks';
 import { defaultTemplate } from '../lib/typeLabels';
 import { getT } from '../store/uiStore';
 
@@ -32,6 +33,7 @@ async function reindex(obj: Obj, type?: ObjType) {
   const linkIds = extractLinkIds(obj.content);
   const linked = linkIds.length ? await db.objects.bulkGet(linkIds) : [];
   const titles = new Map(linked.filter(Boolean).map((o) => [o!.id, o!.title || 'Untitled']));
+  const linkedTypesById = new Map(linked.filter(Boolean).map((o) => [o!.id, o!.typeId]));
   const titleOf = (id: string) => titles.get(id) ?? 'Deleted object';
   const extracted = extractTasks(obj.content, titleOf);
   const old = await db.tasks.where('objectId').equals(obj.id).toArray();
@@ -39,11 +41,20 @@ async function reindex(obj: Obj, type?: ObjType) {
   const now = Date.now();
   const rows: TaskRec[] = extracted.map((t) => {
     const prev = oldMap.get(t.id);
+    const kind = classifyTaskKind({
+      explicitKind: t.explicitKind,
+      status: t.status,
+      contextId: t.contextId,
+      sourceTypeId: obj.typeId,
+      linkedTypes: t.linkIds.map((lid) => linkedTypesById.get(lid)),
+    });
     const changed =
       !prev ||
       prev.text !== t.text ||
       prev.done !== t.done ||
       prev.status !== t.status ||
+      prev.kind !== kind ||
+      (prev.explicitKind ?? null) !== t.explicitKind ||
       (prev.due ?? null) !== t.due ||
       (prev.priority ?? null) !== t.priority ||
       (prev.contextId ?? null) !== t.contextId;
@@ -54,6 +65,8 @@ async function reindex(obj: Obj, type?: ObjType) {
       text: t.text,
       done: t.done,
       status: t.status,
+      kind,
+      explicitKind: t.explicitKind,
       due: t.due,
       priority: t.priority,
       completedAt: t.done ? (t.completedAt ?? prev?.completedAt ?? now) : null,
@@ -268,6 +281,24 @@ export async function updateTask(taskId: string, patch: TaskPatch) {
   });
 }
 
+/** Reschedule many tasks in a single write per source note (1 sync update + 1 undo step per note). */
+export async function rescheduleTasks(taskIds: string[], due: string | null) {
+  if (!taskIds.length) return;
+  const rows = (await db.tasks.bulkGet(taskIds)).filter(Boolean) as TaskRec[];
+  const byObject = new Map<string, Record<string, TaskPatch>>();
+  for (const row of rows) {
+    const map = byObject.get(row.objectId) ?? {};
+    map[row.id] = { due };
+    byObject.set(row.objectId, map);
+  }
+  for (const [objectId, patches] of byObject.entries()) {
+    await saveObject(objectId, (cur) => {
+      const content = patchTasksInDoc(cur.content, patches);
+      return content ? { content } : {};
+    });
+  }
+}
+
 /** Delete a task node cleanly from its source object. */
 export async function deleteTask(taskId: string) {
   const task = await db.tasks.get(taskId);
@@ -284,6 +315,7 @@ export async function createTask(opts: {
   targetObjectId?: string | null;
   contextId?: string | null;
   status?: TaskStatus;
+  kind?: TaskKind | null;
   due?: string | null;
   priority?: TaskPriority | null;
 }): Promise<string | null> {
@@ -306,6 +338,7 @@ export async function createTask(opts: {
       checked,
       taskId,
       status,
+      ...(opts.kind ? { kind: opts.kind } : {}),
       due: opts.due ?? null,
       priority: opts.priority ?? null,
       contextId: opts.contextId && opts.contextId !== note.id ? opts.contextId : null,
@@ -336,6 +369,23 @@ export async function reindexObjects(ids: string[]) {
       }
     }
   });
+}
+
+const TASK_INDEX_VERSION = 1; // bump when derived task fields change (1: task kind)
+
+/**
+ * Rebuild derived links/tasks once after an upgrade, so tasks indexed before
+ * a new derived field existed get it. Notes themselves are not rewritten,
+ * so nothing is re-uploaded to the cloud.
+ */
+export async function upgradeTaskIndex() {
+  if (((await getMeta<number>('taskIndexVersion')) ?? 0) >= TASK_INDEX_VERSION) return;
+  const objs = await db.objects.toArray();
+  const types = new Map((await db.types.toArray()).map((t) => [t.id, t]));
+  await db.transaction('rw', db.objects, db.links, db.tasks, db.types, async () => {
+    for (const o of objs) await reindex(o, types.get(o.typeId));
+  });
+  await setMeta('taskIndexVersion', TASK_INDEX_VERSION);
 }
 
 export async function reindexAll() {

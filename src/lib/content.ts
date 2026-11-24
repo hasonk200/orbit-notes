@@ -1,4 +1,4 @@
-import type { JSONContent, TaskPriority, TaskStatus } from '../db/schema';
+import type { JSONContent, TaskKind, TaskPriority, TaskStatus } from '../db/schema';
 import { uid } from './uid';
 import { resolveTaskStatus } from './tasks';
 
@@ -62,6 +62,8 @@ export interface ExtractedTask {
   text: string;
   done: boolean;
   status: TaskStatus;
+  explicitKind: TaskKind | null;
+  linkIds: string[];
   due: string | null;
   priority: TaskPriority | null;
   contextId: string | null;
@@ -77,16 +79,32 @@ function taskOwnText(n: JSONContent, titleOf?: (id: string) => string) {
     .trim();
 }
 
+/** Inline objectLink IDs inside a task item's own content (excluding nested lists). */
+function taskOwnLinkIds(n: JSONContent): string[] {
+  const ids = new Set<string>();
+  for (const child of n.content ?? []) {
+    if (child.type === 'taskList' || child.type === 'bulletList' || child.type === 'orderedList') continue;
+    walk(child, (c) => {
+      if (c.type === 'objectLink' && c.attrs?.id) ids.add(c.attrs.id);
+    });
+  }
+  return [...ids];
+}
+
 export function extractTasks(doc: JSONContent | undefined, titleOf?: (id: string) => string): ExtractedTask[] {
   const out: ExtractedTask[] = [];
   walk(doc, (n) => {
     if (n.type === 'taskItem' && n.attrs?.taskId) {
       const done = !!n.attrs.checked || n.attrs.status === 'done';
+      const rawKind = n.attrs.kind;
+      const explicitKind: TaskKind | null = rawKind === 'todo' || rawKind === 'task' ? rawKind : null;
       out.push({
         id: n.attrs.taskId,
         text: taskOwnText(n, titleOf),
         done,
         status: resolveTaskStatus(done, n.attrs.status),
+        explicitKind,
+        linkIds: taskOwnLinkIds(n),
         due: n.attrs.due || null,
         priority: (n.attrs.priority as TaskPriority) || null,
         contextId: n.attrs.contextId || null,
@@ -114,53 +132,68 @@ export function assignTaskIds(doc: JSONContent, fresh = false): JSONContent {
 export interface TaskPatch {
   checked?: boolean;
   status?: TaskStatus;
+  kind?: TaskKind | null;
   due?: string | null;
   priority?: TaskPriority | null;
   contextId?: string | null;
   text?: string;
 }
 
-/** Update the attrs (and optionally text) of the task node with this id. Returns a new doc, or null if not found. */
-export function patchTaskInDoc(doc: JSONContent, taskId: string, patch: TaskPatch): JSONContent | null {
+function applyTaskPatch(n: JSONContent, patch: TaskPatch) {
+  const attrs = { ...(n.attrs ?? {}) };
+  if (patch.status !== undefined) {
+    attrs.status = patch.status;
+    if (patch.status === 'done') {
+      attrs.checked = true;
+      attrs.completedAt = attrs.completedAt ?? Date.now();
+    } else {
+      attrs.checked = false;
+      attrs.completedAt = null;
+    }
+  }
+  if (patch.checked !== undefined) {
+    attrs.checked = patch.checked;
+    if (patch.checked) {
+      attrs.status = 'done';
+      attrs.completedAt = Date.now();
+    } else {
+      if (attrs.status === 'done') attrs.status = 'open';
+      attrs.completedAt = null;
+    }
+  }
+  if (patch.kind !== undefined) {
+    if (patch.kind === null) delete attrs.kind;
+    else attrs.kind = patch.kind;
+  }
+  if (patch.due !== undefined) attrs.due = patch.due;
+  if (patch.priority !== undefined) attrs.priority = patch.priority;
+  if (patch.contextId !== undefined) attrs.contextId = patch.contextId;
+  n.attrs = attrs;
+
+  if (patch.text !== undefined) {
+    const rest = (n.content ?? []).filter((c) => c.type === 'taskList' || c.type === 'bulletList' || c.type === 'orderedList');
+    const trimmed = patch.text;
+    n.content = [{ type: 'paragraph', content: trimmed ? [{ type: 'text', text: trimmed }] : [] }, ...rest];
+  }
+}
+
+/** Update multiple task nodes inside one document in a single atomic copy. Returns null if none matched. */
+export function patchTasksInDoc(doc: JSONContent, patches: Record<string, TaskPatch>): JSONContent | null {
   const copy: JSONContent = JSON.parse(JSON.stringify(doc));
   let found = false;
   walk(copy, (n) => {
-    if (n.type === 'taskItem' && n.attrs?.taskId === taskId) {
-      const attrs = { ...(n.attrs ?? {}) };
-      if (patch.status !== undefined) {
-        attrs.status = patch.status;
-        if (patch.status === 'done') {
-          attrs.checked = true;
-          attrs.completedAt = attrs.completedAt ?? Date.now();
-        } else {
-          attrs.checked = false;
-          attrs.completedAt = null;
-        }
-      }
-      if (patch.checked !== undefined) {
-        attrs.checked = patch.checked;
-        if (patch.checked) {
-          attrs.status = 'done';
-          attrs.completedAt = Date.now();
-        } else {
-          if (attrs.status === 'done') attrs.status = 'open';
-          attrs.completedAt = null;
-        }
-      }
-      if (patch.due !== undefined) attrs.due = patch.due;
-      if (patch.priority !== undefined) attrs.priority = patch.priority;
-      if (patch.contextId !== undefined) attrs.contextId = patch.contextId;
-      n.attrs = attrs;
-
-      if (patch.text !== undefined) {
-        const rest = (n.content ?? []).filter((c) => c.type === 'taskList' || c.type === 'bulletList' || c.type === 'orderedList');
-        const trimmed = patch.text;
-        n.content = [{ type: 'paragraph', content: trimmed ? [{ type: 'text', text: trimmed }] : [] }, ...rest];
-      }
+    const id = n.attrs?.taskId;
+    if (n.type === 'taskItem' && id && Object.prototype.hasOwnProperty.call(patches, id)) {
+      applyTaskPatch(n, patches[id]);
       found = true;
     }
   });
   return found ? copy : null;
+}
+
+/** Update the attrs (and optionally text) of the task node with this id. Returns a new doc, or null if not found. */
+export function patchTaskInDoc(doc: JSONContent, taskId: string, patch: TaskPatch): JSONContent | null {
+  return patchTasksInDoc(doc, { [taskId]: patch });
 }
 
 /** Remove the task node with this id from a TipTap document (also cleans up now-empty taskLists). */

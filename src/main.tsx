@@ -6,6 +6,7 @@ import { ensureSeed } from './db/seed';
 import { startDataSync } from './store/dataStore';
 import { applyTheme, getT, useUI } from './store/uiStore';
 import { autoBackupIfDue } from './db/fsSync';
+import { upgradeTaskIndex } from './db/indexers';
 import { initSync } from './sync/engine';
 import './styles/tokens.css';
 import './styles/app.css';
@@ -28,6 +29,11 @@ async function boot() {
     message.textContent = getT()('Orbit could not open its local database. Private windows or blocked site data can cause this.');
     document.getElementById('root')!.replaceChildren(message);
     return;
+  }
+  try {
+    await upgradeTaskIndex();
+  } catch (e) {
+    console.error('Orbit: could not refresh the task index', e);
   }
   startDataSync();
   try {

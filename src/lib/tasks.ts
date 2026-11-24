@@ -1,4 +1,4 @@
-import type { TaskPriority, TaskStatus } from '../db/schema';
+import type { TaskKind, TaskPriority, TaskStatus } from '../db/schema';
 import { parseQuickDate } from './dates';
 
 export interface StatusDef {
@@ -61,6 +61,27 @@ export function resolveTaskStatus(checked: boolean, rawStatus?: string | null): 
     return rawStatus;
   }
   return 'open';
+}
+
+export interface TaskClassifyInput {
+  explicitKind?: TaskKind | string | null;
+  status?: TaskStatus | string | null;
+  contextId?: string | null;
+  sourceTypeId?: string | null;
+  linkedTypes?: (string | null | undefined)[];
+}
+
+/**
+ * Pure read/index-time classifier separating quick one-off To-dos from tracked Project Tasks.
+ * Only explicit user/MCP choices are persisted; legacy/inline checkboxes are classified without mutating notes.
+ */
+export function classifyTaskKind(input: TaskClassifyInput): TaskKind {
+  if (input.explicitKind === 'todo' || input.explicitKind === 'task') return input.explicitKind;
+  if (input.status === 'not_started' || input.status === 'next_up' || input.status === 'in_progress') return 'task';
+  if (input.contextId && !input.contextId.startsWith('daily-')) return 'task';
+  if (input.sourceTypeId && input.sourceTypeId !== 'daily' && input.sourceTypeId !== 'page') return 'task';
+  if (input.linkedTypes?.some((t) => t === 'project')) return 'task';
+  return 'todo';
 }
 
 /** Parse quick inline tokens from a task input string: @tomorrow / @today / @2026-12-01 and !high / !p1 / !med / !p2 / !low / !p3. */
