@@ -1,5 +1,5 @@
 import { Flag, Trash2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import type { TaskRec, TaskStatus } from '../db/schema';
 import { deleteTask, updateTask } from '../db/indexers';
 import { displayTitle, useObject, useTypeMap } from '../store/dataStore';
@@ -9,7 +9,19 @@ import { shortDate, todayISO } from '../lib/dates';
 import { NEXT_PRIO, PRIO_MAP, resolveTaskStatus, STATUS_MAP, TASK_STATUSES } from '../lib/tasks';
 import { Popover } from './Popover';
 
-export function TaskRow({ task, showSource = true }: { task: TaskRec; showSource?: boolean }) {
+export function TaskRow({
+  task,
+  showSource = true,
+  showStatus = true,
+  showKindBadge = false,
+  extraActions,
+}: {
+  task: TaskRec;
+  showSource?: boolean;
+  showStatus?: boolean;
+  showKindBadge?: boolean;
+  extraActions?: ReactNode;
+}) {
   const tr = useT();
   const ctxObj = useObject(task.contextId || task.objectId);
   const typeMap = useTypeMap();
@@ -87,7 +99,13 @@ export function TaskRow({ task, showSource = true }: { task: TaskRec; showSource
         )}
       </div>
 
-      {statusDef && (
+      {showKindBadge && (
+        <span className={`kind-pill kind-${task.kind ?? 'todo'}`}>
+          {task.kind === 'task' ? tr('Task') : tr('To-do')}
+        </span>
+      )}
+
+      {showStatus && statusDef && (
         <button
           ref={statusRef}
           type="button"
@@ -129,6 +147,8 @@ export function TaskRow({ task, showSource = true }: { task: TaskRec; showSource
         <span>{task.due ? shortDate(task.due, tr) : tr('No date')}</span>
         <input type="date" value={task.due ?? ''} onChange={(e) => void updateTask(task.id, { due: e.target.value || null })} />
       </label>
+
+      {extraActions}
 
       <button
         type="button"

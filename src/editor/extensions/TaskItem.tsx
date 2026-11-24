@@ -3,7 +3,7 @@ import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNode
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import { addDays } from 'date-fns';
 import { useRef, useState } from 'react';
-import { uid, type TaskPriority, type TaskStatus } from '../../db/schema';
+import { uid, type TaskKind, type TaskPriority, type TaskStatus } from '../../db/schema';
 import { shortDate, todayISO, toISODate } from '../../lib/dates';
 import { PRIO_MAP, resolveTaskStatus, STATUS_MAP, TASK_PRIORITIES, TASK_STATUSES } from '../../lib/tasks';
 import { displayTitle, useActiveObjects, useData } from '../../store/dataStore';
@@ -18,6 +18,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const due = node.attrs.due as string | null;
   const priority = (node.attrs.priority as TaskPriority | null) ?? null;
   const contextId = (node.attrs.contextId as string | null) ?? null;
+  const explicitKind = (node.attrs.kind === 'todo' || node.attrs.kind === 'task' ? node.attrs.kind : null) as TaskKind | null;
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -134,6 +135,29 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
         )}
         {pickerOpen && (
           <Popover anchor={triggerRef.current} onClose={() => setPickerOpen(false)} className="task-popover">
+            <div className="tp-section">{tr('Kind')}</div>
+            <div className="tp-quick">
+              <button
+                type="button"
+                className={explicitKind === 'todo' ? 'active' : ''}
+                onClick={() => {
+                  set({ kind: explicitKind === 'todo' ? null : 'todo' });
+                  setPickerOpen(false);
+                }}
+              >
+                {tr('To-do')}
+              </button>
+              <button
+                type="button"
+                className={explicitKind === 'task' ? 'active' : ''}
+                onClick={() => {
+                  set({ kind: explicitKind === 'task' ? null : 'task' });
+                  setPickerOpen(false);
+                }}
+              >
+                {tr('Project Task')}
+              </button>
+            </div>
             <div className="tp-section">{tr('Status')}</div>
             <div className="tp-statuses">
               {TASK_STATUSES.map((s) => (
@@ -266,6 +290,15 @@ export const OrbitTaskItem = BaseTaskItem.extend({
         keepOnSplit: false,
         parseHTML: (el: HTMLElement) => el.getAttribute('data-status') || 'open',
         renderHTML: (a: Record<string, any>) => (a.status && a.status !== 'open' ? { 'data-status': a.status } : {}),
+      },
+      kind: {
+        default: null,
+        keepOnSplit: false,
+        parseHTML: (el: HTMLElement) => {
+          const v = el.getAttribute('data-kind');
+          return v === 'todo' || v === 'task' ? v : null;
+        },
+        renderHTML: (a: Record<string, any>) => (a.kind === 'todo' || a.kind === 'task' ? { 'data-kind': a.kind } : {}),
       },
       due: {
         default: null,

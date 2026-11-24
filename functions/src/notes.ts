@@ -5,6 +5,7 @@ import type { JSONContent, Obj, ObjType } from '../../src/db/schema';
 import { assignTaskIds, docText, emptyDoc, extractTags, extractTasks, patchTaskInDoc, walk } from '../../src/lib/content';
 import { dailyTitle } from '../../src/lib/dates';
 import { appendTask } from '../../src/lib/taskInput';
+import { classifyTaskKind } from '../../src/lib/tasks';
 import { objectFingerprint } from '../../src/sync/objectVersions';
 
 export class ApiError extends Error {
@@ -24,7 +25,12 @@ const title = z.string().trim().min(1).max(500);
 const request = { request_id: z.uuid().describe('Unique request UUID. Reuse the same ID when retrying this exact write.') };
 const target = { note_id: id };
 const existing = { ...target, version: z.string().max(100).describe('Version from get_note or search results.') };
-const taskFields = { due: date.nullable().optional(), priority: z.enum(['high', 'medium', 'low']).nullable().optional() };
+const taskKind = z.enum(['todo', 'task']);
+const taskFields = {
+  due: date.nullable().optional(),
+  priority: z.enum(['high', 'medium', 'low']).nullable().optional(),
+  kind: taskKind.nullable().optional().describe('Explicitly mark as a one-off "todo" or a project "task". Omit to auto-classify.'),
+};
 
 export const operations = {
   search_notes: { description: 'Search synced notes in your Orbit account. Use the next cursor to continue across pages.', input: z.object({
@@ -34,8 +40,8 @@ export const operations = {
   get_note: { description: 'Read a note, its version, and its tasks. Use next_offset to read more text.', input: z.object({
     ...target, offset: z.number().int().min(0).max(1000000).default(0),
   }), write: false },
-  list_tasks: { description: 'List synced tasks and their source notes. Filter by completion or due date, and follow next_cursor for more.', input: z.object({
-    done: z.boolean().optional(), due_from: date.optional(), due_to: date.optional(), limit: page, cursor: z.string().max(1000).optional(),
+  list_tasks: { description: 'List synced tasks and to-dos with their source notes. Filter by kind ("todo" or "task"), completion, or due date, and follow next_cursor for more.', input: z.object({
+    done: z.boolean().optional(), kind: taskKind.optional(), due_from: date.optional(), due_to: date.optional(), limit: page, cursor: z.string().max(1000).optional(),
   }), write: false },
   list_changes: { description: 'List recent AI changes, including undo records.', input: z.object({
     limit: page, before: z.string().max(1000).optional(),
@@ -55,12 +61,12 @@ export const operations = {
   update_note: { description: 'Rename a note or replace one unique text fragment inside a single editor text node, preserving formatting and links.', input: z.object({
     ...request, ...existing, title: title.optional(), replace_text: z.object({ from: text, to: z.string().max(20000) }).optional(),
   }).refine((input) => input.title !== undefined || input.replace_text !== undefined, 'Supply a title or a text replacement.'), write: true },
-  add_task: { description: 'Add a linked task inside a source note so it appears in the Tasks view.', input: z.object({
+  add_task: { description: 'Add a linked to-do or project task inside a source note so it appears in Orbit.', input: z.object({
     ...request, ...target, text: z.string().trim().min(1).max(2000), ...taskFields,
   }), write: true },
-  update_task: { description: 'Complete, reopen, reschedule or reprioritize a task in its source note. Read the note for the task ID and version.', input: z.object({
+  update_task: { description: 'Complete, reopen, reschedule, reprioritize, or change kind ("todo" / "task") of a task in its source note. Read the note for the task ID and version.', input: z.object({
     ...request, ...existing, task_id: id, done: z.boolean().optional(), ...taskFields,
-  }).refine((input) => input.done !== undefined || input.due !== undefined || input.priority !== undefined, 'Supply a task change.'), write: true },
+  }).refine((input) => input.done !== undefined || input.due !== undefined || input.priority !== undefined || input.kind !== undefined, 'Supply a task change.'), write: true },
   trash_note: { description: 'Move one note to Orbit’s recoverable Trash.', input: z.object({ ...request, ...existing }), write: true },
   restore_note: { description: 'Restore one note from Orbit’s Trash.', input: z.object({ ...request, ...existing }), write: true },
   undo_change: { description: 'Undo one AI change if the note still matches the version written by that change.', input: z.object({
@@ -165,12 +171,39 @@ export function createNotesService(db: Firestore, appUrl: URL) {
     const notes = db.collection('users').doc(actor.uid).collection('objects');
     const changes = account(db, actor.uid).collection('changes');
 
+    async function resolveLinkedTypes(linkIds: string[], cache: Map<string, string | null>) {
+      const missing = linkIds.filter((lid) => !cache.has(lid));
+      if (missing.length) {
+        const snaps = await db.getAll(...missing.map((lid) => notes.doc(lid)));
+        for (const snap of snaps) {
+          let decoded: Obj | null = null;
+          try { decoded = decode(snap.id, snap.data() as CloudObject | undefined); } catch { decoded = null; }
+          cache.set(snap.id, decoded?.typeId ?? null);
+        }
+      }
+      return linkIds.map((lid) => cache.get(lid));
+    }
+
     switch (operation) {
       case 'get_note': {
         const input = operations.get_note.input.parse(validation.data);
         const note = decode(input.note_id, (await notes.doc(input.note_id).get()).data() as CloudObject | undefined);
         if (!note) throw new ApiError(404, 'Note not found.');
-        return { ...await summary(note, appUrl), ...textPage(docText(note.content, (key) => `[[${key}]]`), input.offset), tasks: extractTasks(note.content, (key) => `[[${key}]]`).slice(0, 100) };
+        const rawTasks = extractTasks(note.content, (key) => `[[${key}]]`).slice(0, 100);
+        const typeCache = new Map<string, string | null>([[note.id, note.typeId]]);
+        const allLinkIds = [...new Set(rawTasks.flatMap((t) => (t.explicitKind ? [] : t.linkIds)))];
+        if (allLinkIds.length) await resolveLinkedTypes(allLinkIds, typeCache);
+        const tasks = rawTasks.map((t) => ({
+          ...t,
+          kind: classifyTaskKind({
+            explicitKind: t.explicitKind,
+            status: t.status,
+            contextId: t.contextId,
+            sourceTypeId: note.typeId,
+            linkedTypes: t.linkIds.map((lid) => typeCache.get(lid)),
+          }),
+        }));
+        return { ...await summary(note, appUrl), ...textPage(docText(note.content, (key) => `[[${key}]]`), input.offset), tasks };
       }
       case 'search_notes': {
         const input = operations.search_notes.input.parse(validation.data);
@@ -209,21 +242,33 @@ export function createNotesService(db: Firestore, appUrl: URL) {
         const cursor = input.cursor ? cursorDecode(input.cursor) : null;
         if (cursor) query = cursor[2] ? query.startAt(cursor[0], cursor[1]) : query.startAfter(cursor[0], cursor[1]);
         const batch = await query.limit(40).get();
+        const typeCache = new Map<string, string | null>();
         const results = [];
         for (const [index, row] of batch.docs.entries()) {
           let note: Obj | null;
           try { note = decode(row.id, row.data() as CloudObject); } catch { continue; }
           if (!note || note.deletedAt || note.syncConflictOf) continue;
+          typeCache.set(note.id, note.typeId);
           const tasks = extractTasks(note.content);
           const offset = cursor && row.id === cursor[1] && row.get('updatedAt') === cursor[0] ? cursor[2] : 0;
+          const neededLinks = [...new Set(tasks.slice(offset).flatMap((t) => (t.explicitKind ? [] : t.linkIds)))];
+          if (neededLinks.length) await resolveLinkedTypes(neededLinks, typeCache);
           let noteVersion: string | undefined;
           for (let i = offset; i < tasks.length; i++) {
             const item = tasks[i];
             if (!item.text || (input.done !== undefined && item.done !== input.done)) continue;
             if ((input.due_from && (!item.due || item.due < input.due_from)) ||
                 (input.due_to && (!item.due || item.due > input.due_to))) continue;
+            const kind = classifyTaskKind({
+              explicitKind: item.explicitKind,
+              status: item.status,
+              contextId: item.contextId,
+              sourceTypeId: note.typeId,
+              linkedTypes: item.linkIds.map((lid) => typeCache.get(lid)),
+            });
+            if (input.kind !== undefined && kind !== input.kind) continue;
             noteVersion ??= await version(note);
-            results.push({ ...item, note_id: note.id, note_title: note.title, note_version: noteVersion, url: link(appUrl, note.id) });
+            results.push({ ...item, kind, note_id: note.id, note_title: note.title, note_version: noteVersion, url: link(appUrl, note.id) });
             if (results.length === input.limit) {
               const withinNote = i + 1 < tasks.length;
               const more = withinNote || index + 1 < batch.size || batch.size === 40;
@@ -330,7 +375,10 @@ export function createNotesService(db: Firestore, appUrl: URL) {
         case 'add_task': {
           const args = operations.add_task.input.parse(validation.data);
           taskId = newTaskId;
-          after = { ...before!, content: appendTask(before!.content, taskId, args.text, args.due ?? null, args.priority ?? null) };
+          after = {
+            ...before!,
+            content: appendTask(before!.content, taskId, args.text, args.due ?? null, args.priority ?? null, { kind: args.kind ?? null }),
+          };
           break;
         }
         case 'update_task': {
@@ -340,6 +388,7 @@ export function createNotesService(db: Firestore, appUrl: URL) {
             ...(args.done !== undefined ? { checked: args.done } : {}),
             ...(args.due !== undefined ? { due: args.due } : {}),
             ...(args.priority !== undefined ? { priority: args.priority } : {}),
+            ...(args.kind !== undefined ? { kind: args.kind } : {}),
           });
           if (!content) throw new ApiError(404, 'Task not found in this note.');
           after = { ...before!, content };

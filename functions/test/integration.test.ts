@@ -88,13 +88,16 @@ test('API isolates Firebase accounts and records recallable, versioned and retry
   await api(other, 'get_note', { note_id: created.note_id }, 404);
   assert.equal((await api(other, 'list_changes', {})).changes.length, 0);
 
-  const task = await api(writer, 'add_task', { ...write(), note_id: created.note_id, text: '記錄里程', due: '2026-11-22' });
+  const task = await api(writer, 'add_task', { ...write(), note_id: created.note_id, text: '記錄里程', due: '2026-11-22', kind: 'task' });
   const view = await api(reader, 'get_note', { note_id: created.note_id });
   assert.equal(view.tasks[0].id, task.task_id);
   assert.equal(view.tasks[0].due, '2026-11-22');
-  assert.equal((await api(reader, 'list_tasks', { done: false, due_from: '2026-11-22' })).tasks[0].id, task.task_id);
+  assert.equal(view.tasks[0].kind, 'task');
+  assert.equal((await api(reader, 'list_tasks', { done: false, kind: 'task', due_from: '2026-11-22' })).tasks[0].id, task.task_id);
+  assert.equal((await api(reader, 'list_tasks', { kind: 'todo' })).tasks.length, 0);
   assert.equal((await api(reader, 'list_tasks', { due_to: '2026-11-21' })).tasks.length, 0);
-  const next = await api(writer, 'update_task', { ...write(), note_id: created.note_id, version: view.version, task_id: task.task_id, done: true });
+  const next = await api(writer, 'update_task', { ...write(), note_id: created.note_id, version: view.version, task_id: task.task_id, done: true, kind: 'todo' });
+  assert.equal((await api(reader, 'list_tasks', { done: true, kind: 'todo' })).tasks[0].id, task.task_id);
   await api(writer, 'trash_note', { ...write(), note_id: created.note_id, version: view.version }, 409);
   const trash = await api(writer, 'trash_note', { ...write(), note_id: created.note_id, version: next.resulting_version });
   assert.equal((await api(reader, 'search_notes', { in_trash: true })).notes.length, 1);

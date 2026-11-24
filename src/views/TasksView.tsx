@@ -17,14 +17,14 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { TaskPriority, TaskRec, TaskStatus } from '../db/schema';
-import { createTask, updateTask } from '../db/indexers';
+import { createTask, rescheduleTasks, updateTask } from '../db/indexers';
 import { displayTitle, useActiveObjects, useData, useObjMap, useTypeMap } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { useT } from '../store/uiStore';
 import { relativeTime, shortDate, todayISO, toISODate } from '../lib/dates';
 import { includesText } from '../lib/search';
 import { typeLabel } from '../lib/typeLabels';
-import { parseQuickTaskInput, PRIO_MAP, PRIO_RANK, resolveTaskStatus, STATUS_MAP, STATUS_RANK, TASK_PRIORITIES, TASK_STATUSES } from '../lib/tasks';
+import { classifyTaskKind, parseQuickTaskInput, PRIO_MAP, PRIO_RANK, resolveTaskStatus, STATUS_MAP, STATUS_RANK, TASK_PRIORITIES, TASK_STATUSES } from '../lib/tasks';
 import { TaskRow } from '../components/TaskRow';
 import { TaskCard } from '../components/TaskCard';
 import { Modal } from '../components/Popover';
@@ -106,15 +106,25 @@ export function TasksView() {
     [activeObjects],
   );
 
-  // All valid, non-empty, non-trashed tasks
+  // All valid, non-empty, non-trashed project tasks (kind === 'task')
   const allTasks = useMemo(() => {
     return tasks
       .filter((t) => {
         const o = objMap.get(t.objectId);
-        return o && !o.deletedAt && t.text.trim() !== '';
+        if (!o || o.deletedAt || t.text.trim() === '') return false;
+        const effectiveKind =
+          t.kind ??
+          classifyTaskKind({
+            explicitKind: t.explicitKind,
+            status: t.status,
+            contextId: t.contextId,
+            sourceTypeId: o.typeId,
+          });
+        return effectiveKind === 'task';
       })
       .map((t) => ({
         ...t,
+        kind: 'task' as const,
         status: resolveTaskStatus(t.done, t.status),
       }));
   }, [tasks, objMap]);
@@ -218,16 +228,21 @@ export function TasksView() {
   }, [filtered]);
 
   const contextGroups = useMemo(() => {
-    const openOnly = filtered.filter((t) => !t.done);
-    const map = new Map<string, TaskRec[]>();
-    for (const t of openOnly) {
+    const map = new Map<string, { open: TaskRec[]; doneCount: number; totalCount: number }>();
+    for (const t of filtered) {
       const cid = t.contextId || t.objectId;
-      map.set(cid, [...(map.get(cid) ?? []), t]);
+      const entry = map.get(cid) ?? { open: [], doneCount: 0, totalCount: 0 };
+      entry.totalCount++;
+      if (t.done) entry.doneCount++;
+      else entry.open.push(t);
+      map.set(cid, entry);
     }
     return [...map.entries()]
-      .map(([cid, items]) => {
+      .filter(([, entry]) => entry.open.length > 0 || entry.doneCount > 0)
+      .map(([cid, entry]) => {
         const obj = objMap.get(cid);
         const tp = obj ? typeMap.get(obj.typeId) : undefined;
+        const pct = entry.totalCount > 0 ? Math.round((entry.doneCount / entry.totalCount) * 100) : 0;
         return {
           id: cid,
           obj,
@@ -235,10 +250,13 @@ export function TasksView() {
           title: obj ? displayTitle(obj, tr) : tr('Unknown'),
           icon: obj?.icon || tp?.icon || '📄',
           color: tp?.color ?? '#8b8a86',
-          items: items.sort(byPrioThenDue),
+          items: entry.open.sort(byPrioThenDue),
+          doneCount: entry.doneCount,
+          totalCount: entry.totalCount,
+          pct,
         };
       })
-      .sort((a, b) => b.items.length - a.items.length || a.title.localeCompare(b.title));
+      .sort((a, b) => b.items.length - a.items.length || b.totalCount - a.totalCount || a.title.localeCompare(b.title));
   }, [filtered, objMap, typeMap, tr]);
 
   const openList = useMemo(() => filtered.filter((t) => !t.done).sort(byPrioThenDue), [filtered]);
@@ -293,6 +311,7 @@ export function TasksView() {
     await createTask({
       text: parsed.text,
       targetObjectId: colContext,
+      kind: 'task',
       status,
       due: parsed.due,
       priority: parsed.priority,
@@ -307,6 +326,7 @@ export function TasksView() {
     await createTask({
       text: parsed.text,
       targetObjectId: objectId,
+      kind: 'task',
       status: 'open',
       due: parsed.due,
       priority: parsed.priority,
@@ -321,6 +341,7 @@ export function TasksView() {
     await createTask({
       text: parsed.text,
       targetObjectId: newTarget,
+      kind: 'task',
       status: newStatus,
       due: parsed.due ?? (newDue || null),
       priority: parsed.priority ?? (newPrio || null),
@@ -334,7 +355,7 @@ export function TasksView() {
 
   const rescheduleOverdueToToday = async () => {
     const overdue = scheduledGroups.find((g) => g.key === 'overdue')?.items ?? [];
-    for (const t of overdue) await updateTask(t.id, { due: today });
+    await rescheduleTasks(overdue.map((t) => t.id), today);
   };
 
   const openNewModalForTab = () => {
@@ -751,7 +772,14 @@ export function TasksView() {
                       <span>{g.title}</span>
                       {g.type && <span className="context-group-type">{typeLabel(g.type, tr)}</span>}
                     </button>
-                    <span className="count">{g.items.length}</span>
+                    <div className="proj-progress" title={`${g.doneCount}/${g.totalCount} (${g.pct}%)`}>
+                      <div className="proj-progress-bar">
+                        <div className="proj-progress-fill" style={{ width: `${g.pct}%` }} />
+                      </div>
+                      <span className="proj-progress-label">
+                        {g.doneCount}/{g.totalCount} · {g.pct}%
+                      </span>
+                    </div>
                     <div className="spacer" />
                     <button
                       type="button"
@@ -785,9 +813,11 @@ export function TasksView() {
                     </form>
                   )}
                   <div className="context-group-items">
-                    {g.items.map((t) => (
-                      <TaskRow key={t.id} task={t} showSource={false} />
-                    ))}
+                    {g.items.length === 0 ? (
+                      <p className="muted small">{tr('All tasks completed.')}</p>
+                    ) : (
+                      g.items.map((t) => <TaskRow key={t.id} task={t} showSource={false} />)
+                    )}
                   </div>
                 </section>
               ))}

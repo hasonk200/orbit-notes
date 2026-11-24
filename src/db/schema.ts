@@ -83,6 +83,7 @@ export interface LinkRec {
 
 export type TaskPriority = 'high' | 'medium' | 'low';
 export type TaskStatus = 'open' | 'not_started' | 'next_up' | 'in_progress' | 'done';
+export type TaskKind = 'todo' | 'task';
 
 export interface TaskRec {
   id: string; // taskId (stable UUID on the TipTap node)
@@ -91,6 +92,8 @@ export interface TaskRec {
   text: string;
   done: boolean;
   status: TaskStatus;
+  kind: TaskKind; // effective kind (derived at index time when not explicit)
+  explicitKind?: TaskKind | null; // only present when user/MCP explicitly chose kind
   due?: string | null; // yyyy-MM-dd
   priority?: TaskPriority | null;
   completedAt?: number | null;

@@ -1,4 +1,4 @@
-import type { JSONContent, TaskPriority } from '../db/schema';
+import type { JSONContent, TaskKind, TaskPriority, TaskStatus } from '../db/schema';
 import { parseQuickDate } from './dates';
 
 export function parseTaskInput(raw: string, now?: Date) {
@@ -16,11 +16,36 @@ export function parseTaskInput(raw: string, now?: Date) {
   return { text, due, priority };
 }
 
-export function appendTask(doc: JSONContent, taskId: string, text: string, due: string | null, priority: TaskPriority | null): JSONContent {
+export interface AppendTaskOptions {
+  kind?: TaskKind | null;
+  status?: TaskStatus;
+  contextId?: string | null;
+}
+
+export function appendTask(
+  doc: JSONContent,
+  taskId: string,
+  text: string,
+  due: string | null,
+  priority: TaskPriority | null,
+  opts?: AppendTaskOptions,
+): JSONContent {
   const content = [...(doc.content ?? [])];
+  const status = opts?.status ?? 'open';
+  const checked = status === 'done';
+  const attrs: Record<string, any> = {
+    checked,
+    taskId,
+    due,
+    priority,
+    ...(status !== 'open' ? { status } : {}),
+    ...(opts?.kind ? { kind: opts.kind } : {}),
+    ...(opts?.contextId ? { contextId: opts.contextId } : {}),
+    ...(checked ? { completedAt: Date.now() } : {}),
+  };
   const item = {
     type: 'taskItem',
-    attrs: { checked: false, taskId, due, priority },
+    attrs,
     content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
   };
   const last = content.at(-1);
