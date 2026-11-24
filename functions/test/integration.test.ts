@@ -132,6 +132,12 @@ test('API isolates Firebase accounts and records recallable, versioned and retry
   assert.equal(rewrittenView.tasks[0].done, true);
   await manage(alice.idToken, '/changes/' + rewritten.id + '/undo', write());
   assert.match((await api(reader, 'get_note', { note_id: md.note_id })).text, /付帳單/);
+  const inserted = await api(writer, 'update_note', { ...write(), note_id: md.note_id, version: (await api(reader, 'get_note', { note_id: md.note_id })).version, insert_text: { anchor: '付帳單', text: '- [ ] 插入的待辦', position: 'before' } });
+  const insertedView = await api(reader, 'get_note', { note_id: md.note_id });
+  assert.deepEqual(insertedView.tasks.map((t: { text: string }) => t.text), ['插入的待辦', '付帳單']);
+  await api(writer, 'update_note', { ...write(), note_id: md.note_id, version: inserted.resulting_version, insert_text: { anchor: '找不到', text: 'x' } }, 409);
+  await api(writer, 'update_note', { ...write(), note_id: md.note_id, version: inserted.resulting_version, insert_text: { anchor: '標題', text: 'x' }, replace_body: 'y' }, 400);
+  await manage(alice.idToken, '/changes/' + inserted.id + '/undo', write());
 
   await Promise.all(['第一段', '第二段'].map((text) => api(writer, 'append_daily_note', { ...write(), date: '2026-11-22', text })));
   const day = await api(reader, 'get_note', { note_id: 'daily-2026-11-22' });
