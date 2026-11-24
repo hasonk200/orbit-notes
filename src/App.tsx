@@ -72,6 +72,7 @@ export default function App() {
       if (isComposing(e)) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === 'k') {
+        if (e.defaultPrevented) return; // the editor used it to add a link
         e.preventDefault();
         setPalette(!useUI.getState().paletteOpen);
       } else if (mod && e.key === '\\') {

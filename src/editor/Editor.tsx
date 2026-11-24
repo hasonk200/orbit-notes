@@ -1,6 +1,6 @@
 import { useT } from '../store/uiStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { EditorContent, useEditor, type Editor } from '@tiptap/react';
+import { EditorContent, Extension, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TaskList } from '@tiptap/extension-task-list';
 import { Placeholder } from '@tiptap/extension-placeholder';
@@ -19,13 +19,34 @@ import type { JSONContent, Obj } from '../db/schema';
 import { saveObject } from '../db/indexers';
 import { registerDraft } from '../db/drafts';
 
-function buildExtensions(getPlaceholder: (heading: boolean) => string) {
+/** Ctrl/Cmd+K on selected text (or inside a link) opens the link box; otherwise the key falls through to search. */
+const LinkShortcut = Extension.create<{ open: () => boolean }>({
+  name: 'linkShortcut',
+  addOptions: () => ({ open: () => false }),
+  addKeyboardShortcuts() {
+    return {
+      'Mod-k': () => {
+        if (!this.editor.isEditable) return false;
+        if (this.editor.state.selection.empty && !this.editor.isActive('link')) return false;
+        return this.options.open();
+      },
+    };
+  },
+});
+
+function buildExtensions(getPlaceholder: (heading: boolean) => string, openLinkBox: () => boolean) {
   return [
     StarterKit.configure({
       listItem: false,
       heading: { levels: [1, 2, 3] },
-      link: { openOnClick: true, autolink: true, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' } },
+      link: {
+        openOnClick: true,
+        autolink: true,
+        protocols: ['file'],
+        HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
+      },
     }),
+    LinkShortcut.configure({ open: openLinkBox }),
     OutlinerListItem,
     Placeholder.configure({
       placeholder: ({ node }) => getPlaceholder(node.type.name === 'heading'),
@@ -73,6 +94,119 @@ function TableToolbar({ editor }: { editor: Editor }) {
   );
 }
 
+/** Turns what people type into a link: Windows paths become file:/// links, bare domains get https://. */
+export function normalizeLinkInput(raw: string): string {
+  const s = raw.trim();
+  if (!s) return '';
+  if (/^[a-z]:[\\/]/i.test(s)) return 'file:///' + encodeURI(s.replace(/\\/g, '/')).replace(/#/g, '%23');
+  if (/^\\\\/.test(s)) return 'file:' + encodeURI(s.replace(/\\/g, '/'));
+  if (/^[a-z][a-z0-9+.-]*:/i.test(s) || s.startsWith('/') || s.startsWith('#')) return s;
+  return 'https://' + s;
+}
+
+function LinkBox({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+  const tr = useT();
+  const existing = (editor.getAttributes('link').href as string | undefined) ?? '';
+  const [url, setUrl] = useState(existing);
+  const [error, setError] = useState(false);
+  const [pos] = useState(() => {
+    const c = editor.view.coordsAtPos(editor.state.selection.to);
+    const left = Math.max(8, Math.min(c.left, window.innerWidth - 340));
+    // Open above the text when there is no room below it.
+    return c.bottom + 150 > window.innerHeight
+      ? { bottom: window.innerHeight - c.top + 6, left }
+      : { top: c.bottom + 6, left };
+  });
+  const close = () => {
+    onClose();
+    editor.commands.focus();
+  };
+  const apply = () => {
+    const href = normalizeLinkInput(url);
+    const chain = editor.chain().focus().extendMarkRange('link');
+    const ok = href ? chain.setLink({ href }).run() : chain.unsetLink().run();
+    if (!ok) return setError(true);
+    onClose();
+  };
+  const remove = () => {
+    editor.chain().focus().extendMarkRange('link').unsetLink().run();
+    onClose();
+  };
+  const isFile = /^file:/i.test(normalizeLinkInput(url));
+  return (
+    <div
+      className="link-box"
+      style={pos}
+      onMouseDown={(e) => { if (e.target !== e.currentTarget && (e.target as HTMLElement).tagName === 'BUTTON') e.preventDefault(); }}
+    >
+      <input
+        autoFocus
+        value={url}
+        placeholder={tr('Paste or type a link, then press Enter')}
+        onChange={(e) => { setUrl(e.target.value); setError(false); }}
+        onBlur={onClose}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === 'Enter') { e.preventDefault(); apply(); }
+          else if (e.key === 'Escape') { e.preventDefault(); close(); }
+        }}
+      />
+      <div className="link-box-row">
+        <button type="button" className="primary" onClick={apply}>{tr('Apply')}</button>
+        {existing && <button type="button" onClick={remove}>{tr('Remove link')}</button>}
+      </div>
+      {error && <p className="link-box-note danger">{tr('That link can’t be used.')}</p>}
+      {!error && isFile && <p className="link-box-note">{tr('Browsers block computer file links from web pages. Clicking this link copies it, so you can paste it into the address bar.')}</p>}
+    </div>
+  );
+}
+
+interface OutlineItem { pos: number; level: number; text: string }
+
+function readOutline(editor: Editor): OutlineItem[] {
+  const items: OutlineItem[] = [];
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'heading') {
+      const text = node.textContent.trim();
+      if (text) items.push({ pos, level: node.attrs.level as number, text });
+      return false;
+    }
+    return true;
+  });
+  return items;
+}
+
+function Outline({ editor, items }: { editor: Editor; items: OutlineItem[] }) {
+  const tr = useT();
+  const [open, setOpen] = useState(true);
+  const jump = (pos: number) => {
+    const dom = editor.view.nodeDOM(pos);
+    if (!(dom instanceof HTMLElement)) return;
+    editor.chain().setTextSelection(pos + 1).focus(undefined, { scrollIntoView: false }).run();
+    dom.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    dom.classList.remove('outline-flash');
+    void dom.offsetWidth;
+    dom.classList.add('outline-flash');
+    window.setTimeout(() => dom.classList.remove('outline-flash'), 1400);
+  };
+  return (
+    <nav className="note-outline" contentEditable={false} aria-label={tr('Contents')}>
+      <button type="button" className="note-outline-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="note-outline-caret">{open ? '▾' : '▸'}</span> {tr('Contents')} <span className="muted">{items.length}</span>
+      </button>
+      {open && (
+        <ul>
+          {items.map((h) => (
+            <li key={h.pos} className={`lvl-${h.level}`}>
+              <button type="button" onClick={() => jump(h.pos)}>{h.text}</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </nav>
+  );
+}
+
 interface RichEditorProps {
   docKey: string;
   content: JSONContent;
@@ -82,6 +216,8 @@ interface RichEditorProps {
   autofocus?: boolean;
   className?: string;
   showGutter?: boolean;
+  /** List the note's headings above it so a click jumps to each one. */
+  showOutline?: boolean;
   onReady?: (e: Editor) => void;
 }
 
@@ -95,6 +231,7 @@ export function RichEditor({
   autofocus,
   className,
   showGutter = true,
+  showOutline = false,
   onReady,
 }: RichEditorProps) {
   const tr = useT();
@@ -106,17 +243,59 @@ export function RichEditor({
   placeholderText.current = { emptyText, headingText };
   const wrapRef = useRef<HTMLDivElement>(null);
   const [inTable, setInTable] = useState(false);
+  const [linkBoxOpen, setLinkBoxOpen] = useState(false);
+  const [outline, setOutline] = useState<OutlineItem[]>([]);
+  const outlineKey = useRef('');
+  const [copiedAt, setCopiedAt] = useState<{ top: number; left: number } | null>(null);
+  const copiedTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(copiedTimer.current), []);
+  const syncOutline = (ed: Editor) => {
+    const items = readOutline(ed);
+    const key = JSON.stringify(items);
+    if (key === outlineKey.current) return;
+    outlineKey.current = key;
+    setOutline(items);
+  };
 
   const editor = useEditor(
     {
-      extensions: buildExtensions((heading) => heading ? placeholderText.current.headingText : placeholderText.current.emptyText),
+      extensions: buildExtensions(
+        (heading) => heading ? placeholderText.current.headingText : placeholderText.current.emptyText,
+        () => { setLinkBoxOpen(true); return true; },
+      ),
       content,
       editable,
       autofocus: autofocus ? 'end' : false,
-      editorProps: { attributes: { class: `prose ${className ?? ''}`, spellcheck: 'true' } },
-      onUpdate: ({ editor }) => onChangeRef.current(editor.getJSON() as JSONContent),
+      editorProps: {
+        attributes: { class: `prose ${className ?? ''}`, spellcheck: 'true' },
+        // Browsers refuse to open file:// links from a web page, so copy the address instead.
+        handleClick: (_view, _pos, event) => {
+          const a = (event.target as HTMLElement | null)?.closest?.('a[href]');
+          const href = a?.getAttribute('href') ?? '';
+          if (!a || !/^file:/i.test(href) || event.button !== 0) return false;
+          event.preventDefault();
+          const rect = a.getBoundingClientRect();
+          void navigator.clipboard?.writeText(href).then(
+            () => {
+              setCopiedAt({ top: rect.bottom + 6, left: Math.max(8, Math.min(rect.left, window.innerWidth - 300)) });
+              window.clearTimeout(copiedTimer.current);
+              copiedTimer.current = window.setTimeout(() => setCopiedAt(null), 2600);
+            },
+            () => window.prompt('', href),
+          );
+          return true;
+        },
+      },
+      onCreate: ({ editor }) => syncOutline(editor),
+      onUpdate: ({ editor }) => {
+        onChangeRef.current(editor.getJSON() as JSONContent);
+        syncOutline(editor);
+      },
       onSelectionUpdate: ({ editor }) => setInTable(editor.isActive('table')),
-      onTransaction: ({ editor }) => setInTable(editor.isActive('table')),
+      onTransaction: ({ editor, transaction }) => {
+        setInTable(editor.isActive('table'));
+        if (transaction.docChanged) syncOutline(editor);
+      },
     },
     [docKey],
   );
@@ -134,8 +313,15 @@ export function RichEditor({
   return (
     <div ref={wrapRef} className={`editor-shell${showGutter && editable ? ' with-gutter' : ''}`}>
       {showGutter && editable && <BlockDragHandle editor={editor} containerRef={wrapRef} />}
+      {showOutline && editor && outline.length >= 2 && <Outline editor={editor} items={outline} />}
       {editable && editor && inTable && <TableToolbar editor={editor} />}
       <EditorContent editor={editor} className="editor-root" />
+      {editable && editor && linkBoxOpen && <LinkBox editor={editor} onClose={() => setLinkBoxOpen(false)} />}
+      {copiedAt && (
+        <div className="link-copied" style={{ top: copiedAt.top, left: copiedAt.left }} role="status">
+          {tr('Copied. Paste it into the browser address bar to open it.')}
+        </div>
+      )}
     </div>
   );
 }
@@ -222,6 +408,7 @@ export function ObjectEditor({ obj, autofocus, placeholder }: { obj: Obj; autofo
       autofocus={autofocus}
       placeholder={placeholder}
       editable={!obj.deletedAt}
+      showOutline
       onReady={onReady}
     />
   );
