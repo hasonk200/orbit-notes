@@ -146,7 +146,21 @@ export function createApp(options: {
       return info.resource?.href === apiResource.href ? { ...info, resource } : info;
     },
   };
-  app.all('/mcp', requireBearerAuth({
+  // The sign-in challenge names the scopes a client should request. MCP clients such as
+  // Claude request exactly those, so offer read and write here and let the person choose
+  // on Orbit's consent screen. Every request still needs read; write tools stay hidden
+  // unless the connection was granted write.
+  const offerAllScopes: RequestHandler = (_req, res, next) => {
+    const set = res.set.bind(res);
+    res.set = ((field: string | Record<string, unknown>, value?: unknown) => {
+      if (typeof field === 'string' && field.toLowerCase() === 'www-authenticate' && typeof value === 'string') {
+        value = value.replace(`scope="${READ}"`, `scope="${READ} ${WRITE}"`);
+      }
+      return set(field as any, value as any);
+    }) as typeof res.set;
+    next();
+  };
+  app.all('/mcp', offerAllScopes, requireBearerAuth({
     verifier: mcpVerifier, expectedResource: resource, requiredScopes: [READ],
     resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(resource),
   }), async (req, res) => {
