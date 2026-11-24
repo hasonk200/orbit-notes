@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { JSONContent, Obj, ObjType } from '../../src/db/schema';
 import { assignTaskIds, docText, emptyDoc, extractTags, extractTasks, patchTaskInDoc, walk } from '../../src/lib/content';
 import { dailyTitle } from '../../src/lib/dates';
+import { markdownToBlocks } from '../../src/lib/markdown';
 import { appendTask } from '../../src/lib/taskInput';
 import { classifyTaskKind } from '../../src/lib/tasks';
 import { objectFingerprint } from '../../src/sync/objectVersions';
@@ -21,6 +22,7 @@ const id = z.string().regex(/^[^/\x00-\x1f\x7f]+$/u).max(400).refine((value) => 
 const date = z.iso.date();
 const page = z.number().int().min(1).max(50).default(20);
 const text = z.string().trim().min(1).max(20000);
+const markdown = z.string().trim().min(1).max(100000).describe('Markdown: # headings, - bullets, 1. numbered, - [ ] / - [x] to-dos, > quotes, ``` code, | tables |, **bold**, *italic*, `code`, [text](url). Plain lines become paragraphs.');
 const title = z.string().trim().min(1).max(500);
 const request = { request_id: z.uuid().describe('Unique request UUID. Reuse the same ID when retrying this exact write.') };
 const target = { note_id: id };
@@ -50,17 +52,19 @@ export const operations = {
     change_id: z.uuid(), offset: z.number().int().min(0).max(1000000).default(0),
   }), write: false },
   create_note: { description: 'Create a note. Defaults to a Page. Use append_daily_note for a dated journal entry.', input: z.object({
-    ...request, title, text: text.optional(), type_id: id.optional(),
+    ...request, title, text: markdown.optional(), type_id: id.optional(),
   }), write: true },
-  append_daily_note: { description: 'Append text to the daily note for the given local calendar date, creating it if needed.', input: z.object({
-    ...request, date, text,
+  append_daily_note: { description: 'Append Markdown text to the daily note for the given local calendar date, creating it if needed.', input: z.object({
+    ...request, date, text: markdown,
   }), write: true },
-  append_to_note: { description: 'Append paragraphs to a note, preserving existing content and updating the latest saved version.', input: z.object({
-    ...request, ...target, text,
+  append_to_note: { description: 'Append Markdown text to a note, preserving existing content and updating the latest saved version.', input: z.object({
+    ...request, ...target, text: markdown,
   }), write: true },
-  update_note: { description: 'Rename a note or replace one unique text fragment inside a single editor text node, preserving formatting and links.', input: z.object({
+  update_note: { description: 'Rename a note, replace one unique text fragment inside a single editor text node (keeps formatting and links), or rewrite the whole body from Markdown with replace_body. replace_body drops links to other notes, tags, dates and task details (due date, priority) that the new Markdown does not repeat; the change can be undone with undo_change.', input: z.object({
     ...request, ...existing, title: title.optional(), replace_text: z.object({ from: text, to: z.string().max(20000) }).optional(),
-  }).refine((input) => input.title !== undefined || input.replace_text !== undefined, 'Supply a title or a text replacement.'), write: true },
+    replace_body: markdown.optional(),
+  }).refine((input) => input.title !== undefined || input.replace_text !== undefined || input.replace_body !== undefined, 'Supply a title, a text replacement, or a new body.')
+    .refine((input) => !(input.replace_text && input.replace_body), 'Use either replace_text or replace_body, not both.'), write: true },
   add_task: { description: 'Add a linked to-do or project task inside a source note so it appears in Orbit.', input: z.object({
     ...request, ...target, text: z.string().trim().min(1).max(2000), ...taskFields,
   }), write: true },
@@ -125,11 +129,15 @@ function publicChange(change: Change, appUrl: URL) {
 }
 
 function appendText(content: JSONContent, body: string): JSONContent {
-  const paragraphs = body.split(/\r?\n/u).map((line) =>
-    line ? { type: 'paragraph', content: [{ type: 'text', text: line }] } : { type: 'paragraph' });
+  const added = markdownToBlocks(body);
   const blocks = content.content ?? [];
   const empty = blocks.length === 1 && blocks[0].type === 'paragraph' && !blocks[0].content?.length;
-  return { ...content, content: [...(empty ? [] : blocks), ...paragraphs] };
+  return assignTaskIds({ ...content, content: [...(empty ? [] : blocks), ...added] });
+}
+
+function replaceBody(content: JSONContent, body: string): JSONContent {
+  const blocks = markdownToBlocks(body);
+  return assignTaskIds({ ...content, content: blocks.length ? blocks : [{ type: 'paragraph' }] });
 }
 
 function replaceText(content: JSONContent, from: string, to: string) {
@@ -369,7 +377,8 @@ export function createNotesService(db: Firestore, appUrl: URL) {
           const args = operations.update_note.input.parse(validation.data);
           const replacement = args.replace_text;
           after = { ...before!, title: args.title ?? before!.title,
-            content: replacement ? replaceText(before!.content, replacement.from, replacement.to) : before!.content };
+            content: replacement ? replaceText(before!.content, replacement.from, replacement.to)
+              : args.replace_body !== undefined ? replaceBody(before!.content, args.replace_body) : before!.content };
           break;
         }
         case 'add_task': {

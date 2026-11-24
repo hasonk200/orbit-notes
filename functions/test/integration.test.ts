@@ -118,6 +118,21 @@ test('API isolates Firebase accounts and records recallable, versioned and retry
   assert.equal((await fetch(firestore + 'users/' + alice.localId + '/objects/' + created.note_id, { headers })).status, 200);
   assert.equal((await fetch(firestore + 'orbitAiAccounts/' + alice.localId + '/changes/' + trash.id, { headers })).status, 403);
 
+  const md = await api(writer, 'create_note', { ...write(), title: 'Markdown 筆記', text: '# 標題\n- 項目\n- [ ] 付帳單\n[網站](https://example.com)' });
+  const mdView = await api(reader, 'get_note', { note_id: md.note_id });
+  assert.equal(mdView.tasks.length, 1);
+  assert.equal(mdView.tasks[0].text, '付帳單');
+  const mdSaved = JSON.parse((await db.collection('users').doc(alice.localId).collection('objects').doc(md.note_id).get()).data()!.json);
+  assert.deepEqual(mdSaved.content.content.map((b: { type: string }) => b.type), ['heading', 'bulletList', 'taskList', 'paragraph']);
+  assert.equal(mdSaved.content.content[3].content[0].marks[0].attrs.href, 'https://example.com');
+  await api(writer, 'update_note', { ...write(), note_id: md.note_id, version: mdView.version, replace_text: { from: '項目', to: 'x' }, replace_body: '新內容' }, 400);
+  const rewritten = await api(writer, 'update_note', { ...write(), note_id: md.note_id, version: mdView.version, replace_body: '## 新的\n☑ 完成了' });
+  const rewrittenView = await api(reader, 'get_note', { note_id: md.note_id });
+  assert.equal(rewrittenView.text, '新的\n完成了');
+  assert.equal(rewrittenView.tasks[0].done, true);
+  await manage(alice.idToken, '/changes/' + rewritten.id + '/undo', write());
+  assert.match((await api(reader, 'get_note', { note_id: md.note_id })).text, /付帳單/);
+
   await Promise.all(['第一段', '第二段'].map((text) => api(writer, 'append_daily_note', { ...write(), date: '2026-11-22', text })));
   const day = await api(reader, 'get_note', { note_id: 'daily-2026-11-22' });
   assert.match(day.text, /第一段/);
