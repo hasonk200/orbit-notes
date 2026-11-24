@@ -4,16 +4,11 @@ import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from 
 import { PluginKey } from '@tiptap/pm/state';
 import Suggestion from '@tiptap/suggestion';
 import { useData } from '../../store/dataStore';
+import { normalizeTagName } from '../../lib/supertags';
 import { useOpen } from '../../store/pane';
 import { runItem, suggestRender, type SuggestItem } from '../suggestStore';
 
-export const normTag = (s: string) =>
-  s
-    .trim()
-    .toLowerCase()
-    .replace(/^#+/, '')
-    .replace(/[^\p{L}\p{N}_\-/]+/gu, '-')
-    .replace(/^-+|-+$/g, '');
+export const normTag = normalizeTagName;
 
 function TagView({ node, selected }: ReactNodeViewProps) {
   const open = useOpen();

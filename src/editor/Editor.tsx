@@ -12,6 +12,11 @@ import { Toggle } from './extensions/Toggle';
 import { ObjectLink } from './extensions/ObjectLink';
 import { Tag } from './extensions/TagSuggest';
 import { DateRef } from './extensions/DateRef';
+import { Outliner, zoomTo, zoomTrail, type ZoomCrumb } from './extensions/Outliner';
+import { LiveSearch } from './extensions/LiveSearch';
+import { onJump, takeJump } from './jump';
+import { posAtPath } from '../lib/supertags';
+import { TextSelection } from '@tiptap/pm/state';
 import { BlobImage } from './extensions/BlobImage';
 import { SlashMenu } from './SlashMenu';
 import { BlockDragHandle } from './BlockDragHandle';
@@ -80,6 +85,8 @@ function buildExtensions(getPlaceholder: (heading: boolean) => string, openLinkB
     }),
     LinkShortcut.configure({ open: openLinkBox }),
     MarkdownPaste,
+    Outliner,
+    LiveSearch,
     OutlinerListItem,
     Placeholder.configure({
       placeholder: ({ node }) => getPlaceholder(node.type.name === 'heading'),
@@ -240,6 +247,27 @@ function Outline({ editor, items }: { editor: Editor; items: OutlineItem[] }) {
   );
 }
 
+function ZoomBar({ editor, trail }: { editor: Editor; trail: ZoomCrumb[] }) {
+  const tr = useT();
+  return (
+    <nav className="zoom-bar" contentEditable={false} aria-label={tr('Zoomed in')}>
+      <button type="button" onClick={() => zoomTo(editor, null)} title={tr('Show the whole note (Ctrl+[)')}>
+        {tr('Whole note')}
+      </button>
+      {trail.map((c, i) => (
+        <span key={c.pos} className="zoom-crumb">
+          <span className="zoom-sep">›</span>
+          {i < trail.length - 1 ? (
+            <button type="button" onClick={() => zoomTo(editor, c.pos)}>{c.text || tr('Untitled')}</button>
+          ) : (
+            <strong>{c.text || tr('Untitled')}</strong>
+          )}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
 interface RichEditorProps {
   docKey: string;
   content: JSONContent;
@@ -278,6 +306,15 @@ export function RichEditor({
   const [inTable, setInTable] = useState(false);
   const [linkBoxOpen, setLinkBoxOpen] = useState(false);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
+  const [trail, setTrail] = useState<ZoomCrumb[]>([]);
+  const trailKey = useRef('[]');
+  const syncTrail = (ed: Editor) => {
+    const next = zoomTrail(ed.state);
+    const key = JSON.stringify(next);
+    if (key === trailKey.current) return;
+    trailKey.current = key;
+    setTrail(next);
+  };
   const outlineKey = useRef('');
   const [copiedAt, setCopiedAt] = useState<{ top: number; left: number } | null>(null);
   const copiedTimer = useRef(0);
@@ -328,6 +365,7 @@ export function RichEditor({
       onTransaction: ({ editor, transaction }) => {
         setInTable(editor.isActive('table'));
         if (transaction.docChanged) syncOutline(editor);
+        syncTrail(editor);
       },
     },
     [docKey],
@@ -335,6 +373,22 @@ export function RichEditor({
   useEffect(() => {
     if (editor && onReady) onReady(editor);
   }, [editor, onReady]);
+  // Land on a block another view asked for (a live search result, a tag page row).
+  useEffect(() => {
+    if (!editor) return;
+    const jump = () => {
+      const path = takeJump(docKey);
+      if (!path || editor.isDestroyed) return;
+      const pos = posAtPath(editor.state.doc, path);
+      const node = pos == null ? null : editor.state.doc.nodeAt(pos);
+      if (pos == null || !node) return;
+      if (node.type.name === 'listItem' || node.type.name === 'taskItem') return zoomTo(editor, pos);
+      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(editor.state.doc.resolve(pos + 1))).scrollIntoView());
+      editor.view.focus();
+    };
+    jump();
+    return onJump((id) => id === docKey && jump());
+  }, [editor, docKey]);
   useEffect(() => {
     editor?.setEditable(editable, false);
   }, [editor, editable]);
@@ -346,7 +400,8 @@ export function RichEditor({
   return (
     <div ref={wrapRef} className={`editor-shell${showGutter && editable ? ' with-gutter' : ''}`}>
       {showGutter && editable && <BlockDragHandle editor={editor} containerRef={wrapRef} />}
-      {showOutline && editor && outline.length >= 2 && <Outline editor={editor} items={outline} />}
+      {editor && trail.length > 0 && <ZoomBar editor={editor} trail={trail} />}
+      {showOutline && editor && !trail.length && outline.length >= 2 && <Outline editor={editor} items={outline} />}
       {editable && editor && inTable && <TableToolbar editor={editor} />}
       <EditorContent editor={editor} className="editor-root" />
       {editable && editor && linkBoxOpen && <LinkBox editor={editor} onClose={() => setLinkBoxOpen(false)} />}

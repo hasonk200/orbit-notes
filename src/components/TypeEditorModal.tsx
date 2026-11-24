@@ -1,5 +1,6 @@
 import { typeLabel } from '../lib/typeLabels';
 import { normalizeText } from '../lib/search';
+import { normalizeTagName } from '../lib/supertags';
 import { useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Trash, X } from 'lucide-react';
 import { db, uid, type JSONContent, type ObjType, type PropertyDef, type PropertyKind } from '../db/schema';
@@ -86,8 +87,10 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
         ...(p.kind === 'relation' ? { targetTypeId: p.targetTypeId ?? null, multi: !!p.multi } : {}),
       });
     }
+    const tag = normalizeTagName(draft.tag ?? '') || null;
+    if (tag && types.some((t) => t.id !== existing?.id && t.tag === tag)) return setErr(tr('Another type already uses #{tag}.', { tag }));
     const id = existing?.id ?? `${slug(name)}-${uid().slice(0, 6)}`;
-    const next: ObjType = { ...draft, id, name, properties: props, defaultTemplate: useTemplate ? template.current : null, updatedAt: Date.now() };
+    const next: ObjType = { ...draft, id, name, tag, properties: props, defaultTemplate: useTemplate ? template.current : null, updatedAt: Date.now() };
     await db.types.put(next);
     if (existing) await reindexAll();
     close();
@@ -134,6 +137,17 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
             <button key={c} type="button" className={`swatch${draft.color === c ? ' active' : ''}`} style={{ background: c }} onClick={() => setDraft({ ...draft, color: c })} aria-label={c} />
           ))}
         </div>
+
+        {draft.id !== 'daily' && (
+          <label className="te-supertag">
+            <span className="te-supertag-label">{tr('Supertag')}</span>
+            <span className="te-supertag-input">
+              #
+              <input placeholder={tr('e.g. bill')} value={draft.tag ?? ''} onChange={(e) => setDraft({ ...draft, tag: e.target.value })} />
+            </span>
+            <span className="muted small">{tr('Any bullet or to-do with this tag shows the properties below as fields.')}</span>
+          </label>
+        )}
 
         <h4>{tr('Properties')}</h4>
         {draft.properties.length === 0 && <p className="muted small">{tr('No properties yet. Properties show at the top of every {type}.', { type: draft.name || tr('object') })}</p>}

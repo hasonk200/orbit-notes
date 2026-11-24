@@ -200,6 +200,8 @@ export function Settings() {
           <li><kbd>Alt</kbd> + {tr('click a link: open in split view')}</li>
           <li><kbd>/</kbd> {tr('commands (Callout, Toggle, Table, Outliner…)')} · <kbd>[[</kbd> {tr('link')} · <kbd>#</kbd> {tr('tag')} · <kbd>@</kbd> {tr('date')}</li>
           <li><kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd> {tr('nest bullet points')} · <kbd>Ctrl</kbd> + <kbd>.</kbd> {tr('collapse / expand bullet branch')}</li>
+          <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> {tr('move bullet up / down')} · <kbd>Ctrl</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> {tr('fold / unfold')}</li>
+          <li><kbd>Ctrl</kbd> + <kbd>]</kbd> / <kbd>[</kbd> {tr('zoom in / out')} · {tr('click a bullet: zoom in')}</li>
         </ul>
       </section>
     </div>

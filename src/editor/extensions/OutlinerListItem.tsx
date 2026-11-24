@@ -2,6 +2,9 @@ import { useT } from '../../store/uiStore';
 import { ListItem as BaseListItem } from '@tiptap/extension-list-item';
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { ChevronRight } from 'lucide-react';
+import type { Editor } from '@tiptap/react';
+import { zoomTo } from './Outliner';
+import { SupertagFields, useItemSupertags } from '../SupertagFields';
 
 function countSubItems(node: ReactNodeViewProps['node']): number {
   let count = 0;
@@ -21,6 +24,7 @@ function OutlinerListItemView({ node, updateAttributes, editor, getPos }: ReactN
   const collapsed = !!node.attrs.collapsed;
   const nestedCount = countSubItems(node);
   const hasChildren = nestedCount > 0;
+  const supertags = useItemSupertags(node);
 
   // Detect whether parent list is ordered or bullet
   let isOrdered = false;
@@ -36,7 +40,7 @@ function OutlinerListItemView({ node, updateAttributes, editor, getPos }: ReactN
   return (
     <NodeViewWrapper
       as="div"
-      className={`outliner-li${isOrdered ? ' is-ordered' : ' is-bullet'}${hasChildren ? ' has-children' : ''}${collapsed && hasChildren ? ' is-collapsed' : ''}`}
+      className={`outliner-li${isOrdered ? ' is-ordered' : ' is-bullet'}${hasChildren ? ' has-children' : ''}${collapsed && hasChildren ? ' is-collapsed' : ''}${supertags.length ? ' has-fields' : ''}`}
       data-collapsed={collapsed && hasChildren ? 'true' : 'false'}
     >
       <div className="outliner-row">
@@ -59,14 +63,18 @@ function OutlinerListItemView({ node, updateAttributes, editor, getPos }: ReactN
             <button
               type="button"
               className="outliner-dot"
-              title={hasChildren ? (collapsed ? tr('Expand branch') : tr('Collapse branch')) : tr('Bullet point (Tab to indent)')}
+              title={tr('Zoom in: show only this point (Ctrl+])')}
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => hasChildren && updateAttributes({ collapsed: !collapsed })}
+              onClick={() => {
+                const pos = typeof getPos === 'function' ? getPos() : null;
+                if (typeof pos === 'number') zoomTo(editor as unknown as Editor, pos);
+              }}
             />
           )}
         </span>
         <div className="outliner-main">
           <NodeViewContent className="outliner-content" />
+          {supertags.length > 0 && <SupertagFields node={node} types={supertags} updateAttributes={updateAttributes} editable={editor.isEditable} />}
           {collapsed && hasChildren && (
             <button
               type="button"
@@ -100,6 +108,18 @@ export const OutlinerListItem = BaseListItem.extend({
         keepOnSplit: false,
         parseHTML: (el: HTMLElement) => el.getAttribute('data-collapsed') === 'true',
         renderHTML: (a: Record<string, any>) => (a.collapsed ? { 'data-collapsed': 'true' } : {}),
+      },
+      fields: {
+        default: null,
+        keepOnSplit: false,
+        parseHTML: (el: HTMLElement) => {
+          try {
+            return JSON.parse(el.getAttribute('data-fields') ?? 'null');
+          } catch {
+            return null;
+          }
+        },
+        renderHTML: (a: Record<string, any>) => (a.fields ? { 'data-fields': JSON.stringify(a.fields) } : {}),
       },
     };
   },

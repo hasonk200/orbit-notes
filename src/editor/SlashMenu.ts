@@ -34,6 +34,13 @@ const ITEMS: Omit<SuggestItem, 'key'>[] = [
   { label: 'Link object', icon: '↗', hint: 'Type [[', section: 'Links', run: (e, r) => e.chain().focus().deleteRange(r).insertContent('[[').run() },
   { label: 'Tag', icon: '#', section: 'Links', run: (e, r) => e.chain().focus().deleteRange(r).insertContent('#').run() },
   {
+    label: 'Live search',
+    icon: '🔍',
+    hint: 'List every item with a tag',
+    section: 'Links',
+    run: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'liveSearch', attrs: { query: { tag: '' } } }).run(),
+  },
+  {
     label: 'Today’s date',
     icon: '◷',
     hint: 'Or type @',
