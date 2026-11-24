@@ -8,11 +8,13 @@ import { applyTheme, getT, useUI } from './store/uiStore';
 import { autoBackupIfDue } from './db/fsSync';
 import { upgradeTaskIndex } from './db/indexers';
 import { initSync } from './sync/engine';
+import { initPwa } from './lib/pwa';
 import './styles/tokens.css';
 import './styles/app.css';
 import './styles/motion.css';
 
 applyTheme(useUI.getState().theme);
+initPwa();
 document.documentElement.lang = getT().language;
 
 const basePath = import.meta.env.BASE_URL;

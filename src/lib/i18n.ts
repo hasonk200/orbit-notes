@@ -4,6 +4,18 @@ type Values = Record<string, string | number>;
 export type Translate = ((message: string, values?: Values) => string) & { language: Language };
 
 const zhHant: Record<string, string> = {
+  "Install app": "安裝 App",
+  "Orbit is installed on this device. It opens in its own window and works offline.": "Orbit 已安裝在這台裝置上，會在自己的視窗開啟，沒網路也能用。",
+  "Add Orbit to your home screen or dock. It opens in its own window, starts faster and works offline.": "把 Orbit 加到主畫面或 Dock，會在自己的視窗開啟、啟動更快，沒網路也能用。",
+  "Install Orbit": "安裝 Orbit",
+  "In Safari, tap": "在 Safari 點",
+  "Share": "分享",
+  "then": "再點",
+  "Add to Home Screen": "加入主畫面",
+  "Open Orbit in Chrome, Edge or Safari, then use the browser menu’s “Install” or “Add to Home Screen” option.": "用 Chrome、Edge 或 Safari 打開 Orbit，再從瀏覽器選單選「安裝」或「加入主畫面」。",
+  "A new version of Orbit is ready.": "Orbit 有新版本了。",
+  "Reload": "重新載入",
+  "Not now": "稍後",
   "AI access": "AI 存取設定",
   "The Orbit AI service has not been set up.": "Orbit AI 服務尚未設定。",
   "Sign in under Cloud Sync above to manage AI access.": "請先在上方「雲端同步」登入，再管理 AI 存取。",

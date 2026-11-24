@@ -85,8 +85,20 @@ export function Sidebar() {
       <div className="sb-head">
         <button type="button" className="brand" onClick={(e) => open('/', e)} title={tr('Home')}>
           <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden>
-            <ellipse cx="16" cy="16" rx="14" ry="5.2" fill="none" stroke="var(--accent)" strokeWidth="2.6" transform="rotate(-22 16 16)" />
-            <circle cx="16" cy="16" r="8" fill="var(--accent)" />
+            <defs>
+              <clipPath id="orbit-logo-front">
+                <rect x="5" y="16" width="22" height="16" />
+              </clipPath>
+              {/* cut a thin gap in the planet where the front of the ring passes over it */}
+              <mask id="orbit-logo-gap" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32">
+                <rect width="32" height="32" fill="#fff" />
+                <ellipse cx="16" cy="16" rx="14" ry="5.2" fill="none" stroke="#000" strokeWidth="4.6" clipPath="url(#orbit-logo-front)" />
+              </mask>
+            </defs>
+            <g transform="rotate(-22 16 16)">
+              <ellipse cx="16" cy="16" rx="14" ry="5.2" fill="none" stroke="var(--accent)" strokeWidth="2.6" />
+              <circle cx="16" cy="16" r="8" fill="var(--accent)" mask="url(#orbit-logo-gap)" />
+            </g>
             <circle cx="28.6" cy="10.4" r="2.2" fill="var(--accent)" />
           </svg>
           Orbit
