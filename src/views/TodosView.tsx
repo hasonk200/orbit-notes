@@ -320,7 +320,8 @@ export function TodosView() {
         <div className="todo-quick-main">
           <Plus size={16} className="muted" />
           <input
-            placeholder={
+            placeholder={tr('Add a to-do… (@tomorrow, !p1)')}
+            title={
               tab === 'today'
                 ? tr('Add a quick to-do for today… (supports @tomorrow, @2026-12-14, !p1)')
                 : tr('Add a quick to-do… (supports @today, @tomorrow, @2026-12-14, !p1)')

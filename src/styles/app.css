@@ -4086,3 +4086,19 @@ span.olink-card {
 .upcoming .task-row .task-due {
   flex: none;
 }
+
+/* To-do page on phones: keep the four tabs on one line */
+@media (max-width: 600px) {
+  .todos-page .tasks-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .todos-page .tasks-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .todos-page .tasks-tab {
+    flex: none;
+    padding-inline: 8px;
+  }
+}
