@@ -2,6 +2,7 @@ import { TaskItem as BaseTaskItem } from '@tiptap/extension-task-item';
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import { addDays } from 'date-fns';
+import { SupertagFields, useItemSupertags } from '../SupertagFields';
 import { useRef, useState } from 'react';
 import { uid, type TaskKind, type TaskPriority, type TaskStatus } from '../../db/schema';
 import { shortDate, todayISO, toISODate } from '../../lib/dates';
@@ -13,6 +14,7 @@ import { Popover } from '../../components/Popover';
 
 function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const tr = useT();
+  const supertags = useItemSupertags(node);
   const checked = !!node.attrs.checked || node.attrs.status === 'done';
   const status = resolveTaskStatus(checked, node.attrs.status);
   const due = node.attrs.due as string | null;
@@ -57,7 +59,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const nextWeek = toISODate(addDays(new Date(), 7));
 
   return (
-    <NodeViewWrapper as="div" className="task-item" data-checked={checked ? 'true' : 'false'}>
+    <NodeViewWrapper as="div" className={`task-item${supertags.length ? ' has-fields' : ''}`} data-checked={checked ? 'true' : 'false'}>
       <label className="task-check" contentEditable={false}>
         <input
           type="checkbox"
@@ -270,6 +272,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
           </Popover>
         )}
       </span>
+      {supertags.length > 0 && <SupertagFields node={node} types={supertags} updateAttributes={updateAttributes} editable={editor.isEditable} />}
     </NodeViewWrapper>
   );
 }
@@ -317,6 +320,18 @@ export const OrbitTaskItem = BaseTaskItem.extend({
         keepOnSplit: false,
         parseHTML: (el: HTMLElement) => el.getAttribute('data-context-id'),
         renderHTML: (a: Record<string, any>) => (a.contextId ? { 'data-context-id': a.contextId } : {}),
+      },
+      fields: {
+        default: null,
+        keepOnSplit: false,
+        parseHTML: (el: HTMLElement) => {
+          try {
+            return JSON.parse(el.getAttribute('data-fields') ?? 'null');
+          } catch {
+            return null;
+          }
+        },
+        renderHTML: (a: Record<string, any>) => (a.fields ? { 'data-fields': JSON.stringify(a.fields) } : {}),
       },
       completedAt: {
         default: null,

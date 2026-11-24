@@ -28,6 +28,8 @@ export interface ObjType {
   color: string; // hex
   properties: PropertyDef[];
   defaultTemplate?: JSONContent | null;
+  /** Supertag: list and task items tagged #tag show this type's properties as fields. */
+  tag?: string | null;
   builtin?: boolean;
   order: number;
   updatedAt?: number;
