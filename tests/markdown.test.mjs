@@ -102,3 +102,9 @@ test('insertMarkdown refuses missing, repeated or empty input', () => {
   assert.throws(() => insertMarkdown(doc, '重複', 'x'), /ambiguous/);
   assert.throws(() => insertMarkdown(doc, '甲', '   '), /empty/);
 });
+
+test('emphasis markers inside code spans do not close bold or italic', () => {
+  const nodes = parseInline('**不要在 `**` 的內側留空格**。`** 文字 **` 不會變粗體，*斜體 `*` 也是*');
+  const view = nodes.map((n) => (n.marks ?? []).map((m) => m.type).join('+') + ':' + n.text);
+  assert.deepEqual(view, ['bold:不要在 ', 'code:**', 'bold: 的內側留空格', ':。', 'code:** 文字 **', ': 不會變粗體，', 'italic:斜體 ', 'code:*', 'italic: 也是']);
+});
