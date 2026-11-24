@@ -1,5 +1,5 @@
 import { typeLabel } from '../lib/typeLabels';
-import { CalendarDays, Network, Search, SquareCheckBig } from 'lucide-react';
+import { CalendarDays, CircleCheck, Network, Search, SquareCheckBig } from 'lucide-react';
 import { createObject, getOrCreateDaily } from '../db/indexers';
 import { useActiveObjects, useData, useTypeMap } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
@@ -39,6 +39,10 @@ export function HomeView() {
         >
           <CalendarDays size={20} />
           <span>{tr('Today’s note')}</span>
+        </button>
+        <button type="button" className="explore-card" onClick={(e) => open('/todos', e)}>
+          <CircleCheck size={20} />
+          <span>{tr('To-do')}</span>
         </button>
         <button type="button" className="explore-card" onClick={(e) => open('/tasks', e)}>
           <SquareCheckBig size={20} />

@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { ObjectPage } from './views/ObjectPage';
 import { CalendarView, type CalMode } from './views/CalendarView';
 import { TasksView } from './views/TasksView';
+import { TodosView } from './views/TodosView';
 import { TypeView } from './views/TypeView';
 import { TagsView } from './views/TagsView';
 import { TrashView } from './views/TrashView';
@@ -33,6 +34,8 @@ export function renderPath(path: string, tr: Translate) {
       return <ObjectPage id={b} isNew={q.get('new') === '1'} />;
     case 'type':
       return <TypeView typeId={b} collectionId={q.get('collection')} />;
+    case 'todos':
+      return <TodosView />;
     case 'tasks':
       return <TasksView />;
     case 'graph':

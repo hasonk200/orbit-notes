@@ -6,7 +6,7 @@ import { displayTitle, useObject, useTypeMap } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { useT } from '../store/uiStore';
 import { shortDate, todayISO } from '../lib/dates';
-import { NEXT_PRIO, PRIO_MAP, resolveTaskStatus, STATUS_MAP, TASK_STATUSES } from '../lib/tasks';
+import { classifyTaskKind, NEXT_PRIO, PRIO_MAP, resolveTaskStatus, STATUS_MAP, TASK_STATUSES } from '../lib/tasks';
 import { Popover } from './Popover';
 
 export function TaskRow({
@@ -23,9 +23,19 @@ export function TaskRow({
   extraActions?: ReactNode;
 }) {
   const tr = useT();
+  const srcObj = useObject(task.objectId);
   const ctxObj = useObject(task.contextId || task.objectId);
   const typeMap = useTypeMap();
   const open = useOpen();
+
+  const effectiveKind =
+    task.kind ??
+    classifyTaskKind({
+      explicitKind: task.explicitKind,
+      status: task.status,
+      contextId: task.contextId,
+      sourceTypeId: srcObj?.typeId,
+    });
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.text);
@@ -100,12 +110,12 @@ export function TaskRow({
       </div>
 
       {showKindBadge && (
-        <span className={`kind-pill kind-${task.kind ?? 'todo'}`}>
-          {task.kind === 'task' ? tr('Task') : tr('To-do')}
+        <span className={`kind-pill kind-${effectiveKind}`}>
+          {effectiveKind === 'task' ? tr('Task') : tr('To-do')}
         </span>
       )}
 
-      {showStatus && statusDef && (
+      {showStatus && (!showKindBadge || effectiveKind === 'task') && statusDef && (
         <button
           ref={statusRef}
           type="button"
