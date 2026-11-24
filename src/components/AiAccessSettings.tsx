@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { usePwa } from '../lib/pwa';
 import { relativeTime } from '../lib/dates';
 import { uid } from '../lib/uid';
 import { useT } from '../store/uiStore';
@@ -66,6 +67,8 @@ function ConnectedAiSettings({ account, email, requestId }: { account: string; e
   const [name, setName] = useState('');
   const [scope, setScope] = useState<'read' | 'write'>('read');
   const [newToken, setNewToken] = useState('');
+  const [returnLink, setReturnLink] = useState('');
+  const [copied, setCopied] = useState(false);
   const undoRequests = useRef(new Map<string, string>());
 
   async function refresh(signal?: AbortSignal) {
@@ -109,8 +112,31 @@ function ConnectedAiSettings({ account, email, requestId }: { account: string; e
         const { redirect } = await manage<{ redirect: string }>(account, '/consent/' + encodeURIComponent(requestId!), {
           method: 'POST', body: JSON.stringify({ choice }),
         });
-        window.location.replace(redirect);
+        setReturnLink(redirect);
+        // In the installed app the AI client's page is open in the browser, not here,
+        // so show the link to copy instead of leaving the app.
+        if (!usePwa.getState().installed) window.location.replace(redirect);
       });
+    }
+    if (returnLink) {
+      const copy = async () => {
+        try {
+          await navigator.clipboard.writeText(returnLink);
+          setCopied(true);
+        } catch {
+          setCopied(false);
+        }
+      };
+      return <>
+        <p>{tr('Copy this link and open it in the browser where you started connecting. It works once and expires in a few minutes.')}</p>
+        <div className="btn-row orbit-ai-form">
+          <input readOnly value={returnLink} onFocus={(event) => event.currentTarget.select()} aria-label={tr('Return link')} />
+        </div>
+        <div className="btn-row">
+          <button className="btn primary" type="button" onClick={() => void copy()}>{copied ? tr('Copied') : tr('Copy link')}</button>
+          <a className="btn" href={returnLink} target="_blank" rel="noopener noreferrer">{tr('Open in browser')}</a>
+        </div>
+      </>;
     }
     return <>
       {consent && <>
