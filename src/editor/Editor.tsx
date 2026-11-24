@@ -18,6 +18,8 @@ import { BlockDragHandle } from './BlockDragHandle';
 import type { JSONContent, Obj } from '../db/schema';
 import { saveObject } from '../db/indexers';
 import { registerDraft } from '../db/drafts';
+import { looksLikeMarkdown, markdownToBlocks } from '../lib/markdown';
+import { Plugin } from '@tiptap/pm/state';
 
 /** Ctrl/Cmd+K on selected text (or inside a link) opens the link box; otherwise the key falls through to search. */
 const LinkShortcut = Extension.create<{ open: () => boolean }>({
@@ -34,6 +36,36 @@ const LinkShortcut = Extension.create<{ open: () => boolean }>({
   },
 });
 
+/** Pasting Markdown (from a .md file, Notepad, an AI chat…) keeps its headings, lists, to-dos and links. */
+const MarkdownPaste = Extension.create({
+  name: 'markdownPaste',
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    return [
+      new Plugin({
+        props: {
+          handlePaste: (view, event) => {
+            const data = event.clipboardData;
+            const text = data?.getData('text/plain') ?? '';
+            if (!text || view.state.selection.$from.parent.type.spec.code) return false;
+            // Rich text copied from a web page or document already has its structure.
+            const html = data?.getData('text/html') ?? '';
+            if (html && /<(h[1-6]|ul|ol|li|table|blockquote|pre)\b/i.test(html)) return false;
+            if (!looksLikeMarkdown(text)) return false;
+            const blocks = markdownToBlocks(text);
+            if (!blocks.length) return false;
+            try {
+              return editor.chain().focus().insertContent(blocks).scrollIntoView().run();
+            } catch {
+              return false;
+            }
+          },
+        },
+      }),
+    ];
+  },
+});
+
 function buildExtensions(getPlaceholder: (heading: boolean) => string, openLinkBox: () => boolean) {
   return [
     StarterKit.configure({
@@ -47,6 +79,7 @@ function buildExtensions(getPlaceholder: (heading: boolean) => string, openLinkB
       },
     }),
     LinkShortcut.configure({ open: openLinkBox }),
+    MarkdownPaste,
     OutlinerListItem,
     Placeholder.configure({
       placeholder: ({ node }) => getPlaceholder(node.type.name === 'heading'),
