@@ -37,7 +37,11 @@ export function parseInline(src: string, marks: Mark[] = []): JSONContent[] {
       const m = rest.match(/^(`+)([\s\S]*?[^`])\1(?!`)/);
       if (m) {
         flush();
-        out.push(textNode(m[2].replace(/^ (.*) $/, '$1'), [...marks.filter((x) => x.type === 'link'), { type: 'code' }]));
+        const code = m[2].replace(/^ (.*) $/, '$1');
+        // A code span holding nothing but a URL is meant to be opened, so make it a link.
+        const url = code.match(URL_RE);
+        if (url && url[0] === code && !marks.some((x) => x.type === 'link')) out.push(textNode(code, withMark({ type: 'link', attrs: { href: code } })));
+        else out.push(textNode(code, [...marks.filter((x) => x.type === 'link'), { type: 'code' }]));
         i += m[0].length;
         continue;
       }
@@ -196,8 +200,9 @@ export function markdownToBlocks(markdown: string): JSONContent[] {
   const push = (node: JSONContent) => {
     const prev = blocks.at(-1);
     // Paragraphs have no margins in Orbit, so keep one empty line where the text had a gap
-    // between ordinary blocks. Headings already carry their own spacing.
-    if (pendingBlank && prev && prev.type !== 'heading' && node.type !== 'heading') blocks.push({ type: 'paragraph' });
+    // between ordinary blocks. Headings, rules, tables and code blocks carry their own spacing.
+    const spaced = (n: JSONContent) => ['heading', 'horizontalRule', 'table', 'codeBlock'].includes(n.type ?? '');
+    if (pendingBlank && prev && !spaced(prev) && !spaced(node)) blocks.push({ type: 'paragraph' });
     pendingBlank = false;
     blocks.push(node);
   };
