@@ -4,11 +4,12 @@ type Values = Record<string, string | number>;
 export type Translate = ((message: string, values?: Values) => string) & { language: Language };
 
 const zhHant: Record<string, string> = {
-  "Copy this link and open it in the browser where you started connecting. It works once and expires in a few minutes.": "複製這個連結，貼到你剛才開始連接的那個瀏覽器打開。連結只能用一次，幾分鐘後就會失效。",
+  "Copy this link and open it in the browser where you started connecting, or continue here. It works once and expires in a few minutes.": "複製這個連結，貼到你剛才開始連接的那個瀏覽器打開，或直接按下方按鈕前往。連結只能用一次，幾分鐘後就會失效。",
   "Return link": "返回連結",
   "Copied": "已複製",
   "Copy link": "複製連結",
   "Open in browser": "在瀏覽器開啟",
+  "Continue to {destination}": "前往 {destination}",
   "Install app": "安裝 App",
   "Orbit is installed on this device. It opens in its own window and works offline.": "Orbit 已安裝在這台裝置上，會在自己的視窗開啟，沒網路也能用。",
   "Add Orbit to your home screen or dock. It opens in its own window, starts faster and works offline.": "把 Orbit 加到主畫面或 Dock，會在自己的視窗開啟、啟動更快，沒網路也能用。",

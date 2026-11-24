@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { usePwa } from '../lib/pwa';
 import { relativeTime } from '../lib/dates';
 import { uid } from '../lib/uid';
 import { useT } from '../store/uiStore';
@@ -112,10 +111,8 @@ function ConnectedAiSettings({ account, email, requestId }: { account: string; e
         const { redirect } = await manage<{ redirect: string }>(account, '/consent/' + encodeURIComponent(requestId!), {
           method: 'POST', body: JSON.stringify({ choice }),
         });
+        // Never jump away on its own: show the link so it can be copied or opened.
         setReturnLink(redirect);
-        // In the installed app the AI client's page is open in the browser, not here,
-        // so show the link to copy instead of leaving the app.
-        if (!usePwa.getState().installed) window.location.replace(redirect);
       });
     }
     if (returnLink) {
@@ -128,13 +125,13 @@ function ConnectedAiSettings({ account, email, requestId }: { account: string; e
         }
       };
       return <>
-        <p>{tr('Copy this link and open it in the browser where you started connecting. It works once and expires in a few minutes.')}</p>
+        <p>{tr('Copy this link and open it in the browser where you started connecting, or continue here. It works once and expires in a few minutes.')}</p>
         <div className="btn-row orbit-ai-form">
           <input readOnly value={returnLink} onFocus={(event) => event.currentTarget.select()} aria-label={tr('Return link')} />
         </div>
         <div className="btn-row">
           <button className="btn primary" type="button" onClick={() => void copy()}>{copied ? tr('Copied') : tr('Copy link')}</button>
-          <a className="btn" href={returnLink} target="_blank" rel="noopener noreferrer">{tr('Open in browser')}</a>
+          <a className="btn" href={returnLink}>{tr('Continue to {destination}', { destination: consent?.destination ?? '' })}</a>
         </div>
       </>;
     }
