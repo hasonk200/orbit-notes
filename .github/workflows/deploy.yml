@@ -38,6 +38,8 @@ jobs:
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          # Root URL of the Orbit AI service (not a secret: it ships in the app). A repository variable overrides it.
+          VITE_ORBIT_AI_URL: ${{ vars.VITE_ORBIT_AI_URL || secrets.VITE_ORBIT_AI_URL || 'https://orbitapi-327513878859.northamerica-northeast2.run.app' }}
         run: |
           npm run build
           cp dist/index.html dist/404.html
