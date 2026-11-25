@@ -5,6 +5,10 @@ export type Translate = ((message: string, values?: Values) => string) & { langu
 
 const zhHant: Record<string, string> = {
   "Return link": "返回連結",
+  "Refresh Orbit": "重新整理 Orbit",
+  "Loading the new version…": "正在載入新版本…",
+  "Synced · you have the latest version": "已同步 · 已是最新版本",
+  "You have the latest version": "已是最新版本",
   "AI apps that can use your notes": "可以使用你筆記的 AI App",
   "Connected apps": "已連接的 App",
   "Connected {time}": "{time}連接",

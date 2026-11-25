@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, ChevronRight, CircleCheck, Hash, Monitor, Moon, Network, Plus, Settings, SquareCheckBig, Sun, Trash } from 'lucide-react';
+import { CalendarDays, Check, ChevronRight, CircleCheck, Hash, Monitor, Moon, Network, Plus, Settings, SquareCheckBig, Sun, Trash } from 'lucide-react';
 import { getOrCreateDaily } from '../db/indexers';
 import { dateLabel, todayISO } from '../lib/dates';
 import { classifyTaskKind } from '../lib/tasks';
@@ -10,6 +10,7 @@ import { useT, useUI } from '../store/uiStore';
 import { OrbitLogo } from '../components/OrbitLogo';
 import { SyncIndicator } from '../components/CloudSync';
 import { MobileHeader } from './MobileHeader';
+import { refreshFromHome, useRefresh } from './refresh';
 
 function Section({ title, count, onAdd, addLabel, children }: { title: string; count?: number; onAdd?: () => void; addLabel?: string; children: React.ReactNode }) {
   return (
@@ -55,6 +56,7 @@ export function MobileHome() {
   const objMap = useObjMap();
   const { theme, setTheme, setTypeEditor, setPalette } = useUI();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const { busy, note } = useRefresh();
 
   const counts = useMemo(() => {
     const byType = new Map<string, number>();
@@ -103,8 +105,8 @@ export function MobileHome() {
       <MobileHeader
         left={
           <div className="m-pill">
-            <button type="button" onClick={() => open('/home')} aria-label="Orbit">
-              <span className="m-brand-mark">
+            <button type="button" onClick={() => void refreshFromHome()} aria-label={tr('Refresh Orbit')} title={tr('Refresh Orbit')} aria-busy={busy}>
+              <span className={`m-brand-mark${busy ? ' is-spinning' : ''}`}>
                 <OrbitLogo size={22} />
               </span>
               <span className="m-brand">Orbit</span>
@@ -124,6 +126,12 @@ export function MobileHome() {
         }
       />
 
+      {note && (
+        <p className={`mh-refresh${note === 'updating' ? ' is-updating' : ''}`} role="status">
+          {note !== 'updating' && <Check size={15} />}
+          {tr(note === 'updating' ? 'Loading the new version…' : note === 'synced' ? 'Synced · you have the latest version' : 'You have the latest version')}
+        </p>
+      )}
       <button type="button" className="mh-today" onClick={() => void openToday()}>
         <span className="mh-today-icon">
           <span className="mh-today-month">{dateLabel(now, tr, 'MMM', 'M月')}</span>

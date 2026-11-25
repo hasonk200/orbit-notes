@@ -6146,3 +6146,33 @@ img.connect-logo {
 .ai-more:hover:not(:disabled) {
   background: var(--surface-2);
 }
+
+/* refreshing from the Orbit button or the Home tab */
+.m-brand-mark.is-spinning svg {
+  animation: m-spin 0.9s linear infinite;
+}
+@keyframes m-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .m-brand-mark.is-spinning svg { animation-duration: 2.5s; }
+}
+.mh-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: fit-content;
+  margin: -4px auto 12px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: 13px;
+  font-weight: 600;
+  animation: sheet-fade 0.2s ease-out;
+}
+.mh-refresh.is-updating {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
