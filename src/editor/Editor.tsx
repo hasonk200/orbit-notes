@@ -15,6 +15,7 @@ import { DateRef } from './extensions/DateRef';
 import { Outliner, zoomTo, zoomTrail, type ZoomCrumb } from './extensions/Outliner';
 import { LiveSearch } from './extensions/LiveSearch';
 import { onJump, takeJump } from './jump';
+import { editorBlurred, editorFocused } from '../mobile/activeEditor';
 import { posAtPath } from '../lib/supertags';
 import { TextSelection } from '@tiptap/pm/state';
 import { BlobImage } from './extensions/BlobImage';
@@ -362,6 +363,8 @@ export function RichEditor({
         syncOutline(editor);
       },
       onSelectionUpdate: ({ editor }) => setInTable(editor.isActive('table')),
+      onFocus: ({ editor }) => editorFocused(editor),
+      onBlur: ({ editor, event }) => editorBlurred(editor, (event as FocusEvent).relatedTarget),
       onTransaction: ({ editor, transaction }) => {
         setInTable(editor.isActive('table'));
         if (transaction.docChanged) syncOutline(editor);
