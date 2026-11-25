@@ -14,3 +14,8 @@ export function registerDraft(id: string, flush: Flush) {
 export async function flushDrafts(id: string) {
   await Promise.all(Array.from(drafts.get(id) ?? [], (flush) => flush()));
 }
+
+/** Save every open editor's pending changes (before a reload, for example). */
+export async function flushAllDrafts() {
+  await Promise.allSettled([...drafts.values()].flatMap((set) => [...set].map((flush) => flush())));
+}

@@ -35,6 +35,31 @@ export function reloadForUpdate() {
   window.location.reload();
 }
 
+/** The built script of the version running now (production builds only). */
+function runningScript() {
+  const el = document.querySelector<HTMLScriptElement>('script[type="module"][src]');
+  return el ? new URL(el.src, window.location.href).pathname : null;
+}
+
+/**
+ * Is a newer Orbit online than the one running? Pages are served network-first, so a reload
+ * picks the new version up; this only tells whether that reload is worth doing. It compares
+ * the hashed script name in the live index.html with the running one.
+ */
+export async function isNewVersionOnline(): Promise<boolean> {
+  if (!import.meta.env.PROD) return false;
+  try {
+    const response = await fetch(import.meta.env.BASE_URL, { cache: 'no-store' });
+    if (!response.ok) return false;
+    const html = await response.text();
+    const src = html.match(/<script\b[^>]*\btype="module"[^>]*\bsrc="([^"]+)"/)?.[1];
+    const now = runningScript();
+    return !!src && !!now && new URL(src, window.location.href).pathname !== now;
+  } catch {
+    return false;
+  }
+}
+
 /** Keep the browser/status bar colour in step with Orbit's own light/dark setting. */
 export function syncThemeColor() {
   const bg = getComputedStyle(document.body).backgroundColor || getComputedStyle(document.documentElement).getPropertyValue('--bg');

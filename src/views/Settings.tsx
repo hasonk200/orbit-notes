@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, FolderOpen, Monitor, Moon, RotateCcw, Sun, Upload } from 'lucide-react';
+import { Archive, Database, Download, FolderOpen, Keyboard, Monitor, Moon, Palette, RotateCcw, Sun, Upload } from 'lucide-react';
+import { SettingsSection } from '../components/SettingsSection';
 import { downloadBackup, importBackupZip } from '../db/backup';
 import { backupToFolder, chooseBackupFolder, forgetBackupFolder, fsSupported, getBackupFolder } from '../db/fsSync';
 import { pruneOrphans, reindexAll } from '../db/indexers';
@@ -49,6 +50,12 @@ export function Settings() {
     ['system', tr('System'), <Monitor size={15} />],
   ];
   const liveObjects = new Set(objects.filter((o) => !o.deletedAt).map((o) => o.id));
+  const dataLine = tr('{objects} objects · {tasks} tasks · {images} images ({size} MB)', {
+      objects: liveObjects.size,
+      tasks: tasks.filter((t) => t.text.trim() && liveObjects.has(t.objectId)).length,
+      images: storage.blobs,
+      size: (storage.bytes / 1024 / 1024).toFixed(1),
+    });
 
   return (
     <div className="page">
@@ -56,8 +63,13 @@ export function Settings() {
         <h1>{tr('Settings')}</h1>
       </header>
 
-      <section className="card-section">
-        <h3>{tr('Appearance')}</h3>
+      <SettingsSection
+        id="appearance"
+        icon={<Palette size={18} />}
+        tone="#e0864a"
+        title={tr('Appearance')}
+        summary={`${themes.find(([t]) => t === theme)?.[1] ?? ''} · ${language === 'zh-Hant' ? '繁體中文' : 'English'}`}
+      >
         <div className="segmented">
           {themes.map(([t, label, icon]) => (
             <button key={t} type="button" className={theme === t ? 'active' : ''} onClick={() => setTheme(t)}>
@@ -74,15 +86,20 @@ export function Settings() {
             繁體中文
           </button>
         </div>
-      </section>
+      </SettingsSection>
 
       <AppInstallSettings />
       <CloudSyncSettings />
       <SyncConflicts />
       <AiAccessSettings />
 
-      <section className="card-section">
-        <h3>{tr('Backup & restore')}</h3>
+      <SettingsSection
+        id="backup"
+        icon={<Archive size={18} />}
+        tone="#e5b12e"
+        title={tr('Backup & restore')}
+        summary={`${tr('Last backup')}${tr.language === 'zh-Hant' ? '：' : ': '}${lastBackupAt ? relativeTime(lastBackupAt, tr) : tr('never')}${folder ? ' · ' + tr('Folder: {folder}', { folder }) : ''}`}
+      >
         <p className="muted">
           {tr('Orbit stores your data in this browser (IndexedDB).')} {tr('Last backup')}{tr.language === 'zh-Hant' ? '：' : ': '}
           <strong>{lastBackupAt ? relativeTime(lastBackupAt, tr) : tr('never')}</strong>
@@ -161,18 +178,10 @@ export function Settings() {
           <p className="muted small">{tr('Folder backup needs Chrome or Edge. Use .zip export in this browser.')}</p>
         )}
         {msg && <div className={`banner ${msg.kind === 'ok' ? 'ok' : 'warn'}`}>{msg.text}</div>}
-      </section>
+      </SettingsSection>
 
-      <section className="card-section">
-        <h3>{tr('Data')}</h3>
-        <p className="muted small">
-          {tr('{objects} objects · {tasks} tasks · {images} images ({size} MB)', {
-            objects: liveObjects.size,
-            tasks: tasks.filter((t) => t.text.trim() && liveObjects.has(t.objectId)).length,
-            images: storage.blobs,
-            size: (storage.bytes / 1024 / 1024).toFixed(1),
-          })}
-        </p>
+      <SettingsSection id="data" icon={<Database size={18} />} tone="#5b7083" title={tr('Data')} summary={dataLine}>
+        <p className="muted small">{dataLine}</p>
         <div className="btn-row">
           <button
             type="button"
@@ -189,10 +198,9 @@ export function Settings() {
             <RotateCcw size={15} /> {tr('Rebuild indexes')}
           </button>
         </div>
-      </section>
+      </SettingsSection>
 
-      <section className="card-section">
-        <h3>{tr('Shortcuts')}</h3>
+      <SettingsSection id="shortcuts" icon={<Keyboard size={18} />} tone="#8b8a86" title={tr('Shortcuts')} summary={tr('Keyboard shortcuts for the computer')}>
         <ul className="shortcuts">
           <li><kbd>Ctrl</kbd> + <kbd>K</kbd> {tr('Search & commands')} · {tr('with text selected in a note: add a link')}</li>
           <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>D</kbd> {tr('Today’s note')}</li>
@@ -203,7 +211,7 @@ export function Settings() {
           <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> {tr('move bullet up / down')} · <kbd>Ctrl</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> {tr('fold / unfold')}</li>
           <li><kbd>Ctrl</kbd> + <kbd>]</kbd> / <kbd>[</kbd> {tr('zoom in / out')} · {tr('click a bullet: zoom in')}</li>
         </ul>
-      </section>
+      </SettingsSection>
     </div>
   );
 }

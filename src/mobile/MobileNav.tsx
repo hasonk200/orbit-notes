@@ -6,6 +6,7 @@ import { useOpen, usePane } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
 import { CreateSheet } from './CreateSheet';
 import { useActiveEditor } from './activeEditor';
+import { refreshFromHome } from './refresh';
 
 /** The floating tab bar at the bottom of the phone layout. */
 export function MobileNav() {
@@ -29,7 +30,7 @@ export function MobileNav() {
   return (
     <>
       <nav className={`m-nav${typing ? ' is-hidden' : ''}`} aria-label={tr('Main')} aria-hidden={typing || undefined}>
-        {item(isHome, tr('Home screen'), <Home size={23} />, () => open('/home'))}
+        {item(isHome, tr('Home screen'), <Home size={23} />, () => (isHome ? void refreshFromHome() : open('/home')))}
         {item(isCalendar, tr('Calendar'), <CalendarDays size={23} />, async () => {
           await getOrCreateDaily(todayISO());
           open(`/calendar?mode=day&date=${todayISO()}`);

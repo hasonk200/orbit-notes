@@ -1,4 +1,5 @@
-import { Download, RefreshCw, Share, SquarePlus } from 'lucide-react';
+import { Download, RefreshCw, Share, Smartphone, SquarePlus } from 'lucide-react';
+import { SettingsSection } from './SettingsSection';
 import { useT } from '../store/uiStore';
 import { isIos, promptInstall, reloadForUpdate, usePwa } from '../lib/pwa';
 
@@ -7,8 +8,13 @@ export function AppInstallSettings() {
   const tr = useT();
   const { canInstall, installed } = usePwa();
   return (
-    <section className="card-section">
-      <h3>{tr('Install app')}</h3>
+    <SettingsSection
+      id="install"
+      icon={<Smartphone size={18} />}
+      tone="#2fa57a"
+      title={tr('Install app')}
+      summary={installed ? tr('Installed on this device') : tr('Use Orbit like an app, offline too')}
+    >
       {installed ? (
         <p className="muted small">{tr('Orbit is installed on this device. It opens in its own window and works offline.')}</p>
       ) : canInstall ? (
@@ -27,7 +33,7 @@ export function AppInstallSettings() {
       ) : (
         <p className="muted small">{tr('Open Orbit in Chrome, Edge or Safari, then use the browser menu’s “Install” or “Add to Home Screen” option.')}</p>
       )}
-    </section>
+    </SettingsSection>
   );
 }
 
