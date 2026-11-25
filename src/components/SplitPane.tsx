@@ -7,6 +7,8 @@ import { decodePathSegment, renderPath } from '../routes';
 import { dailyTitle } from '../lib/dates';
 import { typeLabel } from '../lib/typeLabels';
 import { createObject } from '../db/indexers';
+import { useIsMobile } from '../mobile/useIsMobile';
+import { MobileTopBar, useHeaderSlots } from '../mobile/MobileHeader';
 
 function usePathTitle(path: string): { icon: ReactNode; title: string } {
   const tr = useT();
@@ -118,14 +120,18 @@ function PaneTopBar() {
 
 export function Pane({ ctx }: { ctx: PaneCtx }) {
   const tr = useT();
+  const mobile = useIsMobile();
+  const { slots, refs, Provider } = useHeaderSlots();
   return (
     <PaneContext.Provider value={ctx}>
-      <section className={`pane pane-${ctx.pane}`}>
-        <PaneTopBar />
-        <div className="pane-body" key={ctx.pane + ctx.path.split('?')[0]}>
-          {renderPath(ctx.path, tr)}
-        </div>
-      </section>
+      <Provider value={mobile ? slots : { left: null, center: null, right: null }}>
+        <section className={`pane pane-${ctx.pane}`}>
+          {mobile ? <MobileTopBar refs={refs} /> : <PaneTopBar />}
+          <div className="pane-body" key={ctx.pane + ctx.path.split('?')[0]}>
+            {renderPath(ctx.path, tr)}
+          </div>
+        </section>
+      </Provider>
     </PaneContext.Provider>
   );
 }

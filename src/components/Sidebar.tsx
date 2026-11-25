@@ -9,6 +9,7 @@ import { todayISO } from '../lib/dates';
 import { classifyTaskKind } from '../lib/tasks';
 import { NewMenu } from './NewMenu';
 import { SyncIndicator } from './CloudSync';
+import { OrbitLogo } from './OrbitLogo';
 
 function NavItem({ icon, label, path, active, badge, onClick }: { icon: React.ReactNode; label: string; path?: string; active?: boolean; badge?: React.ReactNode; onClick?: (e: React.MouseEvent) => void }) {
   const open = useOpen();
@@ -84,37 +85,7 @@ export function Sidebar() {
     <aside className="sidebar">
       <div className="sb-head">
         <button type="button" className="brand" onClick={(e) => open('/', e)} title={tr('Home')}>
-          <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden>
-            <defs>
-              <clipPath id="orbit-logo-front">
-                <rect x="0" y="16" width="32" height="16" />
-              </clipPath>
-              {/* cut a thin gap in the planet where the front of the gold ring passes over it */}
-              <mask id="orbit-logo-gap" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32">
-                <rect width="32" height="32" fill="#fff" />
-                <ellipse cx="16" cy="16" rx="14" ry="5.2" fill="none" stroke="#000" strokeWidth="5" clipPath="url(#orbit-logo-front)" />
-              </mask>
-              <linearGradient id="orbit-logo-gold" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#fff3c4" />
-                <stop offset=".4" stopColor="#f2c14e" />
-                <stop offset=".75" stopColor="#c8901c" />
-                <stop offset="1" stopColor="#8a5a0b" />
-              </linearGradient>
-              <radialGradient id="orbit-logo-planet" cx=".35" cy=".3" r=".8">
-                <stop offset="0" stopColor="#a79dff" />
-                <stop offset=".6" stopColor="#6d5efc" />
-                <stop offset="1" stopColor="#4a3bd6" />
-              </radialGradient>
-            </defs>
-            <g transform="rotate(-22 16 16)">
-              <ellipse cx="16" cy="16" rx="14" ry="5.2" fill="none" stroke="url(#orbit-logo-gold)" strokeWidth="2.8" />
-              <circle cx="16" cy="16" r="8" fill="url(#orbit-logo-planet)" mask="url(#orbit-logo-gap)" />
-              <g clipPath="url(#orbit-logo-front)">
-                <ellipse cx="16" cy="16" rx="14" ry="5.2" fill="none" stroke="url(#orbit-logo-gold)" strokeWidth="2.8" />
-                <ellipse cx="16" cy="16" rx="14" ry="5.2" fill="none" stroke="#fffbe8" strokeOpacity=".9" strokeWidth=".6" transform="translate(0 -.75)" />
-              </g>
-            </g>
-          </svg>
+          <OrbitLogo />
           Orbit
         </button>
         <button type="button" className="icon-btn" onClick={toggleSidebar} title={tr('Hide sidebar (Ctrl+\\)')}>

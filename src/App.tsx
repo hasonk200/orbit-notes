@@ -14,6 +14,9 @@ import { getOrCreateDaily } from './db/indexers';
 import { todayISO } from './lib/dates';
 import { isComposing } from './lib/keyboard';
 import { ConnectPage } from './views/ConnectPage';
+import { useIsMobile } from './mobile/useIsMobile';
+import { MobileNav } from './mobile/MobileNav';
+import { KeyboardToolbar } from './mobile/KeyboardToolbar';
 
 export default function App() {
   const tr = useT();
@@ -21,6 +24,7 @@ export default function App() {
   const navigate = useNavigate();
   const { sidebarOpen, setSidebar, paletteOpen, setPalette, split, splitGo, splitReplace, splitBack, splitForward, typeEditor, toggleSidebar } = useUI();
   const ready = useData((s) => s.ready);
+  const mobile = useIsMobile();
   const mainPath = location.pathname + location.search;
 
   // react-router keeps the history index in history.state.idx
@@ -98,8 +102,9 @@ export default function App() {
 
   return (
     <PaneContext.Provider value={mainCtx}>
-      <div className={`app${sidebarOpen ? ' with-sidebar' : ''}${split ? ' is-split' : ''}`}>
-        {sidebarOpen && (
+      {/* Phones get their own layout: floating bars instead of the sidebar, and one pane at a time. */}
+      <div className={`app${mobile ? ' is-mobile' : ''}${sidebarOpen && !mobile ? ' with-sidebar' : ''}${split && !mobile ? ' is-split' : ''}`}>
+        {sidebarOpen && !mobile && (
           <>
             <Sidebar />
             <div className="sidebar-scrim" onClick={() => setSidebar(false)} />
@@ -107,8 +112,10 @@ export default function App() {
         )}
         <main className="panes">
           <Pane ctx={mainCtx} />
-          {splitCtx && <Pane ctx={splitCtx} />}
+          {splitCtx && !mobile && <Pane ctx={splitCtx} />}
         </main>
+        {mobile && <MobileNav />}
+        {mobile && <KeyboardToolbar />}
         {paletteOpen && <CommandPalette />}
         {typeEditor && <TypeEditorModal key={typeEditor} typeId={typeEditor} />}
         <SuggestPopup />

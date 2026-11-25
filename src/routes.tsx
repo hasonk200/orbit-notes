@@ -8,8 +8,15 @@ import { TagsView } from './views/TagsView';
 import { TrashView } from './views/TrashView';
 import { Settings } from './views/Settings';
 import { HomeView } from './views/HomeView';
+import { MobileHome } from './mobile/MobileHome';
+import { useIsMobile } from './mobile/useIsMobile';
 import { todayISO } from './lib/dates';
 import type { Translate } from './lib/i18n';
+
+/** Phones get their own home screen; the desktop keeps Explore. */
+function HomeRoute() {
+  return useIsMobile() ? <MobileHome /> : <HomeView />;
+}
 
 const GraphView = lazy(() => import('./views/GraphView').then((m) => ({ default: m.GraphView })));
 
@@ -51,7 +58,7 @@ export function renderPath(path: string, tr: Translate) {
     case 'settings':
       return <Settings />;
     case 'home':
-      return <HomeView />;
+      return <HomeRoute />;
     default:
       return (
         <div className="empty-state">

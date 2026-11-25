@@ -1,10 +1,10 @@
 import { useT } from '../store/uiStore';
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { CalendarCheck, CalendarDays, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, CirclePlus, Clock, Link2, Pin, PinOff, Plus, Trash } from 'lucide-react';
 import { addDays, addMonths, endOfMonth, endOfWeek, getWeek, isSameMonth, isValid, startOfMonth, startOfWeek } from 'date-fns';
 import type { Obj, ObjType, TaskRec } from '../db/schema';
-import { getOrCreateDaily } from '../db/indexers';
-import { displayTitle, useData, useObjMap, useTypeMap } from '../store/dataStore';
+import { getOrCreateDaily, softDelete } from '../db/indexers';
+import { displayTitle, togglePinned, useData, useObjMap, useTypeMap } from '../store/dataStore';
 import { objPath, useOpen, usePane } from '../store/pane';
 import { dailyTitle, dateLabel, fromISODate, toISODate, todayISO } from '../lib/dates';
 import { propertyLabel } from '../lib/typeLabels';
@@ -13,6 +13,11 @@ import { ObjectEditor } from '../editor/Editor';
 import { MiniCalendar } from '../components/MiniCalendar';
 import { TaskRow } from '../components/TaskRow';
 import { ObjectRow } from '../components/ObjectCard';
+import { useIsMobile } from '../mobile/useIsMobile';
+import { MobileHeader, MobileSegmented } from '../mobile/MobileHeader';
+import { WeekStrip } from '../mobile/WeekStrip';
+import type { MenuAction } from '../mobile/BottomSheet';
+import { copyObjectLink } from '../mobile/copyLink';
 
 export type CalMode = 'day' | 'three' | 'week' | 'month';
 const MODES: [CalMode, string][] = [
@@ -122,10 +127,13 @@ function DayExtras({ iso, idx, typeMap }: { iso: string; idx: CalIndex; typeMap:
 
 type DayTab = 'all' | 'note' | 'created' | 'tasks';
 
-function DayDetail({ iso, idx }: { iso: string; idx: CalIndex }) {
+function DayDetail({ iso, idx, tab: shownTab, onTab, hideTabs }: { iso: string; idx: CalIndex; tab?: DayTab; onTab?: (t: DayTab) => void; hideTabs?: boolean }) {
   const tr = useT();
   const typeMap = useTypeMap();
-  const [tab, setTab] = useState<DayTab>('all');
+  const [ownTab, setOwnTab] = useState<DayTab>('all');
+  // The phone layout drives the tab from its top bar; the desktop keeps its own.
+  const tab = shownTab ?? ownTab;
+  const setTab = onTab ?? setOwnTab;
   const note = idx.daily.get(iso);
   const created = idx.created.get(iso) ?? [];
   const dated = idx.dated.get(iso) ?? [];
@@ -140,6 +148,7 @@ function DayDetail({ iso, idx }: { iso: string; idx: CalIndex }) {
   return (
     <div className="day-detail">
       <DayHeader iso={iso} />
+      {!hideTabs && (
       <div className="day-tabs">
         {tabs.map(([k, label, n]) => (
           <button key={k} type="button" className={`tab${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>
@@ -148,6 +157,7 @@ function DayDetail({ iso, idx }: { iso: string; idx: CalIndex }) {
           </button>
         ))}
       </div>
+      )}
       {showNote && (note ? (
         <div className="day-note">
           <ObjectEditor key={note.id} obj={note} placeholder={tr('What’s on your mind today? Type / for commands, [[ to link, @ for dates')} />
@@ -260,6 +270,82 @@ function MonthView({ month, idx, onPickDay, onPickMonth }: { month: Date; idx: C
   );
 }
 
+/** The phone calendar: a week strip, then the chosen day; the switch and "⋯" live in the floating bar. */
+function MobileDay({ date, idx, set }: { date: string; idx: CalIndex; set: (m: CalMode, iso: string) => void }) {
+  const tr = useT();
+  const pinned = useData((s) => s.pinned);
+  const [tab, setTab] = useState<DayTab>('all');
+  const [monthOpen, setMonthOpen] = useState(false);
+  const marks = useMemo(() => new Set(idx.daily.keys()), [idx]);
+  const note = idx.daily.get(date);
+  const created = idx.created.get(date) ?? [];
+  const due = (idx.due.get(date) ?? []).filter((t) => !t.done);
+  const today = todayISO();
+  const isPinned = !!note && pinned.includes(note.id);
+
+  const actions: MenuAction[] = [
+    ...(date !== today ? [{ key: 'today', icon: <CalendarDays size={20} />, label: tr('Go to today'), onClick: () => set('day', today) }] : []),
+    { key: 'month', icon: <CalendarRange size={20} />, label: tr('Month view'), onClick: () => set('month', date) },
+    ...(note
+      ? [
+          { key: 'pin', group: 1, icon: isPinned ? <PinOff size={20} /> : <Pin size={20} />, label: tr(isPinned ? 'Unpin from Home' : 'Pin to Home'), onClick: () => void togglePinned(note.id) },
+          { key: 'link', group: 1, icon: <Link2 size={20} />, label: tr('Copy link'), onClick: () => void copyObjectLink(note.id) },
+          {
+            key: 'trash',
+            group: 2,
+            danger: true,
+            icon: <Trash size={20} />,
+            label: tr('Move to Trash'),
+            onClick: () => {
+              if (window.confirm(tr('Move this daily note to Trash? You can restore it from Trash.'))) void softDelete(note.id);
+            },
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="m-day">
+      <MobileHeader
+        center={
+          <MobileSegmented<DayTab>
+            label={tr('Show')}
+            value={tab === 'note' ? 'all' : tab}
+            onChange={setTab}
+            options={[
+              { value: 'all', icon: <CalendarCheck size={17} />, label: tr('Daily note') },
+              { value: 'created', icon: <CirclePlus size={17} />, label: tr('Created'), count: created.length },
+              { value: 'tasks', icon: <Clock size={17} />, label: tr('Due'), count: due.length },
+            ]}
+          />
+        }
+        actions={actions}
+        menuLabel={tr('Day actions')}
+      />
+      <WeekStrip selected={date} onSelect={(iso) => set('day', iso)} marks={marks} />
+      <button type="button" className={`m-week-expand${monthOpen ? ' is-open' : ''}`} aria-expanded={monthOpen} aria-label={tr(monthOpen ? 'Hide month' : 'Show month')} onClick={() => setMonthOpen((v) => !v)}>
+        <ChevronDown size={22} />
+      </button>
+      {monthOpen && (
+        <div className="m-month">
+          <MiniCalendar
+            selected={date}
+            marks={marks}
+            onSelect={(iso) => {
+              set('day', iso);
+              setMonthOpen(false);
+            }}
+          />
+        </div>
+      )}
+      <div className="m-day-body">
+        <DayDetail key={date} iso={date} idx={idx} tab={tab} onTab={setTab} hideTabs />
+        {tab === 'all' && <UpcomingTasks />}
+      </div>
+    </div>
+  );
+}
+
 export function CalendarView({ mode, date: requestedDate }: { mode: CalMode; date: string }) {
   const tr = useT();
   const { replace } = usePane();
@@ -276,6 +362,10 @@ export function CalendarView({ mode, date: requestedDate }: { mode: CalMode; dat
     set(safeMode, toISODate(next));
   };
   const marks = useMemo(() => new Set(idx.daily.keys()), [idx]);
+  const mobile = useIsMobile();
+
+  // Phones show one day at a time (with a week strip); the month grid stays available from the ⋯ menu.
+  if (mobile && safeMode !== 'month') return <MobileDay date={date} idx={idx} set={set} />;
 
   let range: string[] = [];
   if (safeMode === 'three') range = [-1, 0, 1].map((i) => toISODate(addDays(d, i)));

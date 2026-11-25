@@ -1,6 +1,6 @@
 import { useT } from '../store/uiStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Columns2, ImagePlus, Pin, PinOff, RotateCcw, Trash, X } from 'lucide-react';
+import { Columns2, ImagePlus, Link2, Pin, PinOff, RotateCcw, Shapes, Trash, X } from 'lucide-react';
 import { relativeTime } from '../lib/dates';
 import { isComposing } from '../lib/keyboard';
 import { togglePinned, useData, useObject } from '../store/dataStore';
@@ -14,6 +14,9 @@ import { Backlinks } from '../components/Backlinks';
 import { TaskRow } from '../components/TaskRow';
 import { EmojiPicker, TypeBadge } from '../components/TypeIcon';
 import { ConvertTypeMenu } from '../components/ConvertTypeMenu';
+import { MobileHeader } from '../mobile/MobileHeader';
+import type { MenuAction } from '../mobile/BottomSheet';
+import { copyObjectLink } from '../mobile/copyLink';
 
 function TitleInput({ id, value, autoFocus, disabled }: { id: string; value: string; autoFocus?: boolean; disabled?: boolean }) {
   const tr = useT();
@@ -142,8 +145,22 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
     input.click();
   };
 
+  // On phones these live in the "⋯" sheet instead of the small toolbar icons.
+  const mobileActions: MenuAction[] = [
+    { key: 'pin', icon: pinned ? <PinOff size={20} /> : <Pin size={20} />, label: tr(pinned ? 'Unpin from Home' : 'Pin to Home'), onClick: () => void togglePinned(obj.id) },
+    ...(cover
+      ? [{ key: 'cover', icon: <ImagePlus size={20} />, label: tr('Change cover'), onClick: addCover }]
+      : [{ key: 'cover', icon: <ImagePlus size={20} />, label: tr('Add cover image'), onClick: addCover }]),
+    { key: 'type', icon: <Shapes size={20} />, label: tr('Change type'), onClick: () => setConvertOpen(true) },
+    { key: 'link', group: 1, icon: <Link2 size={20} />, label: tr('Copy link'), onClick: () => void copyObjectLink(obj.id) },
+    ...(obj.deletedAt
+      ? [{ key: 'restore', group: 2, icon: <RotateCcw size={20} />, label: tr('Restore'), onClick: () => void restoreObject(obj.id) }]
+      : [{ key: 'trash', group: 2, danger: true, icon: <Trash size={20} />, label: tr('Move to Trash'), onClick: () => void softDelete(obj.id) }]),
+  ];
+
   return (
     <div className="obj-page" style={{ ['--type-color' as any]: type?.color }}>
+      <MobileHeader actions={mobileActions} menuLabel={tr('Note actions')} />
       {obj.syncConflictOf && !obj.deletedAt && (
         <div className="banner warn">
           {tr('Recovered version from a sync conflict.')}
