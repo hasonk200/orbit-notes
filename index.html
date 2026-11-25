@@ -16,8 +16,198 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><clipPath id='of'><rect x='0' y='16' width='32' height='16'/></clipPath><mask id='om' maskUnits='userSpaceOnUse' x='0' y='0' width='32' height='32'><rect width='32' height='32' fill='%23fff'/><ellipse cx='16' cy='16' rx='14' ry='5.2' fill='none' stroke='%23000' stroke-width='5' clip-path='url(%23of)'/></mask><linearGradient id='og' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%23fff3c4'/><stop offset='.4' stop-color='%23f2c14e'/><stop offset='.75' stop-color='%23c8901c'/><stop offset='1' stop-color='%238a5a0b'/></linearGradient><radialGradient id='op' cx='.35' cy='.3' r='.8'><stop offset='0' stop-color='%23a79dff'/><stop offset='.6' stop-color='%236d5efc'/><stop offset='1' stop-color='%234a3bd6'/></radialGradient></defs><g transform='rotate(-22 16 16)'><ellipse cx='16' cy='16' rx='14' ry='5.2' fill='none' stroke='url(%23og)' stroke-width='2.8'/><circle cx='16' cy='16' r='8' fill='url(%23op)' mask='url(%23om)'/><g clip-path='url(%23of)'><ellipse cx='16' cy='16' rx='14' ry='5.2' fill='none' stroke='url(%23og)' stroke-width='2.8'/><ellipse cx='16' cy='16' rx='14' ry='5.2' fill='none' stroke='%23fffbe8' stroke-opacity='.9' stroke-width='.6' transform='translate(0 -.75)'/></g></g></svg>" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script>
+      try {
+        var t = localStorage.getItem('orbit-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+      window.__ORBIT_SPLASH_START__ = performance.now();
+    </script>
+    <style id="orbit-splash-style">
+      #orbit-splash {
+        --sp-bg: #f7f6f3;
+        --sp-text: #1f1e1c;
+        --sp-glow: rgba(109, 94, 252, 0.24);
+        --sp-ring-glow: rgba(242, 193, 78, 0.22);
+        --sp-halo: rgba(109, 94, 252, 0.22);
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: var(--sp-bg);
+        color: var(--sp-text);
+        font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        pointer-events: none;
+        user-select: none;
+        transition:
+          opacity 360ms cubic-bezier(0.22, 1, 0.36, 1),
+          transform 380ms cubic-bezier(0.22, 1, 0.36, 1),
+          filter 360ms ease;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) #orbit-splash {
+          --sp-bg: #161615;
+          --sp-text: #ecebe8;
+          --sp-glow: rgba(139, 127, 255, 0.32);
+          --sp-ring-glow: rgba(242, 193, 78, 0.26);
+          --sp-halo: rgba(139, 127, 255, 0.28);
+        }
+      }
+      :root[data-theme='dark'] #orbit-splash {
+        --sp-bg: #161615;
+        --sp-text: #ecebe8;
+        --sp-glow: rgba(139, 127, 255, 0.32);
+        --sp-ring-glow: rgba(242, 193, 78, 0.26);
+        --sp-halo: rgba(139, 127, 255, 0.28);
+      }
+      #orbit-splash.is-leaving {
+        opacity: 0;
+        transform: scale(1.06);
+        filter: blur(4px);
+      }
+      .orbit-splash-stage {
+        position: relative;
+        width: 112px;
+        height: 112px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .orbit-splash-glow {
+        position: absolute;
+        inset: -14px;
+        border-radius: 50%;
+        background: radial-gradient(circle, var(--sp-glow) 0%, var(--sp-ring-glow) 42%, transparent 72%);
+        animation: orbit-splash-glow 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+      .orbit-splash-halo {
+        position: absolute;
+        inset: 4px;
+        border-radius: 50%;
+        border: 1px dashed var(--sp-halo);
+        animation: orbit-splash-halo 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+      .orbit-splash-mark {
+        position: relative;
+        width: 92px;
+        height: 92px;
+        overflow: visible;
+      }
+      .orbit-splash-planet {
+        transform-origin: 60px 60px;
+        animation: orbit-splash-planet 560ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+      }
+      .orbit-splash-ring-back {
+        transform-origin: 60px 60px;
+        animation: orbit-splash-ring-pop 520ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
+      }
+      .orbit-splash-ring-front {
+        stroke-dasharray: 185;
+        stroke-dashoffset: 185;
+        animation: orbit-splash-ring-draw 620ms cubic-bezier(0.22, 1, 0.36, 1) 110ms forwards;
+      }
+      .orbit-splash-ring-sheen {
+        stroke-dasharray: 185;
+        stroke-dashoffset: 185;
+        animation: orbit-splash-ring-draw 620ms cubic-bezier(0.22, 1, 0.36, 1) 140ms forwards;
+      }
+      .orbit-splash-sat {
+        transform-origin: 60px 60px;
+        animation: orbit-splash-dot 820ms cubic-bezier(0.22, 1, 0.36, 1) 90ms both;
+      }
+      .orbit-splash-wordmark {
+        font-size: 20px;
+        font-weight: 600;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        animation: orbit-splash-title 520ms cubic-bezier(0.22, 1, 0.36, 1) 170ms both;
+      }
+      @keyframes orbit-splash-glow {
+        from { opacity: 0; transform: scale(0.45); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      @keyframes orbit-splash-halo {
+        from { opacity: 0; transform: scale(0.68) rotate(-35deg); }
+        to { opacity: 1; transform: scale(1.06) rotate(0deg); }
+      }
+      @keyframes orbit-splash-planet {
+        from { opacity: 0; transform: scale(0.52); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      @keyframes orbit-splash-ring-pop {
+        from { opacity: 0; transform: scale(0.75); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      @keyframes orbit-splash-ring-draw {
+        to { stroke-dashoffset: 0; }
+      }
+      @keyframes orbit-splash-dot {
+        from { opacity: 0; transform: rotate(-110deg) scale(0.4); }
+        35% { opacity: 1; }
+        to { opacity: 1; transform: rotate(15deg) scale(1); }
+      }
+      @keyframes orbit-splash-title {
+        from { opacity: 0; transform: translateY(10px); letter-spacing: 0.16em; }
+        to { opacity: 1; transform: translateY(0); letter-spacing: -0.02em; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #orbit-splash,
+        #orbit-splash * {
+          animation: none !important;
+          transition-duration: 1ms !important;
+        }
+        .orbit-splash-ring-front,
+        .orbit-splash-ring-sheen {
+          stroke-dashoffset: 0;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="orbit-splash" aria-hidden="true">
+      <div class="orbit-splash-stage">
+        <div class="orbit-splash-glow"></div>
+        <div class="orbit-splash-halo"></div>
+        <svg class="orbit-splash-mark" viewBox="0 0 120 120" width="92" height="92" fill="none">
+          <defs>
+            <clipPath id="orbit-sp-front">
+              <rect x="0" y="60" width="120" height="60" />
+            </clipPath>
+            <mask id="orbit-sp-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120">
+              <rect width="120" height="120" fill="#fff" />
+              <ellipse cx="60" cy="60" rx="50" ry="18.5" fill="none" stroke="#000" stroke-width="15" clip-path="url(#orbit-sp-front)" />
+            </mask>
+            <linearGradient id="orbit-sp-gold" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#fff4c8" />
+              <stop offset=".4" stop-color="#f2c14e" />
+              <stop offset=".75" stop-color="#c8901c" />
+              <stop offset="1" stop-color="#8a5a0b" />
+            </linearGradient>
+            <radialGradient id="orbit-sp-planet" cx=".34" cy=".28" r=".8">
+              <stop offset="0" stop-color="#b4abff" />
+              <stop offset=".55" stop-color="#6d5efc" />
+              <stop offset="1" stop-color="#4334c9" />
+            </radialGradient>
+          </defs>
+          <g transform="rotate(-22 60 60)">
+            <ellipse class="orbit-splash-ring-back" cx="60" cy="60" rx="50" ry="18.5" stroke="url(#orbit-sp-gold)" stroke-width="9" />
+            <circle class="orbit-splash-planet" cx="60" cy="60" r="28" fill="url(#orbit-sp-planet)" mask="url(#orbit-sp-mask)" />
+            <g clip-path="url(#orbit-sp-front)">
+              <ellipse class="orbit-splash-ring-front" cx="60" cy="60" rx="50" ry="18.5" stroke="url(#orbit-sp-gold)" stroke-width="9" stroke-linecap="round" />
+              <ellipse class="orbit-splash-ring-sheen" cx="60" cy="60" rx="50" ry="18.5" stroke="#fffbe8" stroke-opacity=".85" stroke-width="2" transform="translate(0 -2.4)" />
+            </g>
+            <g class="orbit-splash-sat">
+              <circle cx="109" cy="60" r="4.5" fill="#fff7d6" />
+            </g>
+          </g>
+        </svg>
+      </div>
+      <div class="orbit-splash-wordmark">Orbit</div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
