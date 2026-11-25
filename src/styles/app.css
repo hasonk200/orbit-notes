@@ -4588,3 +4588,405 @@ span.olink-card {
   text-align: center;
   cursor: default;
 }
+
+/* ---------- Connect page: approving an AI app (OAuth consent) ---------- */
+.connect-page {
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* No bottom padding: a pinned button bar must sit on the real bottom edge, with nothing showing below it. */
+  padding: max(32px, 6vh) 16px 0;
+  background: var(--bg);
+  box-sizing: border-box;
+}
+.connect-page::after {
+  content: '';
+  flex: none;
+  height: 40px;
+}
+.connect-card {
+  width: min(440px, 100%);
+  margin: auto 0;
+  padding: 28px 24px 22px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  box-sizing: border-box;
+  animation: connect-in 0.22s ease-out;
+}
+@keyframes connect-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .connect-card { animation: none; }
+}
+.connect-card h1 {
+  margin: 18px 0 6px;
+  font-size: 22px;
+  line-height: 1.3;
+  font-weight: 700;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.connect-sub {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 14.5px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.connect-logos {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.connect-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  flex: none;
+}
+img.connect-logo {
+  box-shadow: 0 0 0 1px var(--line);
+}
+.connect-client {
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 24px;
+  font-weight: 700;
+}
+.connect-link-line {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  color: var(--muted);
+}
+.connect-link-line::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 2px dashed var(--line-strong);
+}
+.connect-link-line svg {
+  position: relative;
+  padding: 4px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+  box-sizing: content-box;
+}
+.connect-section {
+  margin-top: 20px;
+}
+.connect-label {
+  display: block;
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.connect-list + .connect-label {
+  margin-top: 14px;
+}
+.connect-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.connect-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-weight: 700;
+  font-size: 16px;
+  object-fit: cover;
+}
+.connect-account-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.connect-account-text strong,
+.connect-account-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connect-account-text span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.connect-scopes {
+  display: grid;
+  gap: 8px;
+}
+.connect-scope {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.connect-scope:hover {
+  border-color: var(--line-strong);
+}
+.connect-scope.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.connect-scope input {
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.connect-scope strong {
+  display: block;
+  font-size: 14.5px;
+}
+.connect-scope small {
+  display: block;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.connect-pill {
+  margin: 16px auto 0;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: center;
+}
+.connect-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+.connect-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.connect-list svg {
+  flex: none;
+  margin-top: 2px;
+}
+.connect-list.is-can svg {
+  color: var(--ok);
+}
+.connect-list.is-cannot li {
+  color: var(--text-2);
+}
+.connect-list.is-cannot svg {
+  color: var(--muted);
+}
+.connect-safety {
+  display: flex;
+  gap: 9px;
+  margin: 18px 0 0;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.connect-safety svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--ok);
+}
+.connect-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+.connect-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 46px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s, filter 0.12s;
+}
+.connect-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.connect-btn.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
+}
+.connect-btn.primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.08);
+}
+.connect-btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-2);
+  font-weight: 500;
+}
+.connect-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.connect-btn:focus-visible,
+.connect-scope:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.connect-note {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+}
+.connect-problem {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+}
+.connect-wait {
+  margin: 18px 0 4px;
+  color: var(--muted);
+  text-align: center;
+}
+.connect-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 18px;
+}
+.connect-state h1 {
+  margin-top: 12px;
+}
+.connect-state-icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+}
+.connect-state-icon.is-ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.connect-state-icon.is-muted {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.connect-link-field {
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  box-sizing: border-box;
+}
+.connect-footer-link {
+  display: block;
+  margin-top: 12px;
+  color: var(--accent-text);
+  font-size: 13px;
+  text-align: center;
+}
+.connect-dest {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 10px auto 0;
+  padding: 4px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  box-sizing: border-box;
+}
+.connect-dest svg {
+  color: var(--muted);
+}
+.connect-dest strong {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+/* The choice stays in reach at the bottom of the screen while reading the permissions. */
+.connect-actions.is-sticky {
+  position: sticky;
+  bottom: 0;
+  margin: 16px -24px -22px;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 18px 18px;
+  background: var(--surface);
+  box-shadow: 0 -10px 20px -16px rgba(0, 0, 0, 0.35);
+}
+@media (max-width: 560px) {
+  .connect-page {
+    padding: 16px 12px 0;
+  }
+  .connect-page::after {
+    height: 0;
+  }
+  .connect-card {
+    padding: 24px 18px 0;
+  }
+  .connect-state + .connect-actions,
+  .connect-card > :last-child:not(.is-sticky) {
+    margin-bottom: 20px;
+  }
+  .connect-actions.is-sticky {
+    margin: 16px -18px 0;
+    padding: 12px 18px calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+}

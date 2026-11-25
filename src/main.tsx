@@ -18,8 +18,9 @@ initPwa();
 document.documentElement.lang = getT().language;
 
 const basePath = import.meta.env.BASE_URL;
-if (window.location.pathname === basePath && new URLSearchParams(window.location.hash.slice(1)).has('ai_request')) {
-  window.history.replaceState(window.history.state, '', basePath + 'settings' + window.location.hash);
+// An AI app asking to connect lands on Orbit's own approval page (the AI service sends it to the app root).
+if ([basePath, basePath + 'settings'].includes(window.location.pathname) && new URLSearchParams(window.location.hash.slice(1)).has('ai_request')) {
+  window.history.replaceState(window.history.state, '', basePath + 'connect' + window.location.hash);
 }
 
 async function boot() {
