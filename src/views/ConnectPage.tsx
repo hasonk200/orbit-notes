@@ -241,7 +241,7 @@ export function ConnectPage() {
         {copied === 'failed' && <input className="connect-link-field" readOnly value={phase.link} onFocus={(e) => e.currentTarget.select()} aria-label={tr('Return link')} />}
         <p className="connect-note">{tr('Started connecting in another browser or app? Copy the link and open it there. It works once and expires in a few minutes.')}</p>
         {allowed && (
-          <a className="connect-footer-link" href={home + 'settings'}>
+          <a className="connect-footer-link" href={home + 'settings#ai-access'}>
             {tr('Manage AI connections in Settings')}
           </a>
         )}

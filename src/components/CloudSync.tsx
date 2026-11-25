@@ -7,6 +7,7 @@ import { googleDirectAvailable, signInWithFirebasePopup, signInWithGoogle, signO
 import { resolveObjectConflict } from '../db/indexers';
 import { displayTitle, useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
+import { SettingsSection } from './SettingsSection';
 
 const LABEL: Record<SyncStatus, string> = {
   unconfigured: 'Cloud sync not set up',
@@ -69,8 +70,13 @@ export function CloudSyncSettings() {
   };
 
   return (
-    <section className="card-section">
-      <h3>{tr('Cloud sync')}</h3>
+    <SettingsSection
+      id="cloud-sync"
+      icon={<Cloud size={18} />}
+      tone="#3f9bd8"
+      title={tr('Cloud sync')}
+      summary={status === 'unconfigured' ? tr('Not set up') : user ? `${user.email ?? user.name ?? ''} · ${tr(LABEL[status])}` : tr('Not signed in')}
+    >
       {status === 'unconfigured' ? (
         <p className="muted small">{tr('Firebase isn’t configured. Copy .env.example to .env.local, fill in your Firebase web config and restart the dev server.')}</p>
       ) : !user ? (
@@ -118,7 +124,7 @@ export function CloudSyncSettings() {
         </>
       )}
       {msg && <div className="banner warn">{msg}</div>}
-    </section>
+    </SettingsSection>
   );
 }
 
