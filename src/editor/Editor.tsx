@@ -25,6 +25,7 @@ import type { JSONContent, Obj } from '../db/schema';
 import { saveObject } from '../db/indexers';
 import { registerDraft } from '../db/drafts';
 import { looksLikeMarkdown, markdownToBlocks } from '../lib/markdown';
+import { openLocalFile } from '../lib/native';
 import { Plugin } from '@tiptap/pm/state';
 
 /** Ctrl/Cmd+K on selected text (or inside a link) opens the link box; otherwise the key falls through to search. */
@@ -339,21 +340,24 @@ export function RichEditor({
       autofocus: autofocus ? 'end' : false,
       editorProps: {
         attributes: { class: `prose ${className ?? ''}`, spellcheck: 'true' },
-        // Browsers refuse to open file:// links from a web page, so copy the address instead.
+        // Browsers refuse to open file:// links from a web page, so open natively in desktop or copy on web.
         handleClick: (_view, _pos, event) => {
           const a = (event.target as HTMLElement | null)?.closest?.('a[href]');
           const href = a?.getAttribute('href') ?? '';
           if (!a || !/^file:/i.test(href) || event.button !== 0) return false;
           event.preventDefault();
           const rect = a.getBoundingClientRect();
-          void navigator.clipboard?.writeText(href).then(
-            () => {
-              setCopiedAt({ top: rect.bottom + 6, left: Math.max(8, Math.min(rect.left, window.innerWidth - 300)) });
-              window.clearTimeout(copiedTimer.current);
-              copiedTimer.current = window.setTimeout(() => setCopiedAt(null), 2600);
-            },
-            () => window.prompt('', href),
-          );
+          void openLocalFile(href).then((opened) => {
+            if (opened) return;
+            void navigator.clipboard?.writeText(href).then(
+              () => {
+                setCopiedAt({ top: rect.bottom + 6, left: Math.max(8, Math.min(rect.left, window.innerWidth - 300)) });
+                window.clearTimeout(copiedTimer.current);
+                copiedTimer.current = window.setTimeout(() => setCopiedAt(null), 2600);
+              },
+              () => window.prompt('', href),
+            );
+          });
           return true;
         },
       },

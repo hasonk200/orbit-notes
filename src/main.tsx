@@ -9,11 +9,13 @@ import { autoBackupIfDue } from './db/fsSync';
 import { upgradeTaskIndex } from './db/indexers';
 import { initSync } from './sync/engine';
 import { initPwa } from './lib/pwa';
+import { initNative } from './lib/native';
 import './styles/tokens.css';
 import './styles/app.css';
 import './styles/motion.css';
 
 applyTheme(useUI.getState().theme);
+initNative();
 initPwa();
 document.documentElement.lang = getT().language;
 

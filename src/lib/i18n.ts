@@ -462,6 +462,7 @@ const zhHant: Record<string, string> = {
   "{count} sync conflicts": "{count} 筆同步衝突",
   "The browser blocked the sign-in window. Allow pop-ups for this site and try again.": "瀏覽器已封鎖登入視窗。請允許此網站開啟彈出式視窗，再重試。",
   "Google sign-in is not enabled for this Firebase project yet. Enable it in Firebase console → Authentication → Sign-in method → Google.": "此 Firebase 專案尚未啟用 Google 登入。請到 Firebase 控制台的 Authentication → Sign-in method 啟用 Google。",
+  "This app domain ({domain}) is not authorized in Firebase yet. Add it under Firebase console → Authentication → Settings → Authorized domains.": "此應用程式網域（{domain}）尚未加入 Firebase 授權名單。請到 Firebase 控制台的 Authentication → Settings → Authorized domains 新增它。",
   "Cloud sync": "雲端同步",
   "Firebase isn’t configured. Copy .env.example to .env.local, fill in your Firebase web config and restart the dev server.": "尚未設定 Firebase。請複製 .env.example 至 .env.local，填寫 Firebase 網頁設定後重新啟動開發伺服器。",
   "Sign in to sync notes, types, collections, pins and images across devices. Your data also stays in this browser for offline use.": "登入後可跨裝置同步筆記、類型、收藏夾、釘選項目及圖片。資料也會保存在此瀏覽器，供離線使用。",

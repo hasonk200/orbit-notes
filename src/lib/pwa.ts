@@ -1,5 +1,6 @@
 /** Home-screen app support: service worker, install prompt and update notice. */
 import { create } from 'zustand';
+import { isNativeApp } from './native';
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -13,8 +14,9 @@ interface PwaState {
 }
 
 const standalone = () =>
-  typeof window !== 'undefined' &&
-  (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true);
+  isNativeApp() ||
+  (typeof window !== 'undefined' &&
+    (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true));
 
 export const usePwa = create<PwaState>(() => ({ canInstall: false, installed: standalone(), updateReady: false }));
 
@@ -87,7 +89,7 @@ export function initPwa() {
   window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', syncThemeColor);
   syncThemeColor();
 
-  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  if (isNativeApp() || !import.meta.env.PROD || !('serviceWorker' in navigator)) return;
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     // A newer version took over. Only mention it if an older one was running.

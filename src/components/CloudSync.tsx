@@ -63,6 +63,8 @@ export function CloudSyncSettings() {
       }
       if (code === 'auth/operation-not-allowed' || code === 'auth/configuration-not-found')
         setMsg(tr('Google sign-in is not enabled for this Firebase project yet. Enable it in Firebase console → Authentication → Sign-in method → Google.'));
+      else if (code === 'auth/unauthorized-domain')
+        setMsg(tr('This app domain ({domain}) is not authorized in Firebase yet. Add it under Firebase console → Authentication → Settings → Authorized domains.', { domain: window.location.hostname || 'localhost' }));
       else setMsg(e?.message ?? String(e));
     } finally {
       setBusy(false);
