@@ -3,7 +3,7 @@ import { relativeTime } from '../lib/dates';
 import { uid } from '../lib/uid';
 import { useT } from '../store/uiStore';
 import { useSync } from '../sync/engine';
-import { fb } from '../sync/firebase';
+import { aiService as service, manage, readConsentRequestId } from '../sync/aiService';
 
 type Connection = {
   id: string; name: string; kind: 'mcp' | 'api'; scopes: string[]; expiresAt: number; revokedAt: number | null;
@@ -13,7 +13,6 @@ type Change = {
 };
 type ChangePage = { changes: Change[]; next_cursor: string | null };
 type ChangeDetail = Change & { before: { title: string; text: string; next_offset: number | null } | null };
-type Consent = { name: string; canWrite: boolean; destination: string };
 
 const actions = {
   create_note: 'Created note', append_daily_note: 'Appended to daily note', append_to_note: 'Appended to note',
@@ -21,53 +20,18 @@ const actions = {
   trash_note: 'Moved note to Trash', restore_note: 'Restored note', undo_change: 'Undid change',
 } as const;
 
-function readService() {
-  const setting = import.meta.env.VITE_ORBIT_AI_URL;
-  if (!setting) return null;
-  try {
-    const url = new URL(setting);
-    const dev = import.meta.env.DEV && url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname);
-    return (url.protocol === 'https:' || dev) && !url.username && !url.password &&
-      url.pathname === '/' && !url.search && !url.hash ? url.origin : null;
-  } catch {
-    return null;
-  }
-}
-const service = readService();
-
-async function manage<T>(account: string, path: string, options: RequestInit = {}): Promise<T> {
-  const user = fb().auth.currentUser;
-  if (!user || user.uid !== account) throw new Error('Sign in to Orbit first.');
-  const token = await user.getIdToken();
-  let response: Response;
-  try {
-    response = await fetch(service + '/manage' + path, {
-      ...options, headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) },
-    });
-  } catch {
-    throw new Error('Could not reach the Orbit AI service.');
-  }
-  if (response.status === 204) return undefined as T;
-  const data = await response.json().catch(() => null);
-  if (!response.ok || !data) throw new Error(data?.error ?? 'Orbit could not complete this request.');
-  return data as T;
-}
-
-function ConnectedAiSettings({ account, email, requestId }: { account: string; email: string; requestId: string | null }) {
+function ConnectedAiSettings({ account }: { account: string }) {
   const tr = useT();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [history, setHistory] = useState<Change[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [detail, setDetail] = useState<ChangeDetail | null>(null);
-  const [consent, setConsent] = useState<Consent | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [name, setName] = useState('');
   const [scope, setScope] = useState<'read' | 'write'>('read');
   const [newToken, setNewToken] = useState('');
-  const [returnLink, setReturnLink] = useState('');
-  const [copied, setCopied] = useState(false);
   const undoRequests = useRef(new Map<string, string>());
 
   async function refresh(signal?: AbortSignal) {
@@ -83,16 +47,13 @@ function ConnectedAiSettings({ account, email, requestId }: { account: string; e
   useEffect(() => {
     const controller = new AbortController();
     setBusy(true);
-    const work = requestId
-      ? manage<Consent>(account, '/consent/' + encodeURIComponent(requestId), { signal: controller.signal }).then(setConsent)
-      : refresh(controller.signal);
-    void work.catch((failure: Error) => {
+    void refresh(controller.signal).catch((failure: Error) => {
       if (!controller.signal.aborted) setError(failure.message);
     }).finally(() => {
       if (!controller.signal.aborted) setBusy(false);
     });
     return () => controller.abort();
-  }, [account, requestId]);
+  }, [account]);
 
   async function run(fn: () => Promise<void>) {
     if (busy) return;
@@ -105,50 +66,6 @@ function ConnectedAiSettings({ account, email, requestId }: { account: string; e
   }
 
   const message = error ? <p className="banner warn" role="alert">{tr(error)}</p> : null;
-  if (requestId) {
-    function decide(choice: 'read' | 'write' | 'deny') {
-      return run(async () => {
-        const { redirect } = await manage<{ redirect: string }>(account, '/consent/' + encodeURIComponent(requestId!), {
-          method: 'POST', body: JSON.stringify({ choice }),
-        });
-        // Never jump away on its own: show the link so it can be copied or opened.
-        setReturnLink(redirect);
-      });
-    }
-    if (returnLink) {
-      const copy = async () => {
-        try {
-          await navigator.clipboard.writeText(returnLink);
-          setCopied(true);
-        } catch {
-          setCopied(false);
-        }
-      };
-      return <>
-        <p>{tr('Copy this link and open it in the browser where you started connecting, or continue here. It works once and expires in a few minutes.')}</p>
-        <div className="btn-row orbit-ai-form">
-          <input readOnly value={returnLink} onFocus={(event) => event.currentTarget.select()} aria-label={tr('Return link')} />
-        </div>
-        <div className="btn-row">
-          <button className="btn primary" type="button" onClick={() => void copy()}>{copied ? tr('Copied') : tr('Copy link')}</button>
-          <a className="btn" href={returnLink}>{tr('Continue to {destination}', { destination: consent?.destination ?? '' })}</a>
-        </div>
-      </>;
-    }
-    return <>
-      {consent && <>
-        <p>{tr('{client} wants to connect to Orbit. The authorization will return to {destination}.', { client: consent.name, destination: consent.destination })}</p>
-        <p className="muted">{tr('Signing in as {account}', { account: email })}</p>
-        <div className="btn-row">
-          <button className="btn primary" type="button" disabled={busy} onClick={() => void decide('read')}>{tr('Allow read only')}</button>
-          {consent.canWrite && <button className="btn" type="button" disabled={busy} onClick={() => void decide('write')}>{tr('Allow read and write')}</button>}
-          <button className="btn" type="button" disabled={busy} onClick={() => void decide('deny')}>{tr('Decline')}</button>
-        </div>
-      </>}
-      {message}
-    </>;
-  }
-
   const active = connections.filter((client) => !client.revokedAt && client.expiresAt > Date.now());
   return <>
     <p className="muted">{tr('AI connections can access the notes synced to this Orbit account.')}</p>
@@ -233,11 +150,12 @@ function ConnectedAiSettings({ account, email, requestId }: { account: string; e
 export function AiAccessSettings() {
   const tr = useT();
   const user = useSync((state) => state.user);
-  const requestId = typeof window === 'undefined' ? null : new URLSearchParams(window.location.hash.slice(1)).get('ai_request');
+  const requestId = readConsentRequestId();
   return <section className="card-section" id="ai-access">
     <h3>{tr('AI access')}</h3>
+    {requestId && <p className="banner"><a href={import.meta.env.BASE_URL + 'connect' + window.location.hash}>{tr('An AI app is waiting for your approval. Open the connect page')}</a></p>}
     {!service ? <p className="muted">{tr('The Orbit AI service has not been set up.')}</p> :
       !user ? <p className="muted">{tr('Sign in under Cloud Sync above to manage AI access.')}</p> :
-      <ConnectedAiSettings key={user.uid + (requestId ?? '')} account={user.uid} email={user.email ?? user.uid} requestId={requestId} />}
+      <ConnectedAiSettings key={user.uid} account={user.uid} />}
   </section>;
 }
