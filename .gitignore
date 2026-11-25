@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-mobile
 .env.local
 .firebase/
 *.log
@@ -8,3 +9,13 @@ dist
 /functions/.env
 /functions/.env.*
 !/functions/.env.example
+/src-tauri/target/
+/src-tauri/gen/schemas/
+/android/app/build/
+/android/.gradle/
+/android/build/
+/android/local.properties
+/android/app/src/main/assets/public/
+/ios/App/Pods/
+/ios/App/App/public/
+/ios/App/build/

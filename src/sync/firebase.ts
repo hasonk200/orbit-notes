@@ -1,6 +1,7 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithCredential, signInWithPopup, signOut, type Auth } from 'firebase/auth';
 import { initializeFirestore, type Firestore } from 'firebase/firestore';
+import { isTauri } from '../lib/native';
 
 const env = import.meta.env;
 const config = {
@@ -51,7 +52,7 @@ function loadGis() {
 
 /** Main sign-in: Google's account window, then hand the token to Firebase. */
 export async function signInWithGoogle() {
-  if (!googleClientId) return signInWithFirebasePopup();
+  if (isTauri() || !googleClientId) return signInWithFirebasePopup();
   await loadGis();
   const accessToken = await new Promise<string>((resolve, reject) => {
     const client = (window as any).google.accounts.oauth2.initTokenClient({
