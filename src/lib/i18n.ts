@@ -5,6 +5,7 @@ export type Translate = ((message: string, values?: Values) => string) & { langu
 
 const zhHant: Record<string, string> = {
   "Return link": "返回連結",
+  "To-do and tasks": "待辦與專案任務",
   "Quick links": "捷徑",
   "Bullet list": "項目符號",
   "Change type": "更換類型",

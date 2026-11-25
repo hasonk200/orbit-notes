@@ -23,6 +23,7 @@ import { typeLabel } from '../lib/typeLabels';
 import { classifyTaskKind, parseQuickTaskInput, PRIO_RANK, TASK_PRIORITIES } from '../lib/tasks';
 import { TaskRow } from '../components/TaskRow';
 import { Popover } from '../components/Popover';
+import { TaskTabs } from '../mobile/TaskTabs';
 
 type TodoTab = 'today' | 'upcoming' | 'anytime' | 'logbook';
 
@@ -265,6 +266,7 @@ export function TodosView() {
 
   return (
     <div className="page todos-page">
+      <TaskTabs current="todos" />
       <header className="tasks-head">
         <div className="tasks-head-left">
           <span className="todos-brand-icon">

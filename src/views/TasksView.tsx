@@ -28,6 +28,7 @@ import { classifyTaskKind, parseQuickTaskInput, PRIO_MAP, PRIO_RANK, resolveTask
 import { TaskRow } from '../components/TaskRow';
 import { TaskCard } from '../components/TaskCard';
 import { Modal } from '../components/Popover';
+import { TaskTabs } from '../mobile/TaskTabs';
 
 type DashTab = 'inbox' | 'today' | 'scheduled' | 'status' | 'context' | 'open' | 'completed' | 'all';
 type LayoutMode = 'board' | 'list' | 'table';
@@ -528,6 +529,7 @@ export function TasksView() {
 
   return (
     <div className={`page${tab === 'status' || (tab === 'all' && allLayout === 'board') ? ' tasks-full' : ' wide'}`}>
+      <TaskTabs current="tasks" />
       <header className="tasks-head">
         <div className="tasks-head-left">
           <span className="tasks-brand-icon">
