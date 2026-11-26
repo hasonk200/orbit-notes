@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight, CircleCheck, Columns2, Compass, FileText, Hash, Network, PanelLeft, Plus, Search, Settings, SquareCheckBig, Trash, X } from 'lucide-react';
+import { ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight, CircleCheck, Columns2, Compass, FileText, Hash, Network, PanelLeft, Plus, Repeat, Search, Settings, SquareCheckBig, Trash, X } from 'lucide-react';
 import { fileNameFromPath } from '../lib/native';
 import { displayTitle, useData } from '../store/dataStore';
 import { objPath, PaneContext, useOpen, usePane, type PaneCtx } from '../store/pane';
@@ -25,7 +25,7 @@ function usePathTitle(path: string): { icon: ReactNode; title: string } {
     if (!a || a === 'calendar' || a === 'daily') {
       const date = url.searchParams.get('date') ?? b;
       const mode = url.searchParams.get('mode') ?? 'day';
-      return { icon: <CalendarDays size={15} />, title: mode === 'day' && date ? (space === 'ai' ? aiLogTitle(date, tr) : dailyTitle(date, tr)) : tr('Calendar') };
+      return { icon: <CalendarDays size={15} />, title: mode === 'day' && date ? (space === 'ai' ? aiLogTitle(date, tr) : dailyTitle(date, tr)) : tr('Diary') };
     }
     if (a === 'o') {
       const o = objects.find((x) => x.id === b);
@@ -44,6 +44,7 @@ function usePathTitle(path: string): { icon: ReactNode; title: string } {
     }
     const map: Record<string, [ReactNode, string]> = {
       todos: [<CircleCheck size={15} />, tr('To-do')],
+      routines: [<Repeat size={15} />, tr('Routines')],
       tasks: [<SquareCheckBig size={15} />, tr('Tasks')],
       graph: [<Network size={15} />, tr('Graph')],
       tags: [<Hash size={15} />, b ? `#${decodePathSegment(b)}` : tr('Tags')],

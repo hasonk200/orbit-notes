@@ -4,6 +4,7 @@ import { CalendarView, type CalMode } from './views/CalendarView';
 import { TasksView } from './views/TasksView';
 import { TodosView } from './views/TodosView';
 import { RoutinesView } from './views/RoutinesView';
+import { WithCalendarAside } from './components/CalendarAside';
 import { TypeView } from './views/TypeView';
 import { TagsView } from './views/TagsView';
 import { TrashView } from './views/TrashView';
@@ -48,11 +49,23 @@ export function renderPath(path: string, tr: Translate) {
     case 'type':
       return <TypeView typeId={b} collectionId={q.get('collection')} />;
     case 'todos':
-      return <TodosView />;
+      return (
+        <WithCalendarAside>
+          <TodosView />
+        </WithCalendarAside>
+      );
     case 'routines':
-      return <RoutinesView />;
+      return (
+        <WithCalendarAside>
+          <RoutinesView />
+        </WithCalendarAside>
+      );
     case 'tasks':
-      return <TasksView />;
+      return (
+        <WithCalendarAside>
+          <TasksView />
+        </WithCalendarAside>
+      );
     case 'graph':
       return (
         <Suspense fallback={<div className="empty-state muted">{tr('Loading graph…')}</div>}>

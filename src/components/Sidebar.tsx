@@ -107,7 +107,7 @@ export function Sidebar() {
       </div>
 
       <nav className="sb-nav">
-        <NavItem icon={<CalendarDays size={16} />} label={tr('Calendar')} path="/calendar" active={isCal} />
+        <NavItem icon={<CalendarDays size={16} />} label={tr('Diary')} path="/calendar" active={isCal} />
         <NavItem
           icon={<span className="nav-today">{new Date().getDate()}</span>}
           label={tr('Today')}

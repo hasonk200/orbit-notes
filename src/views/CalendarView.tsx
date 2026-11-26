@@ -14,6 +14,7 @@ import { Backlinks } from '../components/Backlinks';
 import { AiNotesPanel } from '../components/AiNotesPanel';
 import { ObjectEditor } from '../editor/Editor';
 import { MiniCalendar } from '../components/MiniCalendar';
+import { UpcomingTasks } from '../components/CalendarAside';
 import { TaskRow } from '../components/TaskRow';
 import { ObjectRow } from '../components/ObjectCard';
 import { useIsMobile } from '../mobile/useIsMobile';
@@ -485,28 +486,6 @@ export function CalendarView({ mode, date: requestedDate }: { mode: CalMode; dat
       {safeMode === 'month' && (
         <MonthView month={startOfMonth(d)} idx={idx} onPickDay={(iso) => set('day', iso)} onPickMonth={(m) => set('month', toISODate(m))} />
       )}
-    </div>
-  );
-}
-
-function UpcomingTasks() {
-  const tr = useT();
-  const tasks = useSpaceTasks();
-  const objMap = useObjMap();
-  const today = todayISO();
-  const week = toISODate(addDays(new Date(), 7));
-  const list = tasks
-    .filter((t) => !t.done && t.due && t.due <= week && t.text.trim() && objMap.has(t.objectId) && !objMap.get(t.objectId)?.deletedAt)
-    .sort((a, b) => (a.due! < b.due! ? -1 : 1))
-    .slice(0, 8);
-  return (
-    <div className="upcoming">
-      <h4>{tr('Next 7 days')}</h4>
-      {list.length === 0 && <p className="muted small">{tr('Nothing due. Enjoy the calm.')}</p>}
-      {list.map((t) => (
-        <TaskRow key={t.id} task={t} showKindBadge showStatus={false} />
-      ))}
-      {list.some((t) => t.due! < today) && <p className="muted small">{tr('Includes overdue tasks.')}</p>}
     </div>
   );
 }

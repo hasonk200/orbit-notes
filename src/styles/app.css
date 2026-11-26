@@ -1555,6 +1555,45 @@ span.olink-card {
 .day-detail {
   max-width: 760px;
 }
+/* The diary's month + "Next 7 days" column beside To-do, Routines and Tasks (desktop only).
+   A container query hides it when the pane is too narrow (split view, small windows). */
+.side-cal {
+  container-type: inline-size;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.side-cal-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  flex: 1;
+}
+.side-cal-main {
+  min-width: 0;
+}
+.side-cal-aside {
+  border-left: 1px solid var(--line);
+}
+.side-cal-inner {
+  position: sticky;
+  top: 0;
+  padding: 8px 14px;
+}
+/* The status board needs the whole width. */
+.side-cal:has(.page.tasks-full) .side-cal-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.side-cal:has(.page.tasks-full) .side-cal-aside {
+  display: none;
+}
+@container (max-width: 940px) {
+  .side-cal-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .side-cal-aside {
+    display: none;
+  }
+}
 .day-head-lg .day-date {
   font-size: 30px;
 }
@@ -4036,6 +4075,15 @@ span.olink-card {
 .upcoming .task-row .task-due {
   flex: none;
 }
+/* The hover-only delete button would wrap onto an empty second line; pin it to the corner instead. */
+.upcoming .task-row {
+  position: relative;
+}
+.upcoming .task-row-del {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+}
 
 /* To-do page on phones: keep the four tabs on one line */
 @media (max-width: 600px) {
@@ -4960,6 +5008,20 @@ img.connect-logo {
 .app.is-mobile .update-notice,
 .app.is-mobile .backup-banner {
   bottom: calc(92px + env(safe-area-inset-bottom));
+}
+/* Phone: message and ✕ on the first line, the buttons on the second. */
+.app.is-mobile .backup-banner > span {
+  flex: 1 1 calc(100% - 64px);
+}
+.app.is-mobile .backup-banner > .icon-btn {
+  order: -1;
+  margin-left: auto;
+}
+.app.is-mobile .backup-banner > svg {
+  order: -3;
+}
+.app.is-mobile .backup-banner > span {
+  order: -2;
 }
 
 /* floating top bar */
@@ -6947,11 +7009,11 @@ img.connect-logo {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 .local-file-status.is-dirty {
-  color: #b45309;
+  color: var(--warn);
 }
 .local-dot {
   width: 7px;
@@ -6962,20 +7024,12 @@ img.connect-logo {
 .local-file-status.is-saved {
   color: var(--ok);
 }
-:root[data-theme='dark'] .local-file-status.is-dirty {
-  color: #f3c46b;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .local-file-status.is-dirty {
-    color: #f3c46b;
-  }
-}
 .local-file-title {
   margin-bottom: 2px;
 }
 .local-file-path {
   margin: 0 0 14px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--muted);
   word-break: break-all;
 }
@@ -7058,7 +7112,7 @@ img.connect-logo {
   background: var(--surface);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 .local-save-foot {
   display: flex;

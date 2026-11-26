@@ -151,7 +151,7 @@ export function CommandPalette() {
     }
     const views: [string, string, string][] = [
       ['📅', tr(space === 'ai' ? 'Today’s AI log' : 'Today’s note'), 'today'],
-      ['🗓️', tr('Calendar'), '/calendar'],
+      ['🗓️', tr('Diary'), '/calendar'],
       ['✓', tr('To-do'), '/todos'],
       ['🔁', tr('Routines'), '/routines'],
       ['☑', tr('Tasks'), '/tasks'],
