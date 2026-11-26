@@ -8,9 +8,11 @@ Read this before changing the UI. New sessions have no memory of earlier ones; t
 - Rewriting notes for the user: "manual style" (see the Orbit note “gemini flash 風格 說明改寫skill”), and **never drop information**.
 
 ## Design system: reuse, don't reinvent
+**The full style guide is [`DESIGN.md`](DESIGN.md): read it before any UI work** (colour, dark mode, type and radius scales, components, phone, motion, accessibility, writing, PR checklist). The summary below is not a substitute.
+
 Before writing new CSS, find the existing pattern below and use it. A new screen should look like it was always there.
 
-**Colours and shape** (`src/styles/tokens.css`): only use the variables: `--bg` (page), `--surface` (cards), `--surface-2/3` (hover, fills), `--line` / `--line-strong` (borders), `--text`, `--text-2`, `--muted`, `--accent` / `--accent-soft` / `--accent-text`, `--ok(-soft)`, `--danger(-soft)`, `--warn-soft`. No hard-coded colours except white text on `--accent`. Every screen must work in dark mode.
+**Colours and shape** (`src/styles/tokens.css`): only use the variables: `--bg` (page), `--surface` (cards), `--surface-2/3` (hover, fills), `--line` / `--line-strong` (borders), `--text`, `--text-2`, `--muted`, `--accent` / `--accent-soft` / `--accent-text`, `--ok(-soft)`, `--warn(-soft)`, `--info(-soft)`, `--danger(-soft)`. No hard-coded colours except white text on `--accent` and the category palette in DESIGN.md. Every screen must work in dark mode, including theme = System on a dark OS: write dark tweaks as `:root[data-theme='dark'] …` (it is always set), never `@media (prefers-color-scheme)` in app.css.
 
 **Cards**: rounded 12–18px, `1px solid var(--line)`, `var(--surface)` background. Group related controls in one card; don't stack loose headings and buttons.
 

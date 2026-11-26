@@ -40,10 +40,29 @@ export function applySpace(space: Space) {
   else root.removeAttribute('data-space');
 }
 
+const darkQuery = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+let currentTheme: Theme = 'system';
+
+/**
+ * Always sets data-theme to "light" or "dark" (System follows the OS and updates live), so every
+ * `:root[data-theme='dark']` rule also applies when the theme is System and the OS is dark.
+ */
 export function applyTheme(t: Theme) {
+  currentTheme = t;
+  const resolved = t === 'system' ? (darkQuery?.matches ? 'dark' : 'light') : t;
   const root = document.documentElement;
-  if (t === 'system') root.removeAttribute('data-theme');
-  else root.setAttribute('data-theme', t);
+  root.setAttribute('data-theme', resolved);
+  root.setAttribute('data-theme-pref', t);
+}
+
+const followSystem = () => {
+  if (currentTheme === 'system') applyTheme('system');
+};
+darkQuery?.addEventListener?.('change', followSystem);
+// backup for browsers/webviews that don't fire 'change': re-check when the window comes back
+if (typeof window !== 'undefined') {
+  window.addEventListener('focus', followSystem);
+  document.addEventListener('visibilitychange', followSystem);
 }
 
 interface SplitState {
