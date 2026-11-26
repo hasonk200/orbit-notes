@@ -3,7 +3,9 @@ import { ArrowUpDown, FolderPlus, Funnel, LayoutGrid, List, Pencil, Plus, Table,
 import { relativeTime } from '../lib/dates';
 import { includesText } from '../lib/search';
 import { propertyLabel, typeLabel } from '../lib/typeLabels';
-import { createCollection, createObject, deleteCollection, getOrCreateDaily, updateCollection } from '../db/indexers';
+import { createCollection, createObject, deleteCollection, getOrCreateDayNote, updateCollection } from '../db/indexers';
+import { AI_DOC_TYPE, AI_LOG_TYPE, aiDocStatus, spaceOf } from '../lib/spaces';
+import { MenuSelect } from '../components/MenuSelect';
 import { displayTitle, useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
@@ -38,9 +40,13 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
   const type = useData((s) => s.types.find((t) => t.id === typeId));
   const collections = useData((s) => s.collections);
   const objects = useData((s) => s.objects);
+  const space = useUI((s) => s.space);
   const open = useOpen();
   const setTypeEditor = useUI((s) => s.setTypeEditor);
-  const [view, setViewState] = useState<ViewMode>(() => readPref(`orbit-view-${typeId}`, typeId === 'daily' ? 'list' : 'grid'));
+  const isDayType = typeId === 'daily' || typeId === AI_LOG_TYPE;
+  // Archived AI documents are hidden unless asked for.
+  const [showArchived, setShowArchived] = useState(false);
+  const [view, setViewState] = useState<ViewMode>(() => readPref(`orbit-view-${typeId}`, isDayType ? 'list' : 'grid'));
   const [sort, setSort] = useState<string>(() => readPref(`orbit-sort-${typeId}`, 'updated'));
   const [filterKey, setFilterKey] = useState('');
   const [filterVal, setFilterVal] = useState('');
@@ -59,7 +65,8 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
   const typeCollections = useMemo(() => collections.filter((c) => c.typeId === typeId), [collections, typeId]);
   const activeCol = collectionId ? typeCollections.find((c) => c.id === collectionId) ?? null : null;
 
-  const allOfType = useMemo(() => objects.filter((o) => o.typeId === typeId && !o.deletedAt), [objects, typeId]);
+  const allOfType = useMemo(() => objects.filter((o) => o.typeId === typeId && !o.deletedAt && spaceOf(o) === space), [objects, typeId, space]);
+  const archivedCount = typeId === AI_DOC_TYPE ? allOfType.filter((o) => aiDocStatus(o) === 'Archived').length : 0;
 
   const colCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -73,6 +80,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
   const items = useMemo(() => {
     if (!type) return [];
     let list = activeCol ? allOfType.filter((o) => o.collectionIds?.includes(activeCol.id)) : allOfType;
+    if (typeId === AI_DOC_TYPE && !showArchived) list = list.filter((o) => aiDocStatus(o) !== 'Archived');
     if (filterKey && filterVal.trim()) {
       const q = filterVal.trim();
       if (filterKey === '__title') list = list.filter((o) => includesText(displayTitle(o, tr), q));
@@ -97,15 +105,15 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
       if (key === 'daily') return (b.dailyDate ?? '').localeCompare(a.dailyDate ?? '');
       return cmp(a.props[key], b.props[key]);
     });
-  }, [allOfType, objectMap, type, activeCol, sort, filterKey, filterVal, tr]);
+  }, [allOfType, objectMap, type, activeCol, sort, filterKey, filterVal, tr, showArchived, typeId]);
 
   if (!type) return <div className="empty-state"><h2>{tr('Unknown type')}</h2></div>;
 
   const create = async (e: React.MouseEvent) => {
     const altKey = e.altKey;
-    if (typeId === 'daily') {
-      await getOrCreateDaily(todayISO());
-      return open(`/calendar?mode=day&date=${todayISO()}`, { altKey });
+    if (isDayType) {
+      await getOrCreateDayNote(todayISO(), typeId === AI_LOG_TYPE ? 'ai' : 'me');
+      return open(typeId === AI_LOG_TYPE && space !== 'ai' ? objPath(`ai-log-${todayISO()}`) : `/calendar?mode=day&date=${todayISO()}`, { altKey });
     }
     const o = await createObject(typeId, activeCol ? { collectionIds: [activeCol.id] } : {});
     open(objPath(o.id) + '?new=1', { altKey });
@@ -255,43 +263,49 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
             <Table size={15} />
           </button>
         </div>
-        <label className="control">
-          <ArrowUpDown size={14} />
-          <select
-            value={sort}
-            onChange={(e) => {
-              setSort(e.target.value);
-              writePref(`orbit-sort-${typeId}`, e.target.value);
-            }}
-          >
-            <option value="updated">{tr('Last edited')}</option>
-            <option value="created">{tr('Created')}</option>
-            <option value="title">{tr('Title A–Z')}</option>
-            {typeId === 'daily' && <option value="daily">{tr('Date')}</option>}
-            {sortable.flatMap((p) => [
-              <option key={p.key + 'a'} value={`${p.key}:asc`}>
-                {propertyLabel(type, p, tr)} ↑
-              </option>,
-              <option key={p.key + 'd'} value={`${p.key}:desc`}>
-                {propertyLabel(type, p, tr)} ↓
-              </option>,
-            ])}
-          </select>
-        </label>
-        <label className="control">
-          <Funnel size={14} />
-          <select value={filterKey} onChange={(e) => setFilterKey(e.target.value)}>
-            <option value="">{tr('No filter')}</option>
-            <option value="__title">{tr('Title')}</option>
-            <option value="__tag">{tr('Tag')}</option>
-            {type.properties.map((p) => (
-              <option key={p.key} value={p.key}>
-                {propertyLabel(type, p, tr)}
-              </option>
-            ))}
-          </select>
-          {filterKey && <input placeholder="contains…" value={filterVal} onChange={(e) => setFilterVal(e.target.value)} autoFocus />}
-        </label>
+        <MenuSelect
+          label={tr('Sort')}
+          icon={<ArrowUpDown size={14} />}
+          value={sort}
+          onChange={(v) => {
+            setSort(v);
+            writePref(`orbit-sort-${typeId}`, v);
+          }}
+          options={[
+            { value: 'updated', label: tr('Last edited') },
+            { value: 'created', label: tr('Created') },
+            { value: 'title', label: tr('Title A–Z') },
+            ...(isDayType ? [{ value: 'daily', label: tr('Date') }] : []),
+            ...sortable.flatMap((p) => [
+              { value: `${p.key}:asc`, label: `${propertyLabel(type, p, tr)} ↑` },
+              { value: `${p.key}:desc`, label: `${propertyLabel(type, p, tr)} ↓` },
+            ]),
+          ]}
+        />
+        <div className="control-pair">
+          <MenuSelect
+            label={tr('Filter')}
+            icon={<Funnel size={14} />}
+            value={filterKey}
+            onChange={setFilterKey}
+            options={[
+              { value: '', label: tr('No filter') },
+              { value: '__title', label: tr('Title') },
+              { value: '__tag', label: tr('Tag') },
+              ...type.properties.map((p) => ({ value: p.key, label: propertyLabel(type, p, tr) })),
+            ]}
+          />
+          {filterKey && (
+            <label className="control filter-text">
+              <input placeholder={tr('Contains…')} aria-label={tr('Contains…')} value={filterVal} onChange={(e) => setFilterVal(e.target.value)} autoFocus />
+            </label>
+          )}
+        </div>
+        {archivedCount > 0 && (
+          <button type="button" className={`chip${showArchived ? ' active' : ''}`} aria-pressed={showArchived} onClick={() => setShowArchived((v) => !v)}>
+            {tr(showArchived ? 'Hide archived' : 'Show {count} archived', { count: archivedCount })}
+          </button>
+        )}
       </div>
 
       {items.length === 0 && (

@@ -11,6 +11,7 @@ import { displayTitle, useActiveObjects, useData } from '../../store/dataStore';
 import { objPath, useOpen } from '../../store/pane';
 import { useT } from '../../store/uiStore';
 import { Popover } from '../../components/Popover';
+import { parseAiTodo } from '../../lib/spaces';
 
 function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const tr = useT();
@@ -21,6 +22,7 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const priority = (node.attrs.priority as TaskPriority | null) ?? null;
   const contextId = (node.attrs.contextId as string | null) ?? null;
   const explicitKind = (node.attrs.kind === 'todo' || node.attrs.kind === 'task' ? node.attrs.kind : null) as TaskKind | null;
+  const aiTodo = parseAiTodo(node.attrs.aiTodo);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -71,6 +73,11 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
       </label>
       <NodeViewContent className="task-content" />
       <span className="task-meta" contentEditable={false}>
+        {aiTodo && (
+          <span className={`ai-todo-chip is-${aiTodo.kind}`} title={tr(aiTodo.kind === 'confirm' ? 'The AI needs you to check this' : 'Left for the next AI session')}>
+            {tr(aiTodo.kind === 'confirm' ? 'Waiting for you' : 'AI next time')}
+          </span>
+        )}
         {status !== 'open' && status !== 'done' && statusDef && (
           <button
             type="button"
@@ -332,6 +339,19 @@ export const OrbitTaskItem = BaseTaskItem.extend({
           }
         },
         renderHTML: (a: Record<string, any>) => (a.fields ? { 'data-fields': JSON.stringify(a.fields) } : {}),
+      },
+      // The AI workspace's to-dos: { kind: 'confirm' | 'next', at, notes }.
+      aiTodo: {
+        default: null,
+        keepOnSplit: false,
+        parseHTML: (el: HTMLElement) => {
+          try {
+            return JSON.parse(el.getAttribute('data-ai-todo') ?? 'null');
+          } catch {
+            return null;
+          }
+        },
+        renderHTML: (a: Record<string, any>) => (a.aiTodo ? { 'data-ai-todo': JSON.stringify(a.aiTodo) } : {}),
       },
       completedAt: {
         default: null,

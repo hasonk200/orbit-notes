@@ -18,7 +18,7 @@ import {
 import { useMemo, useState } from 'react';
 import type { TaskPriority, TaskRec, TaskStatus } from '../db/schema';
 import { createTask, rescheduleTasks, updateTask } from '../db/indexers';
-import { displayTitle, useActiveObjects, useData, useObjMap, useTypeMap } from '../store/dataStore';
+import { displayTitle, useData, useObjMap, useSpaceObjects, useSpaceTasks, useTypeMap } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { useT } from '../store/uiStore';
 import { relativeTime, shortDate, todayISO, toISODate } from '../lib/dates';
@@ -52,9 +52,9 @@ function dayBucket(ts: number): 'Today' | 'Yesterday' | 'Earlier' {
 
 export function TasksView() {
   const tr = useT();
-  const tasks = useData((s) => s.tasks);
+  const tasks = useSpaceTasks();
   const types = useData((s) => s.types);
-  const activeObjects = useActiveObjects();
+  const activeObjects = useSpaceObjects();
   const objMap = useObjMap();
   const typeMap = useTypeMap();
   const open = useOpen();

@@ -4,6 +4,8 @@ import { useMemo } from 'react';
 import { db, type CollectionRec, type LinkRec, type Obj, type ObjType, type TaskRec } from '../db/schema';
 import { dailyTitle } from '../lib/dates';
 import { translators } from '../lib/i18n';
+import { AI_LOG_TYPE, aiLogTitle, objectsInSpace, tasksInSpace, typesForSpace } from '../lib/spaces';
+import { useUI } from './uiStore';
 
 interface DataState {
   ready: boolean;
@@ -72,6 +74,29 @@ export function useActiveObjects() {
   return useMemo(() => objects.filter((o) => !o.deletedAt), [objects]);
 }
 
+/** Active notes in the space you are in. */
+export function useSpaceObjects() {
+  const objects = useData((s) => s.objects);
+  const space = useUI((s) => s.space);
+  return useMemo(() => objectsInSpace(objects, space), [objects, space]);
+}
+
+/** Tasks whose note is in the space you are in. */
+export function useSpaceTasks() {
+  const tasks = useData((s) => s.tasks);
+  const objMap = useObjMap();
+  const space = useUI((s) => s.space);
+  return useMemo(() => tasksInSpace(tasks, objMap, space), [tasks, objMap, space]);
+}
+
+/** Object types listed in the space you are in. */
+export function useSpaceTypes() {
+  const types = useData((s) => s.types);
+  const objects = useData((s) => s.objects);
+  const space = useUI((s) => s.space);
+  return useMemo(() => typesForSpace(types, objects, space), [types, objects, space]);
+}
+
 export function useObject(id?: string | null) {
   return useData((s) => (id ? s.objects.find((o) => o.id === id) : undefined));
 }
@@ -79,6 +104,7 @@ export function useObject(id?: string | null) {
 export function displayTitle(o: Obj | null | undefined, t = translators.en) {
   if (!o) return t('Deleted object');
   const title = o.title?.trim();
+  if (o.dailyDate && o.typeId === AI_LOG_TYPE && title === aiLogTitle(o.dailyDate)) return aiLogTitle(o.dailyDate, t);
   if (o.dailyDate && title === dailyTitle(o.dailyDate)) return dailyTitle(o.dailyDate, t);
   return title || t('Untitled');
 }

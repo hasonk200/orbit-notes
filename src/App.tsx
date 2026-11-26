@@ -10,7 +10,7 @@ import { SuggestPopup } from './components/SuggestPopup';
 import { TypeEditorModal } from './components/TypeEditorModal';
 import { BackupBanner } from './components/BackupBanner';
 import { UpdateNotice } from './components/AppInstall';
-import { getOrCreateDaily } from './db/indexers';
+import { getOrCreateDayNote } from './db/indexers';
 import { todayISO } from './lib/dates';
 import { isComposing } from './lib/keyboard';
 import { ConnectPage } from './views/ConnectPage';
@@ -86,7 +86,7 @@ export default function App() {
         toggleSidebar();
       } else if (mod && e.shiftKey && e.key.toLowerCase() === 'd') {
         e.preventDefault();
-        void getOrCreateDaily(todayISO()).then(() => navigate(`/calendar?mode=day&date=${todayISO()}`));
+        void getOrCreateDayNote(todayISO()).then(() => navigate(`/calendar?mode=day&date=${todayISO()}`));
       } else if (e.altKey && e.key === 'ArrowLeft' && !(e.target as HTMLElement)?.closest?.('.ProseMirror')) {
         navigate(-1);
       } else if (e.altKey && e.key === 'ArrowRight' && !(e.target as HTMLElement)?.closest?.('.ProseMirror')) {

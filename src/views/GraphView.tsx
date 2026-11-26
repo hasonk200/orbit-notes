@@ -1,7 +1,7 @@
 import { typeLabel } from '../lib/typeLabels';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
-import { displayTitle, useActiveObjects, useData } from '../store/dataStore';
+import { displayTitle, useData, useSpaceObjects } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
 
@@ -21,7 +21,7 @@ function cssVar(name: string) {
 
 export function GraphView() {
   const tr = useT();
-  const objects = useActiveObjects();
+  const objects = useSpaceObjects();
   const types = useData((s) => s.types);
   const links = useData((s) => s.links);
   const theme = useUI((s) => s.theme);

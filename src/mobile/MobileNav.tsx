@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CalendarDays, CircleCheck, Home, Plus, Search } from 'lucide-react';
-import { getOrCreateDaily } from '../db/indexers';
+import { getOrCreateDayNote } from '../db/indexers';
 import { todayISO } from '../lib/dates';
 import { useOpen, usePane } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
@@ -32,7 +32,7 @@ export function MobileNav() {
       <nav className={`m-nav${typing ? ' is-hidden' : ''}`} aria-label={tr('Main')} aria-hidden={typing || undefined}>
         {item(isHome, tr('Home screen'), <Home size={23} />, () => (isHome ? void refreshFromHome() : open('/home')))}
         {item(isCalendar, tr('Calendar'), <CalendarDays size={23} />, async () => {
-          await getOrCreateDaily(todayISO());
+          await getOrCreateDayNote(todayISO());
           open(`/calendar?mode=day&date=${todayISO()}`);
         })}
         {item(isTodos, tr('To-do'), <CircleCheck size={23} />, () => open('/todos'))}

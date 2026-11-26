@@ -254,3 +254,88 @@ test('MCP discovers OAuth, protects PKCE and callbacks, filters tool scopes and 
   await token({ grant_type: 'refresh_token', refresh_token: refreshed.refresh_token }, 400);
   await request('POST', '/mcp', refreshed.access_token, {}, 401);
 });
+
+test('AI workspace: where notes go, the daily AI log, AI to-dos and AI documents', { skip: !emulators }, async () => {
+  const user = await account();
+  const writer = (await manage(user.idToken, '/connections', { name: 'Claude', scope: 'write' }, 201)).token;
+  const reader = (await manage(user.idToken, '/connections', { name: 'Reader', scope: 'read' }, 201)).token;
+  const saved = async (noteId: string) => JSON.parse((await db.collection('users').doc(user.localId).collection('objects').doc(noteId).get()).data()!.json);
+
+  // Notes an AI creates go to the AI workspace; a note the user asked for can go to their own space.
+  const aiNote = await api(writer, 'create_note', { ...write(), title: 'AI 草稿' });
+  const mine = await api(writer, 'create_note', { ...write(), title: '💰 財務進度網站', space: 'me' });
+  assert.equal((await api(reader, 'get_note', { note_id: aiNote.note_id })).space, 'ai');
+  assert.equal((await api(reader, 'get_note', { note_id: mine.note_id })).space, 'me');
+  assert.equal((await saved(aiNote.note_id)).space, 'ai');
+  assert.equal('space' in (await saved(mine.note_id)), false);
+  assert.deepEqual((await api(reader, 'search_notes', { space: 'me' })).notes.map((n: { id: string }) => n.id), [mine.note_id]);
+  assert.deepEqual((await api(reader, 'search_notes', { space: 'ai' })).notes.map((n: { id: string }) => n.id), [aiNote.note_id]);
+  assert.equal((await api(reader, 'search_notes', {})).notes.length, 2);
+
+  // Changing the user's note leaves it in their space.
+  await api(writer, 'append_to_note', { ...write(), note_id: mine.note_id, text: '11 月數字已更新' });
+  assert.equal((await api(reader, 'get_note', { note_id: mine.note_id })).space, 'me');
+
+  // One log per day, laid out by Orbit.
+  const entry = { date: '2026-11-26', time: '9:05', title: '整理財務筆記', done: '把三個帳戶的數字對齊', notes: [mine.note_id], open: ['補上 10 月的帳單'], confirm: ['新版數字請核對'] };
+  await api(writer, 'log_ai_work', { ...write(), ...entry, time: '25:00' }, 400);
+  await api(writer, 'log_ai_work', { ...write(), ...entry, notes: ['missing-note'] }, 404);
+  await api(reader, 'log_ai_work', { ...write(), ...entry }, 403);
+  const first = await api(writer, 'log_ai_work', { ...write(), ...entry });
+  assert.equal(first.note_id, 'ai-log-2026-11-26');
+  const second = await api(writer, 'log_ai_work', { ...write(), ...entry, time: '16:40', title: '第二段', open: undefined, confirm: undefined, notes: [] });
+  const log = await api(reader, 'get_note', { note_id: 'ai-log-2026-11-26' });
+  assert.equal(log.title, 'AI 日誌 · 2026-11-26（四）');
+  assert.equal(log.type_id, 'ai-log');
+  assert.equal(log.space, 'ai');
+  assert.equal(log.daily_date, '2026-11-26');
+  assert.match(log.text, /^09:05 · Claude · 整理財務筆記\n做了什麼：把三個帳戶的數字對齊\n改了哪些筆記：\[\[/);
+  assert.match(log.text, new RegExp('\\[\\[' + mine.note_id + '\\]\\]'));
+  assert.match(log.text, /16:40 · Claude · 第二段/);
+  assert.deepEqual(log.tasks.map((t: { text: string; aiTodo: { kind: string; at: string } }) => [t.text, t.aiTodo.kind, t.aiTodo.at]), [['補上 10 月的帳單', 'next', '2026-11-26'], ['新版數字請核對', 'confirm', '2026-11-26']]);
+  assert.equal(log.tasks[0].kind, 'todo');
+
+  // The next session sees what was left for it, and how much waits for the user.
+  const context = await api(reader, 'get_ai_context', {});
+  assert.equal(context.handbook, null);
+  assert.equal(context.ai_workspace.waiting_for_user, 1);
+  assert.deepEqual(context.ai_workspace.next_time.map((t: { text: string }) => t.text), ['補上 10 月的帳單']);
+  assert.deepEqual(context.ai_workspace.next_time[0].related_notes, [mine.note_id]);
+  assert.equal(context.ai_workspace.recent_logs[0].id, 'ai-log-2026-11-26');
+  assert.match(context.usage, /log_ai_work/);
+  assert.deepEqual((await api(reader, 'list_tasks', { ai_todo: 'confirm' })).tasks.map((t: { text: string }) => t.text), ['新版數字請核對']);
+  assert.equal((await api(reader, 'list_tasks', { ai_todo: 'next', done: false })).tasks.length, 1);
+  await api(writer, 'update_task', { ...write(), note_id: log.id, version: log.version, task_id: log.tasks[0].id, done: true });
+  assert.equal((await api(reader, 'get_ai_context', {})).ai_workspace.next_time.length, 0);
+
+  // An AI to-do can also be added to any note.
+  const asked = await api(writer, 'add_task', { ...write(), note_id: mine.note_id, text: '確認帳單金額', ai_todo: 'confirm', date: '2026-11-26' });
+  const mineView = await api(reader, 'get_note', { note_id: mine.note_id });
+  assert.deepEqual(mineView.tasks.find((t: { id: string }) => t.id === asked.task_id).aiTodo, { kind: 'confirm', at: '2026-11-26' });
+
+  // AI documents: dated title, source, status and related notes; they stay in the AI workspace.
+  const report = await api(writer, 'create_note', { ...write(), type_id: 'ai-doc', title: 'Notion 全面掃描報告', date: '2026-11-25', status: 'review', related_notes: [mine.note_id], text: '## 結果\n- 找到 3 個重複頁面' });
+  const doc = await saved(report.note_id);
+  assert.equal(doc.title, 'Notion 全面掃描報告（2026-11-25）');
+  assert.equal(doc.typeId, 'ai-doc');
+  assert.equal(doc.space, 'ai');
+  assert.deepEqual(doc.props, { source: 'Claude', date: '2026-11-25', status: 'To review', related: [mine.note_id] });
+  assert.equal((await api(reader, 'search_notes', { type_id: 'ai-doc' })).notes.length, 1);
+  await api(writer, 'create_note', { ...write(), type_id: 'ai-doc', title: 'x', space: 'me' }, 400);
+  await api(writer, 'create_note', { ...write(), type_id: 'ai-log', title: 'x' }, 400);
+  await api(writer, 'create_note', { ...write(), title: 'x', status: 'review' }, 400);
+  await api(writer, 'create_note', { ...write(), type_id: 'ai-doc', title: 'x', related_notes: ['missing-note'] }, 404);
+
+  // Undo removes one log entry and keeps the rest.
+  await manage(user.idToken, '/changes/' + second.id + '/undo', write(), 409); // the log changed since (a task was completed)
+  const firstUndoable = await api(writer, 'log_ai_work', { ...write(), ...entry, time: '18:00', title: '第三段', open: undefined, confirm: undefined, notes: [] });
+  await manage(user.idToken, '/changes/' + firstUndoable.id + '/undo', write());
+  const afterUndo = await api(reader, 'get_note', { note_id: 'ai-log-2026-11-26' });
+  assert.doesNotMatch(afterUndo.text, /第三段/);
+  assert.match(afterUndo.text, /第二段/);
+
+  // Each MCP tool is offered to writers only.
+  const viaToken = await connectMcp(writer);
+  assert.ok((await viaToken.listTools()).tools.some((t) => t.name === 'log_ai_work'));
+  await viaToken.close();
+});

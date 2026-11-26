@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
-import { createObject, getOrCreateDaily } from '../db/indexers';
+import { createObject, getOrCreateDayNote } from '../db/indexers';
 import { displayTitle, useData } from '../store/dataStore';
+import { aiLogTitle, creatableTypes, spaceOf, typesForSpace } from '../lib/spaces';
 import { objPath, useOpen } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
 import { docText } from '../lib/content';
@@ -40,8 +41,11 @@ export function CommandPalette() {
   const objects = useData((s) => s.objects);
   const types = useData((s) => s.types);
   const collections = useData((s) => s.collections);
+  const space = useUI((s) => s.space);
   const open = useOpen();
   const [q, setQ] = useState('');
+  // Search looks in the space you are in; one tap widens it to both spaces.
+  const [scope, setScope] = useState<'space' | 'all'>('space');
   const [index, setIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const close = () => setPalette(false);
@@ -80,18 +84,33 @@ export function CommandPalette() {
     };
     if (query) {
       const res = search(query);
+      let elsewhere = 0;
       for (const r of res) {
         const o = objectMap.get(r.id);
         if (!o) continue;
+        const otherSpace = spaceOf(o) !== space;
+        if (otherSpace && scope === 'space') {
+          elsewhere++;
+          continue;
+        }
         const t = typeMap.get(o.typeId);
         out.push({
           key: o.id,
           icon: o.icon || t?.icon,
           label: displayTitle(o, tr),
-          hint: t && typeLabel(t, tr),
+          hint: t && (otherSpace ? `${spaceOf(o) === 'ai' ? '🤖' : '🪐'} ` : '') + typeLabel(t, tr),
           snippet: snippetAround(texts.get(o.id) ?? '', r.terms),
           section: tr('Objects'),
           run: go(objPath(o.id)),
+        });
+      }
+      if (elsewhere) {
+        out.push({
+          key: 'search-all',
+          icon: space === 'ai' ? '🪐' : '🤖',
+          label: tr('{count} more in {space}: search both spaces', { count: elsewhere, space: tr(space === 'ai' ? 'My space' : 'AI workspace') }),
+          section: tr('Objects'),
+          run: () => setScope('all'),
         });
       }
       const date = parseQuickDate(query);
@@ -99,16 +118,16 @@ export function CommandPalette() {
         out.push({
           key: 'date',
           icon: '◷',
-          label: dailyTitle(date, tr),
+          label: space === 'ai' ? aiLogTitle(date, tr) : dailyTitle(date, tr),
           hint: tr('Open day'),
           section: tr('Jump to'),
           run: async (alt) => {
-            await getOrCreateDaily(date);
+            await getOrCreateDayNote(date, space);
             go(`/calendar?mode=day&date=${date}`)(alt);
           },
         });
       }
-      for (const t of types.filter((x) => x.id !== 'daily')) {
+      for (const t of creatableTypes(types, objects, space)) {
         out.push({
           key: 'new-' + t.id,
           icon: t.icon,
@@ -122,7 +141,7 @@ export function CommandPalette() {
       }
     } else {
       const recent = objects
-        .filter((o) => !o.deletedAt)
+        .filter((o) => !o.deletedAt && spaceOf(o) === space)
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, 6);
       for (const o of recent) {
@@ -131,17 +150,17 @@ export function CommandPalette() {
       }
     }
     const views: [string, string, string][] = [
-      ['📅', tr('Today’s note'), 'today'],
+      ['📅', tr(space === 'ai' ? 'Today’s AI log' : 'Today’s note'), 'today'],
       ['🗓️', tr('Calendar'), '/calendar'],
       ['✓', tr('To-do'), '/todos'],
       ['☑', tr('Tasks'), '/tasks'],
       ['🕸', tr('Graph'), '/graph'],
       ['#', tr('Tags'), '/tags'],
-      ['🧭', tr('Explore'), '/home'],
+      ['🧭', tr(space === 'ai' ? 'AI workspace home' : 'Explore'), '/home'],
       ['🗑', tr('Trash'), '/trash'],
       ['⚙', tr('Settings'), '/settings'],
-      ...types.map((t): [string, string, string] => [t.icon, tr('All {type}', { type: typeLabel(t, tr) }), `/type/${t.id}`]),
-      ...collections.map((c) => {
+      ...typesForSpace(types, objects, space).map((t): [string, string, string] => [t.icon, tr('All {type}', { type: typeLabel(t, tr) }), `/type/${t.id}`]),
+      ...(space === 'ai' ? [] : collections).map((c) => {
         const t = typeMap.get(c.typeId);
         return [c.icon || '📁', `${t ? typeLabel(t, tr) + ' / ' : ''}${c.name}`, `/type/${c.typeId}?collection=${c.id}`] as [string, string, string];
       }),
@@ -156,7 +175,7 @@ export function CommandPalette() {
         run:
           path === 'today'
             ? async (alt) => {
-                await getOrCreateDaily(todayISO());
+                await getOrCreateDayNote(todayISO(), space);
                 go(`/calendar?mode=day&date=${todayISO()}`)(alt);
               }
             : go(path),
@@ -164,7 +183,7 @@ export function CommandPalette() {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, search, texts, objectMap, objects, types, collections, tr]);
+  }, [q, search, texts, objectMap, objects, types, collections, tr, space, scope]);
 
   useEffect(() => setIndex(0), [q]);
   useEffect(() => {
@@ -196,6 +215,14 @@ export function CommandPalette() {
             }
           }}
         />
+        <div className="palette-scope" role="group" aria-label={tr('Where to search')}>
+          <button type="button" aria-pressed={scope === 'space'} onClick={() => setScope('space')} title={tr('Search only {space}', { space: tr(space === 'ai' ? 'AI workspace' : 'My space') })}>
+            {space === 'ai' ? '🤖' : '🪐'} {tr('This space')}
+          </button>
+          <button type="button" aria-pressed={scope === 'all'} onClick={() => setScope('all')} title={tr('Search both spaces')}>
+            {tr('All')}
+          </button>
+        </div>
         <kbd>Esc</kbd>
       </div>
       <div className="palette-list" ref={listRef}>

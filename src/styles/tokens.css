@@ -103,3 +103,22 @@
   --wd-6: #b88cf5;
   color-scheme: dark;
 }
+
+/* The AI workspace uses a teal accent, so you can tell at a glance which space you are in. */
+:root[data-space='ai'] {
+  --accent: #0f9b8e;
+  --accent-soft: #e0f4f1;
+  --accent-text: #0b7a70;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-space='ai']:not([data-theme='light']) {
+    --accent: #36c2b2;
+    --accent-soft: #13332f;
+    --accent-text: #6fdccd;
+  }
+}
+:root[data-space='ai'][data-theme='dark'] {
+  --accent: #36c2b2;
+  --accent-soft: #13332f;
+  --accent-text: #6fdccd;
+}

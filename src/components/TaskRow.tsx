@@ -14,12 +14,15 @@ export function TaskRow({
   showSource = true,
   showStatus = true,
   showKindBadge = false,
+  hideEmptyMeta = false,
   extraActions,
 }: {
   task: TaskRec;
   showSource?: boolean;
   showStatus?: boolean;
   showKindBadge?: boolean;
+  /** Leave out the priority flag and the date when the task has none (for short lists such as the AI workspace home). */
+  hideEmptyMeta?: boolean;
   extraActions?: ReactNode;
 }) {
   const tr = useT();
@@ -144,19 +147,23 @@ export function TaskRow({
         </Popover>
       )}
 
-      <button
-        type="button"
-        className={`prio-chip${prioDef ? ` prio-${prioDef.id}` : ' prio-none'}`}
-        onClick={cyclePrio}
-        title={tr('Click to cycle priority (P1 High → P2 Med → P3 Low → None)')}
-      >
-        {prioDef ? prioDef.bang : <Flag size={11} />}
-      </button>
+      {(!hideEmptyMeta || prioDef) && (
+        <button
+          type="button"
+          className={`prio-chip${prioDef ? ` prio-${prioDef.id}` : ' prio-none'}`}
+          onClick={cyclePrio}
+          title={tr('Click to cycle priority (P1 High → P2 Med → P3 Low → None)')}
+        >
+          {prioDef ? prioDef.bang : <Flag size={11} />}
+        </button>
+      )}
 
-      <label className={`task-due${overdue ? ' overdue' : ''}${task.due === todayISO() ? ' today' : ''}`} title={tr('Due date')}>
-        <span>{task.due ? shortDate(task.due, tr) : tr('No date')}</span>
-        <input type="date" value={task.due ?? ''} onChange={(e) => void updateTask(task.id, { due: e.target.value || null })} />
-      </label>
+      {(!hideEmptyMeta || task.due) && (
+        <label className={`task-due${overdue ? ' overdue' : ''}${task.due === todayISO() ? ' today' : ''}`} title={tr('Due date')}>
+          <span>{task.due ? shortDate(task.due, tr) : tr('No date')}</span>
+          <input type="date" value={task.due ?? ''} onChange={(e) => void updateTask(task.id, { due: e.target.value || null })} />
+        </label>
+      )}
 
       {extraActions}
 

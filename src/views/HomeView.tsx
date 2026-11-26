@@ -1,7 +1,8 @@
 import { typeLabel } from '../lib/typeLabels';
 import { CalendarDays, CircleCheck, Network, Search, SquareCheckBig } from 'lucide-react';
 import { createObject, getOrCreateDaily } from '../db/indexers';
-import { useActiveObjects, useData, useTypeMap } from '../store/dataStore';
+import { useData, useSpaceObjects, useTypeMap } from '../store/dataStore';
+import { creatableTypes } from '../lib/spaces';
 import { objPath, useOpen } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
 import { todayISO } from '../lib/dates';
@@ -9,8 +10,9 @@ import { ObjectRow } from '../components/ObjectCard';
 
 export function HomeView() {
   const tr = useT();
-  const objects = useActiveObjects();
-  const types = useData((s) => s.types);
+  const objects = useSpaceObjects();
+  const allObjects = useData((s) => s.objects);
+  const types = creatableTypes(useData((s) => s.types), allObjects, 'me');
   const typeMap = useTypeMap();
   const open = useOpen();
   const setPalette = useUI((s) => s.setPalette);
@@ -57,7 +59,6 @@ export function HomeView() {
       <h4 className="section-label">{tr('Quick create')}</h4>
       <div className="quick-types">
         {types
-          .filter((t) => t.id !== 'daily')
           .map((t) => (
             <button
               key={t.id}

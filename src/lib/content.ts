@@ -1,6 +1,7 @@
-import type { JSONContent, TaskKind, TaskPriority, TaskStatus } from '../db/schema';
+import type { AiTodo, JSONContent, TaskKind, TaskPriority, TaskStatus } from '../db/schema';
 import { uid } from './uid';
 import { resolveTaskStatus } from './tasks';
+import { parseAiTodo } from './spaces';
 
 export const emptyDoc = (): JSONContent => ({ type: 'doc', content: [{ type: 'paragraph' }] });
 
@@ -68,6 +69,7 @@ export interface ExtractedTask {
   priority: TaskPriority | null;
   contextId: string | null;
   completedAt: number | null;
+  aiTodo: AiTodo | null;
 }
 
 /** Text of a task item, without nested task lists. */
@@ -109,6 +111,7 @@ export function extractTasks(doc: JSONContent | undefined, titleOf?: (id: string
         priority: (n.attrs.priority as TaskPriority) || null,
         contextId: n.attrs.contextId || null,
         completedAt: typeof n.attrs.completedAt === 'number' ? n.attrs.completedAt : null,
+        aiTodo: parseAiTodo(n.attrs.aiTodo),
       });
     }
   });

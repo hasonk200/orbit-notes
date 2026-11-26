@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { resolveLanguage, translators, type Language } from '../lib/i18n';
+import type { Space } from '../db/schema';
 
 export type Theme = 'light' | 'dark' | 'system';
 
@@ -23,6 +24,22 @@ function readLanguage(): Language {
   }
 }
 
+/** The space you are in is remembered on this device only. */
+function readSpace(): Space {
+  try {
+    return typeof window !== 'undefined' && window.localStorage.getItem('orbit-space') === 'ai' ? 'ai' : 'me';
+  } catch {
+    return 'me';
+  }
+}
+
+/** The AI workspace has its own accent colour, so you can tell at a glance where you are. */
+export function applySpace(space: Space) {
+  const root = document.documentElement;
+  if (space === 'ai') root.setAttribute('data-space', 'ai');
+  else root.removeAttribute('data-space');
+}
+
 export function applyTheme(t: Theme) {
   const root = document.documentElement;
   if (t === 'system') root.removeAttribute('data-theme');
@@ -39,6 +56,7 @@ interface UIState {
   paletteOpen: boolean;
   theme: Theme;
   language: Language;
+  space: Space;
   split: SplitState | null;
   typeEditor: string | null; // type id, or 'new'
   newMenuOpen: boolean;
@@ -49,6 +67,7 @@ interface UIState {
   setPalette: (v: boolean) => void;
   setTheme: (t: Theme) => void;
   setLanguage: (language: Language) => void;
+  setSpace: (space: Space) => void;
   openSplit: (path: string) => void;
   splitGo: (path: string) => void;
   splitReplace: (path: string) => void;
@@ -66,6 +85,7 @@ export const useUI = create<UIState>((set, get) => ({
   paletteOpen: false,
   theme: readTheme(),
   language: readLanguage(),
+  space: readSpace(),
   split: null,
   typeEditor: null,
   newMenuOpen: false,
@@ -91,6 +111,16 @@ export const useUI = create<UIState>((set, get) => ({
     }
     document.documentElement.lang = language;
     set({ language });
+  },
+  setSpace: (space) => {
+    try {
+      if (space === 'ai') localStorage.setItem('orbit-space', 'ai');
+      else localStorage.removeItem('orbit-space');
+    } catch {
+      /* ignore */
+    }
+    applySpace(space);
+    set({ space });
   },
   openSplit: (path) => {
     const s = get().split;
@@ -123,4 +153,5 @@ export const useUI = create<UIState>((set, get) => ({
 }));
 
 export const useT = () => useUI((state) => translators[state.language]);
+export const useCurrentSpace = () => useUI((state) => state.space);
 export const getT = () => translators[useUI.getState().language];

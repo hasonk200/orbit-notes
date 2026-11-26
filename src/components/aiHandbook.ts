@@ -9,7 +9,7 @@ import { objPath } from '../store/pane';
 export async function ensureHandbook(tr: Translate) {
   const existing = await db.objects.get(HANDBOOK_ID);
   if (!existing) {
-    await createObject('page', { id: HANDBOOK_ID, title: handbookTitle(tr), content: { type: 'doc', content: markdownToBlocks(handbookTemplate(tr)) } });
+    await createObject('page', { id: HANDBOOK_ID, space: 'me', title: handbookTitle(tr), content: { type: 'doc', content: markdownToBlocks(handbookTemplate(tr)) } });
   } else if (existing.deletedAt) {
     await restoreObject(HANDBOOK_ID);
   }
