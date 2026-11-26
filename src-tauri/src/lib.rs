@@ -1,15 +1,43 @@
 use std::{
+    fs,
     io::{ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
+    path::Path,
+    sync::Mutex,
     time::{Duration, Instant},
 };
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, Manager, State,
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_opener::OpenerExt;
+
+const MAX_LOCAL_MD_BYTES: u64 = 5 * 1024 * 1024;
+
+#[derive(Default)]
+struct PendingFiles(Mutex<Vec<String>>);
+
+fn is_markdown_file(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|e| e.to_str()).map(|s| s.to_ascii_lowercase()).as_deref(),
+        Some("md") | Some("markdown")
+    )
+}
+
+fn extract_markdown_arg(args: &[String]) -> Option<String> {
+    for arg in args.iter().skip(1) {
+        if arg.starts_with('-') {
+            continue;
+        }
+        let p = Path::new(arg);
+        if p.is_file() && is_markdown_file(p) {
+            return Some(arg.clone());
+        }
+    }
+    None
+}
 
 fn show_main(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -22,6 +50,37 @@ fn show_main(app: &tauri::AppHandle) {
 #[tauri::command]
 fn show_main_window(app: tauri::AppHandle) {
     show_main(&app);
+}
+
+#[tauri::command]
+fn take_pending_files(pending: State<'_, PendingFiles>) -> Vec<String> {
+    let mut guard = pending.0.lock().unwrap_or_else(|e| e.into_inner());
+    std::mem::take(&mut *guard)
+}
+
+#[tauri::command]
+fn read_local_markdown(path: String) -> Result<String, String> {
+    let p = Path::new(&path);
+    if !is_markdown_file(p) {
+        return Err("Only .md and .markdown files can be opened directly.".into());
+    }
+    let meta = fs::metadata(p).map_err(|e| format!("Could not inspect file: {e}"))?;
+    if !meta.is_file() {
+        return Err("Target path is not a file.".into());
+    }
+    if meta.len() > MAX_LOCAL_MD_BYTES {
+        return Err("Markdown file exceeds the 5 MB direct editor limit.".into());
+    }
+    fs::read_to_string(p).map_err(|e| format!("Could not read Markdown file: {e}"))
+}
+
+#[tauri::command]
+fn write_local_markdown(path: String, content: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    if !is_markdown_file(p) {
+        return Err("Only .md and .markdown files can be saved directly.".into());
+    }
+    fs::write(p, content.as_bytes()).map_err(|e| format!("Could not save Markdown file: {e}"))
 }
 
 #[tauri::command]
@@ -194,9 +253,16 @@ async fn desktop_google_sign_in(app: tauri::AppHandle, web_app_url: String) -> R
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(PendingFiles::default())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             show_main(app);
+            if let Some(path) = extract_markdown_arg(&args) {
+                if let Some(pending) = app.try_state::<PendingFiles>() {
+                    pending.0.lock().unwrap_or_else(|e| e.into_inner()).push(path.clone());
+                }
+                let _ = app.emit("orbit://open-file", path);
+            }
         }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -211,9 +277,19 @@ pub fn run() {
             open_local_path,
             open_external_url,
             show_main_window,
-            desktop_google_sign_in
+            desktop_google_sign_in,
+            take_pending_files,
+            read_local_markdown,
+            write_local_markdown
         ])
         .setup(|app| {
+            let cli_args: Vec<String> = std::env::args().collect();
+            if let Some(path) = extract_markdown_arg(&cli_args) {
+                if let Some(pending) = app.try_state::<PendingFiles>() {
+                    pending.0.lock().unwrap_or_else(|e| e.into_inner()).push(path);
+                }
+            }
+
             let show_item = MenuItem::with_id(app, "show", "Show Orbit", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit Orbit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
