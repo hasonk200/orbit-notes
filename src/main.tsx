@@ -8,6 +8,7 @@ import { applySpace, applyTheme, getT, useUI } from './store/uiStore';
 import { autoBackupIfDue } from './db/fsSync';
 import { upgradeTaskIndex } from './db/indexers';
 import { initSync } from './sync/engine';
+import { initWebDav } from './sync/webdav';
 import { initPwa } from './lib/pwa';
 import { initNative, showDesktopWindow } from './lib/native';
 import './styles/tokens.css';
@@ -96,6 +97,7 @@ async function boot() {
   } catch (e) {
     console.error('Orbit: cloud sync failed to start', e);
   }
+  initWebDav().catch((e) => console.error('Orbit: WebDAV sync failed to start', e));
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <BrowserRouter basename={import.meta.env.BASE_URL.replace(/[/]$/, '')}>

@@ -256,6 +256,8 @@ pub fn run() {
         .manage(PendingFiles::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // WebDAV sync (e.g. Nutstore): servers don't allow web pages to call them, so requests go through Rust.
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             show_main(app);
             if let Some(path) = extract_markdown_arg(&args) {
