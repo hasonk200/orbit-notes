@@ -51,6 +51,16 @@ export interface Obj {
   deletedAt?: number | null;
   syncConflictOf?: string;
   syncConflictDeleted?: boolean;
+  /** Notes left for future AI sessions (and by the user for them), kept apart from the body. */
+  aiNotes?: AiNote[];
+}
+
+export interface AiNote {
+  id: string;
+  at: number;
+  /** Which AI app wrote it, or 'me' for the user. */
+  by: string;
+  text: string;
 }
 
 export interface CollectionRec {

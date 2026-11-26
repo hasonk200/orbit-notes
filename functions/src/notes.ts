@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { FieldPath, type Firestore } from 'firebase-admin/firestore';
 import { z } from 'zod';
-import type { JSONContent, Obj, ObjType } from '../../src/db/schema';
+import type { AiNote, JSONContent, Obj, ObjType } from '../../src/db/schema';
 import { assignTaskIds, docText, emptyDoc, extractTags, extractTasks, patchTaskInDoc, walk } from '../../src/lib/content';
 import { dailyTitle } from '../../src/lib/dates';
 import { markdownToBlocks } from '../../src/lib/markdown';
 import { InsertError, insertMarkdown } from '../../src/lib/insertMarkdown';
+import { appendAiNote, HANDBOOK_ID, handbookTemplate, handbookTitle, MAX_AI_NOTE_LENGTH } from '../../src/lib/aiNotes';
 import { appendTask } from '../../src/lib/taskInput';
 import { classifyTaskKind } from '../../src/lib/tasks';
 import { objectFingerprint } from '../../src/sync/objectVersions';
@@ -36,6 +37,7 @@ const taskFields = {
 };
 
 export const operations = {
+  get_ai_context: { description: 'Start here. Reads the AI handbook: the user’s standing instructions for AI apps, and notes earlier AI sessions left for everyone. Call it once at the start of a session, before reading or changing notes.', input: z.object({}), write: false },
   search_notes: { description: 'Search synced notes in your Orbit account. Use the next cursor to continue across pages.', input: z.object({
     query: z.string().max(300).default(''), type_id: id.optional(), from_date: date.optional(), to_date: date.optional(),
     in_trash: z.boolean().default(false), limit: page, cursor: z.string().max(1000).optional(),
@@ -71,6 +73,9 @@ export const operations = {
     replace_body: markdown.optional(),
   }).refine((input) => input.title !== undefined || input.replace_text !== undefined || input.insert_text !== undefined || input.replace_body !== undefined, 'Supply a title, insert_text, replace_text or replace_body.')
     .refine((input) => [input.replace_text, input.insert_text, input.replace_body].filter((v) => v !== undefined).length <= 1, 'Use only one of insert_text, replace_text or replace_body per call.'), write: true },
+  add_ai_note: { description: 'Leave a short note for future AI sessions. With note_id it is added to that note’s AI notes: what you changed and why, what is still open, what to watch out for. Without note_id it goes to the AI handbook, for things that apply everywhere (the user’s preferences, habits, rules). AI notes are kept apart from the note body and folded away for the user; get_note and get_ai_context return them as ai_notes. Do not repeat what the note itself already says.', input: z.object({
+    ...request, note_id: id.optional().describe('The note this is about. Omit to write in the AI handbook.'), text: z.string().trim().min(1).max(MAX_AI_NOTE_LENGTH),
+  }), write: true },
   add_task: { description: 'Add a linked to-do or project task inside a source note so it appears in Orbit.', input: z.object({
     ...request, ...target, text: z.string().trim().min(1).max(2000), ...taskFields,
   }), write: true },
@@ -110,6 +115,11 @@ async function summary(note: Obj, appUrl: URL) {
     id: note.id, title: note.title, type_id: note.typeId, daily_date: note.dailyDate ?? null, tags: note.tags,
     updated_at: note.updatedAt, trashed: !!note.deletedAt, version: await version(note), url: link(appUrl, note.id),
   };
+}
+
+/** AI notes as the API returns them: newest last, at most the latest 30. */
+function publicAiNotes(note: Obj) {
+  return (note.aiNotes ?? []).slice(-30).map((n: AiNote) => ({ at: new Date(n.at).toISOString(), by: n.by === 'me' ? 'user' : n.by, text: n.text }));
 }
 
 function textPage(value: string, offset: number) {
@@ -210,6 +220,12 @@ export function createNotesService(db: Firestore, appUrl: URL) {
     }
 
     switch (operation) {
+      case 'get_ai_context': {
+        const handbook = decode(HANDBOOK_ID, (await notes.doc(HANDBOOK_ID).get()).data() as CloudObject | undefined);
+        const usage = 'Use add_ai_note with a note_id after changing a note, to say what you did and why. Use it without note_id for things every AI app should know. The user can read and edit all of this in Orbit.';
+        if (!handbook || handbook.deletedAt) return { handbook: null, usage: 'There is no AI handbook yet. ' + usage };
+        return { handbook: { ...await summary(handbook, appUrl), ai_notes: publicAiNotes(handbook), ...textPage(docText(handbook.content, (key) => `[[${key}]]`), 0) }, usage };
+      }
       case 'get_note': {
         const input = operations.get_note.input.parse(validation.data);
         const note = decode(input.note_id, (await notes.doc(input.note_id).get()).data() as CloudObject | undefined);
@@ -228,7 +244,7 @@ export function createNotesService(db: Firestore, appUrl: URL) {
             linkedTypes: t.linkIds.map((lid) => typeCache.get(lid)),
           }),
         }));
-        return { ...await summary(note, appUrl), ...textPage(docText(note.content, (key) => `[[${key}]]`), input.offset), tasks };
+        return { ...await summary(note, appUrl), ai_notes: publicAiNotes(note), ...textPage(docText(note.content, (key) => `[[${key}]]`), input.offset), tasks };
       }
       case 'search_notes': {
         const input = operations.search_notes.input.parse(validation.data);
@@ -353,11 +369,12 @@ export function createNotesService(db: Firestore, appUrl: URL) {
         undone = (await tx.get(changes.doc(args.change_id!))).data() as Change | undefined;
         if (!undone) throw new ApiError(404, 'Change not found.');
       }
-      const noteId = undone?.note_id ?? args.note_id ?? (args.date ? 'daily-' + args.date : newNoteId);
+      const noteId = undone?.note_id ?? args.note_id ?? (operation === 'add_ai_note' ? HANDBOOK_ID : args.date ? 'daily-' + args.date : newNoteId);
       const noteRef = notes.doc(noteId);
       const snapshot = await tx.get(noteRef);
       const before = decode(noteId, snapshot.data() as CloudObject | undefined);
-      if (!before && operation !== 'create_note' && operation !== 'append_daily_note') throw new ApiError(404, 'Note not found.');
+      const startsHandbook = operation === 'add_ai_note' && noteId === HANDBOOK_ID;
+      if (!before && operation !== 'create_note' && operation !== 'append_daily_note' && !startsHandbook) throw new ApiError(404, 'Note not found.');
       if (snapshot.exists && !before && operation === 'append_daily_note') throw new ApiError(409, 'This day has a permanently deleted note. Open the day in Orbit first.');
       if (before?.syncConflictOf) throw new ApiError(409, 'Resolve this sync conflict in Orbit before making AI changes to it.');
       const expected = undone?.resulting_version ?? args.version;
@@ -397,6 +414,17 @@ export function createNotesService(db: Firestore, appUrl: URL) {
             content: replacement ? replaceText(before!.content, replacement.from, replacement.to)
               : args.insert_text ? insertText(before!.content, args.insert_text.anchor, args.insert_text.text, args.insert_text.position)
               : args.replace_body !== undefined ? replaceBody(before!.content, args.replace_body) : before!.content };
+          break;
+        }
+        case 'add_ai_note': {
+          const args = operations.add_ai_note.input.parse(validation.data);
+          let note = before;
+          if (!note) {
+            // The first handbook note also starts the handbook itself.
+            note = makeNote(HANDBOOK_ID, 'page', handbookTitle(), now, null);
+            note.content = { type: 'doc', content: markdownToBlocks(handbookTemplate()) };
+          }
+          after = { ...note, aiNotes: appendAiNote(note.aiNotes, { id: input.request_id, at: now, by: actor.name, text: args.text }) };
           break;
         }
         case 'add_task': {

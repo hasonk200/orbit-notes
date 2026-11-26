@@ -5,6 +5,18 @@ export type Translate = ((message: string, values?: Values) => string) & { langu
 
 const zhHant: Record<string, string> = {
   "Return link": "返回連結",
+  "AI notes": "AI 備註",
+  "Last: {time} · {who}": "最後：{time} · {who}",
+  "For future AI sessions": "留給之後的 AI 看",
+  "AI apps read these before the note itself, and add to them after making changes. You can leave a message for them too.": "AI 讀這篇筆記時會先看這裡，改完東西也會在這裡留言。你也可以留言給之後的 AI。",
+  "No AI notes yet.": "還沒有 AI 備註。",
+  "Delete this AI note": "刪除這則 AI 備註",
+  "Delete this AI note?": "要刪除這則 AI 備註嗎？",
+  "Leave a message for future AI sessions…": "留言給之後的 AI…",
+  "You": "你",
+  "AI handbook": "AI 交接簿",
+  "One page every AI app reads before it starts: who you are, how you like things done, and messages AI apps leave for each other. Each note also has its own folded AI notes at the bottom.": "每個 AI 開始工作前都會先讀的一頁：你是誰、你的習慣和規矩，還有 AI 之間互相留的話。每篇筆記底部也有自己的「AI 備註」，平常是收起來的。",
+  "Open the AI handbook": "打開 AI 交接簿",
   "Refresh Orbit": "重新整理 Orbit",
   "Loading the new version…": "正在載入新版本…",
   "Synced · you have the latest version": "已同步 · 已是最新版本",

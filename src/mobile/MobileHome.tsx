@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, Check, ChevronRight, CircleCheck, Hash, Monitor, Moon, Network, Plus, Settings, SquareCheckBig, Sun, Trash } from 'lucide-react';
+import { BookOpen, CalendarDays, Check, ChevronRight, CircleCheck, Hash, Monitor, Moon, Network, Plus, Settings, SquareCheckBig, Sun, Trash } from 'lucide-react';
 import { getOrCreateDaily } from '../db/indexers';
 import { dateLabel, todayISO } from '../lib/dates';
 import { classifyTaskKind } from '../lib/tasks';
@@ -11,6 +11,7 @@ import { OrbitLogo } from '../components/OrbitLogo';
 import { SyncIndicator } from '../components/CloudSync';
 import { MobileHeader } from './MobileHeader';
 import { refreshFromHome, useRefresh } from './refresh';
+import { ensureHandbook } from '../components/aiHandbook';
 
 function Section({ title, count, onAdd, addLabel, children }: { title: string; count?: number; onAdd?: () => void; addLabel?: string; children: React.ReactNode }) {
   return (
@@ -163,6 +164,7 @@ export function MobileHome() {
         <Row icon={<CalendarDays size={18} />} label={tr('Calendar')} onClick={() => open('/calendar?mode=month')} />
         <Row icon={<Network size={18} />} label={tr('Graph')} onClick={() => open('/graph')} />
         <Row icon={<Hash size={18} />} label={tr('Tags')} onClick={() => open('/tags')} />
+        <Row icon={<BookOpen size={18} />} label={tr('AI handbook')} onClick={async () => open(await ensureHandbook(tr))} />
         <Row icon={<Trash size={18} />} label={tr('Trash')} onClick={() => open('/trash')} right={counts.trash || null} />
       </Section>
 
