@@ -2,15 +2,16 @@ import { useMemo, useState } from 'react';
 import { BookOpen, CalendarDays, Check, ChevronRight, CircleCheck, Hash, Monitor, Moon, Network, Plus, Settings, SquareCheckBig, Sun, Trash } from 'lucide-react';
 import { getOrCreateDaily } from '../db/indexers';
 import { dateLabel, todayISO } from '../lib/dates';
+import { spaceOf } from '../lib/spaces';
 import { classifyTaskKind } from '../lib/tasks';
 import { typeLabel } from '../lib/typeLabels';
-import { displayTitle, useData, useObjMap } from '../store/dataStore';
+import { displayTitle, useData, useObjMap, useSpaceObjects, useSpaceTasks, useSpaceTypes } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
-import { OrbitLogo } from '../components/OrbitLogo';
+import { SpaceSwitcher } from '../components/SpaceSwitcher';
 import { SyncIndicator } from '../components/CloudSync';
 import { MobileHeader } from './MobileHeader';
-import { refreshFromHome, useRefresh } from './refresh';
+import { useRefresh } from './refresh';
 import { ensureHandbook } from '../components/aiHandbook';
 
 function Section({ title, count, onAdd, addLabel, children }: { title: string; count?: number; onAdd?: () => void; addLabel?: string; children: React.ReactNode }) {
@@ -45,19 +46,20 @@ function Row({ icon, label, onClick, right, color, chevron, indent }: { icon: Re
   );
 }
 
-/** The phone home screen: today, pinned notes, shortcuts, object types and recent edits. */
+/** The phone home screen of my space: today, pinned notes, shortcuts, object types and recent edits. */
 export function MobileHome() {
   const tr = useT();
   const open = useOpen();
   const objects = useData((s) => s.objects);
-  const types = useData((s) => s.types);
+  const spaceObjects = useSpaceObjects();
+  const types = useSpaceTypes();
   const collections = useData((s) => s.collections);
-  const tasks = useData((s) => s.tasks);
+  const tasks = useSpaceTasks();
   const pinned = useData((s) => s.pinned);
   const objMap = useObjMap();
   const { theme, setTheme, setTypeEditor, setPalette } = useUI();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const { busy, note } = useRefresh();
+  const { note } = useRefresh();
 
   const counts = useMemo(() => {
     const byType = new Map<string, number>();
@@ -65,7 +67,7 @@ export function MobileHome() {
     let trash = 0;
     for (const o of objects) {
       if (o.deletedAt) trash++;
-      else {
+      else if (spaceOf(o) === 'me') {
         byType.set(o.typeId, (byType.get(o.typeId) ?? 0) + 1);
         for (const c of o.collectionIds ?? []) byCollection.set(c, (byCollection.get(c) ?? 0) + 1);
       }
@@ -89,8 +91,8 @@ export function MobileHome() {
     return { todos, projectTasks };
   }, [tasks, objMap]);
 
-  const pinnedObjects = pinned.map((id) => objMap.get(id)).filter((o) => o && !o.deletedAt);
-  const recent = useMemo(() => objects.filter((o) => !o.deletedAt).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8), [objects]);
+  const pinnedObjects = pinned.map((id) => objMap.get(id)).filter((o) => o && !o.deletedAt && spaceOf(o) === 'me');
+  const recent = useMemo(() => [...spaceObjects].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8), [spaceObjects]);
   const typeOf = (id: string) => types.find((t) => t.id === id);
   const nextTheme = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light';
   const themeLabel = { light: tr('Light'), dark: tr('Dark'), system: tr('System') };
@@ -104,16 +106,7 @@ export function MobileHome() {
   return (
     <div className="mh">
       <MobileHeader
-        left={
-          <div className="m-pill">
-            <button type="button" onClick={() => void refreshFromHome()} aria-label={tr('Refresh Orbit')} title={tr('Refresh Orbit')} aria-busy={busy}>
-              <span className={`m-brand-mark${busy ? ' is-spinning' : ''}`}>
-                <OrbitLogo size={22} />
-              </span>
-              <span className="m-brand">Orbit</span>
-            </button>
-          </div>
-        }
+        left={<SpaceSwitcher />}
         right={
           <div className="m-pill">
             <button type="button" onClick={() => setTheme(nextTheme)} aria-label={tr('Theme: {current} (click for {next})', { current: themeLabel[theme], next: themeLabel[nextTheme] })}>

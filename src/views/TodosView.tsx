@@ -15,7 +15,7 @@ import {
 import { useMemo, useRef, useState } from 'react';
 import type { TaskPriority, TaskRec } from '../db/schema';
 import { createTask, rescheduleTasks, updateTask } from '../db/indexers';
-import { displayTitle, useActiveObjects, useData, useObjMap, useTypeMap } from '../store/dataStore';
+import { displayTitle, useActiveObjects, useObjMap, useSpaceTasks, useTypeMap } from '../store/dataStore';
 import { useT } from '../store/uiStore';
 import { relativeTime, todayISO, toISODate } from '../lib/dates';
 import { includesText } from '../lib/search';
@@ -119,7 +119,7 @@ function PromoteButton({ task }: { task: TaskRec }) {
 
 export function TodosView() {
   const tr = useT();
-  const tasks = useData((s) => s.tasks);
+  const tasks = useSpaceTasks();
   const objMap = useObjMap();
 
   const [tab, setTabState] = useState<TodoTab>(readTodoTab);

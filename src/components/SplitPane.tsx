@@ -5,6 +5,7 @@ import { objPath, PaneContext, useOpen, usePane, type PaneCtx } from '../store/p
 import { useT, useUI } from '../store/uiStore';
 import { decodePathSegment, renderPath } from '../routes';
 import { dailyTitle } from '../lib/dates';
+import { aiLogTitle } from '../lib/spaces';
 import { typeLabel } from '../lib/typeLabels';
 import { createObject } from '../db/indexers';
 import { useIsMobile } from '../mobile/useIsMobile';
@@ -15,6 +16,7 @@ function usePathTitle(path: string): { icon: ReactNode; title: string } {
   const objects = useData((s) => s.objects);
   const types = useData((s) => s.types);
   const collections = useData((s) => s.collections);
+  const space = useUI((s) => s.space);
   return useMemo(() => {
     const url = new URL(path, 'http://orbit.local');
     const parts = url.pathname.split('/').filter(Boolean);
@@ -22,7 +24,7 @@ function usePathTitle(path: string): { icon: ReactNode; title: string } {
     if (!a || a === 'calendar' || a === 'daily') {
       const date = url.searchParams.get('date') ?? b;
       const mode = url.searchParams.get('mode') ?? 'day';
-      return { icon: <CalendarDays size={15} />, title: mode === 'day' && date ? dailyTitle(date, tr) : tr('Calendar') };
+      return { icon: <CalendarDays size={15} />, title: mode === 'day' && date ? (space === 'ai' ? aiLogTitle(date, tr) : dailyTitle(date, tr)) : tr('Calendar') };
     }
     if (a === 'o') {
       const o = objects.find((x) => x.id === b);
@@ -46,11 +48,11 @@ function usePathTitle(path: string): { icon: ReactNode; title: string } {
       tags: [<Hash size={15} />, b ? `#${decodePathSegment(b)}` : tr('Tags')],
       trash: [<Trash size={15} />, tr('Trash')],
       settings: [<Settings size={15} />, tr('Settings')],
-      home: [<Compass size={15} />, tr('Explore')],
+      home: [<Compass size={15} />, tr(space === 'ai' ? 'AI workspace home' : 'Explore')],
     };
     const m = map[a];
     return m ? { icon: m[0], title: m[1] } : { icon: null, title: 'Orbit' };
-  }, [path, objects, types, collections, tr]);
+  }, [path, objects, types, collections, tr, space]);
 }
 
 function PaneTopBar() {

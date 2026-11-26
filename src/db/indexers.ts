@@ -355,7 +355,8 @@ export async function createTask(opts: {
   const cleanText = opts.text.trim();
   if (!cleanText) return null;
   const targetId = opts.targetObjectId && opts.targetObjectId !== '__today' ? opts.targetObjectId : null;
-  const note = targetId ? await db.objects.get(targetId) : await getOrCreateDaily(toISODate(new Date()));
+  // Without a target, the task goes to today's note of the space you are in.
+  const note = targetId ? await db.objects.get(targetId) : await getOrCreateDayNote(toISODate(new Date()));
   if (!note) return null;
   const fresh = await db.objects.get(note.id);
   if (!fresh) return null;

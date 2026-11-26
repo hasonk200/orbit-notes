@@ -3,7 +3,8 @@ import { ArrowUpDown, FolderPlus, Funnel, LayoutGrid, List, Pencil, Plus, Table,
 import { relativeTime } from '../lib/dates';
 import { includesText } from '../lib/search';
 import { propertyLabel, typeLabel } from '../lib/typeLabels';
-import { createCollection, createObject, deleteCollection, getOrCreateDaily, updateCollection } from '../db/indexers';
+import { createCollection, createObject, deleteCollection, getOrCreateDayNote, updateCollection } from '../db/indexers';
+import { AI_LOG_TYPE, spaceOf } from '../lib/spaces';
 import { displayTitle, useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
@@ -38,9 +39,11 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
   const type = useData((s) => s.types.find((t) => t.id === typeId));
   const collections = useData((s) => s.collections);
   const objects = useData((s) => s.objects);
+  const space = useUI((s) => s.space);
   const open = useOpen();
   const setTypeEditor = useUI((s) => s.setTypeEditor);
-  const [view, setViewState] = useState<ViewMode>(() => readPref(`orbit-view-${typeId}`, typeId === 'daily' ? 'list' : 'grid'));
+  const isDayType = typeId === 'daily' || typeId === AI_LOG_TYPE;
+  const [view, setViewState] = useState<ViewMode>(() => readPref(`orbit-view-${typeId}`, isDayType ? 'list' : 'grid'));
   const [sort, setSort] = useState<string>(() => readPref(`orbit-sort-${typeId}`, 'updated'));
   const [filterKey, setFilterKey] = useState('');
   const [filterVal, setFilterVal] = useState('');
@@ -59,7 +62,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
   const typeCollections = useMemo(() => collections.filter((c) => c.typeId === typeId), [collections, typeId]);
   const activeCol = collectionId ? typeCollections.find((c) => c.id === collectionId) ?? null : null;
 
-  const allOfType = useMemo(() => objects.filter((o) => o.typeId === typeId && !o.deletedAt), [objects, typeId]);
+  const allOfType = useMemo(() => objects.filter((o) => o.typeId === typeId && !o.deletedAt && spaceOf(o) === space), [objects, typeId, space]);
 
   const colCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -103,9 +106,9 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
 
   const create = async (e: React.MouseEvent) => {
     const altKey = e.altKey;
-    if (typeId === 'daily') {
-      await getOrCreateDaily(todayISO());
-      return open(`/calendar?mode=day&date=${todayISO()}`, { altKey });
+    if (isDayType) {
+      await getOrCreateDayNote(todayISO(), typeId === AI_LOG_TYPE ? 'ai' : 'me');
+      return open(typeId === AI_LOG_TYPE && space !== 'ai' ? objPath(`ai-log-${todayISO()}`) : `/calendar?mode=day&date=${todayISO()}`, { altKey });
     }
     const o = await createObject(typeId, activeCol ? { collectionIds: [activeCol.id] } : {});
     open(objPath(o.id) + '?new=1', { altKey });
@@ -267,7 +270,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
             <option value="updated">{tr('Last edited')}</option>
             <option value="created">{tr('Created')}</option>
             <option value="title">{tr('Title A–Z')}</option>
-            {typeId === 'daily' && <option value="daily">{tr('Date')}</option>}
+            {isDayType && <option value="daily">{tr('Date')}</option>}
             {sortable.flatMap((p) => [
               <option key={p.key + 'a'} value={`${p.key}:asc`}>
                 {propertyLabel(type, p, tr)} ↑
