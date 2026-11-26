@@ -8,6 +8,7 @@ import { TagsView } from './views/TagsView';
 import { TrashView } from './views/TrashView';
 import { Settings } from './views/Settings';
 import { HomeView } from './views/HomeView';
+import { LocalFileView } from './views/LocalFileView';
 import { MobileHome } from './mobile/MobileHome';
 import { AiHome } from './views/AiHome';
 import { useUI } from './store/uiStore';
@@ -61,6 +62,8 @@ export function renderPath(path: string, tr: Translate) {
       return <TrashView />;
     case 'settings':
       return <Settings />;
+    case 'local-file':
+      return <LocalFileView path={q.get('path')} />;
     case 'home':
       return <HomeRoute />;
     default:

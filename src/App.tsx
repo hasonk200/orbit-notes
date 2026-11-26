@@ -13,6 +13,7 @@ import { UpdateNotice } from './components/AppInstall';
 import { getOrCreateDayNote } from './db/indexers';
 import { todayISO } from './lib/dates';
 import { isComposing } from './lib/keyboard';
+import { onOpenLocalFile, takePendingLocalFiles } from './lib/native';
 import { ConnectPage } from './views/ConnectPage';
 import { DesktopAuthPage } from './views/DesktopAuthPage';
 import { useIsMobile } from './mobile/useIsMobile';
@@ -96,6 +97,20 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [navigate, setPalette, toggleSidebar]);
+
+  // Open local Markdown files launched from Windows Explorer ("Open with Orbit").
+  useEffect(() => {
+    let unlisten = () => {};
+    void takePendingLocalFiles().then((files) => {
+      if (files.length) navigate(`/local-file?path=${encodeURIComponent(files[files.length - 1])}`);
+    });
+    void onOpenLocalFile((filePath) => {
+      navigate(`/local-file?path=${encodeURIComponent(filePath)}`);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten();
+  }, [navigate]);
 
   // The approval & desktop auth bridge pages stand on their own, without the sidebar or notes.
   if (location.pathname === '/connect') return <ConnectPage />;

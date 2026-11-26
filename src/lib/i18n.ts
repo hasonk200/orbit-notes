@@ -4,6 +4,16 @@ type Values = Record<string, string | number>;
 export type Translate = ((message: string, values?: Values) => string) & { language: Language };
 
 const zhHant: Record<string, string> = {
+  "Current version": "目前版本",
+  "Recovered version": "保留的版本",
+  "Deleted": "已刪除",
+  "The text of both versions is the same; only formatting or details differ.": "兩個版本的文字一樣，只有格式或細節不同。",
+  "{removed} line(s) only in the current version, {added} line(s) only in the recovered version.": "有 {removed} 行只在目前版本，{added} 行只在保留的版本。",
+  "Compare differences": "比較差異",
+  "Hide differences": "收起差異",
+  "Differences": "差異",
+  "Only in the current version": "只在目前版本",
+  "Only in the recovered version": "只在保留的版本",
   "Sort": "排序",
   "Filter": "篩選",
   "Contains…": "包含…",
@@ -200,7 +210,6 @@ const zhHant: Record<string, string> = {
   "contains “{text}”": "包含「{text}」",
   "Live search: pick a tag to list every item that has it": "即時搜尋：選一個標籤，列出所有加了它的項目",
   "Edit search": "修改搜尋條件",
-  "Filter tasks": "篩選任務",
   "Item": "項目",
   "Source note": "所在筆記",
   "Open where this item is written": "打開這個項目所在的位置",
@@ -754,6 +763,16 @@ const zhHant: Record<string, string> = {
   "Value": "值",
   "Today’s Daily Note": "今日日記",
   "Default": "預設",
+  "No local Markdown file selected.": "未選擇本地 Markdown 檔案。",
+  "Local Markdown files can only be edited in Orbit Desktop.": "只可在 Orbit 桌面版直接編輯本地 Markdown 檔案。",
+  "Local file · Not synced to cloud": "本機檔案 · 不同步至雲端",
+  "Saving…": "儲存中…",
+  "Saved": "已儲存",
+  "Open containing folder": "打開所在資料夾",
+  "Open folder": "打開資料夾",
+  "Reload from disk": "重新載入檔案",
+  "Filter tasks": "篩選任務",
+  "{objects} objects · {links} links · Alt+Click opens in split view": "{objects} 個物件 · {links} 條連結 · Alt+點擊於分割檢視開啟",
 };
 
 export function resolveLanguage(saved: string | null, preferred: readonly string[]): Language {
@@ -761,10 +780,28 @@ export function resolveLanguage(saved: string | null, preferred: readonly string
   return /^zh(?:-|$)/i.test(preferred[0] ?? '') ? 'zh-Hant' : 'en';
 }
 
+function padCjkAscii(before: string, val: string, after: string): string {
+  const lead = before && val && (
+    (/[\u4e00-\u9fff]$/.test(before) && /^[A-Za-z]/.test(val)) ||
+    (/[A-Za-z]$/.test(before) && /^[\u4e00-\u9fff]/.test(val))
+  ) ? ' ' : '';
+  const tail = val && after && (
+    (/[\u4e00-\u9fff]$/.test(val) && /^[A-Za-z]/.test(after)) ||
+    (/[A-Za-z]$/.test(val) && /^[\u4e00-\u9fff]/.test(after))
+  ) ? ' ' : '';
+  return lead + val + tail;
+}
+
 function translator(language: Language): Translate {
   return Object.assign((message: string, values?: Values) => {
     const text = language === 'zh-Hant' && Object.hasOwn(zhHant, message) ? zhHant[message] : message;
-    return values ? text.replace(/\{(\w+)\}/g, (match, key: string) => Object.hasOwn(values, key) ? String(values[key]) : match) : text;
+    if (!values) return text;
+    return text.replace(/\{(\w+)\}/g, (match, key: string, offset: number) => {
+      if (!Object.hasOwn(values, key)) return match;
+      const val = String(values[key]);
+      if (language !== 'zh-Hant') return val;
+      return padCjkAscii(text.slice(0, offset), val, text.slice(offset + match.length));
+    });
   }, { language });
 }
 

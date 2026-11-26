@@ -180,6 +180,12 @@ export function AiHome() {
           <div className="mh-sync">
             <SyncIndicator />
           </div>
+          <Row
+            icon={<BookOpen size={20} />}
+            color="var(--accent)"
+            label={tr('AI handbook')}
+            onClick={async () => open(await ensureHandbook(tr))}
+          />
         </>
       ) : (
         <>
@@ -253,7 +259,7 @@ export function AiHome() {
       </Sec>
 
       <Sec mobile={mobile} title={tr('This week')} count={weekTotal}>
-        <div className="aiw-week" role="list" aria-label={tr('Work recorded each day this week')}>
+        <div className={`aiw-week${weekTotal === 0 ? ' is-empty' : ''}`} role="list" aria-label={tr('Work recorded each day this week')}>
           {week.map((d) => (
             <button
               key={d.iso}

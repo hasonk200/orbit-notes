@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { isComposing } from '../lib/keyboard';
 
@@ -7,6 +7,12 @@ import { isComposing } from '../lib/keyboard';
  * one about itself, so a click or Escape in the inner menu does not count as "outside" and close both.
  */
 const PopoverLayer = createContext<((el: HTMLElement) => () => void) | null>(null);
+
+/** For a layer that is not a Popover (a bottom sheet) opened from inside one: clicks in it are not "outside". */
+export function useInsidePopover(ref: RefObject<HTMLElement | null>) {
+  const register = useContext(PopoverLayer);
+  useLayoutEffect(() => (ref.current && register ? register(ref.current) : undefined), [register, ref]);
+}
 
 /** Floating panel anchored to an element (or a rect), rendered in <body>. Closes on outside click / Escape. */
 export function Popover({

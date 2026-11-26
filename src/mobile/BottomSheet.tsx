@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight } from 'lucide-react';
 import { isComposing } from '../lib/keyboard';
+import { useInsidePopover } from '../components/Popover';
 
 /**
  * A sheet that slides up from the bottom of a phone screen.
@@ -9,6 +10,8 @@ import { isComposing } from '../lib/keyboard';
  */
 export function BottomSheet({ onClose, title, children, label }: { onClose: () => void; title?: ReactNode; children: ReactNode; label: string }) {
   const sheet = useRef<HTMLDivElement>(null);
+  const backdrop = useRef<HTMLDivElement>(null);
+  useInsidePopover(backdrop);
   const [drag, setDrag] = useState(0);
   const start = useRef<number | null>(null);
 
@@ -40,7 +43,7 @@ export function BottomSheet({ onClose, title, children, label }: { onClose: () =
   };
 
   return createPortal(
-    <div className="sheet-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onTouchEnd={(e) => e.target === e.currentTarget && onClose()}>
+    <div ref={backdrop} className="sheet-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onTouchEnd={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={sheet}
         className="sheet"
