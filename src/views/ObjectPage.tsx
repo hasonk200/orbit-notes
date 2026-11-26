@@ -186,7 +186,7 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
         </div>
       )}
       {obj.typeId === AI_DOC_TYPE && space === 'ai' && aiDocStatus(obj) === 'Adopted' && !obj.deletedAt && (
-        <div className="banner aiw-adopted-banner">
+        <div className="banner ai-adopted-banner">
           {tr('You adopted this document. Move it to your space to keep it with your own notes.')}
           <button type="button" className="btn" onClick={move}>
             <ArrowLeftRight size={14} /> {tr('Move to my space')}

@@ -14,12 +14,13 @@ import { MobileHeader } from './MobileHeader';
 import { useRefresh } from './refresh';
 import { ensureHandbook } from '../components/aiHandbook';
 
-function Section({ title, count, onAdd, addLabel, children }: { title: string; count?: number; onAdd?: () => void; addLabel?: string; children: React.ReactNode }) {
+export function Section({ title, count, badge, onAdd, addLabel, children }: { title: string; count?: number; badge?: React.ReactNode; onAdd?: () => void; addLabel?: string; children: React.ReactNode }) {
   return (
     <section className="mh-section">
       <header className="mh-section-head">
         <h2>{title}</h2>
         {count != null && <span className="mh-count">{count}</span>}
+        {badge}
         {onAdd && (
           <button type="button" className="mh-add" onClick={onAdd} aria-label={addLabel}>
             <Plus size={20} />
@@ -31,7 +32,7 @@ function Section({ title, count, onAdd, addLabel, children }: { title: string; c
   );
 }
 
-function Row({ icon, label, onClick, right, color, chevron, indent }: { icon: React.ReactNode; label: string; onClick: () => void; right?: React.ReactNode; color?: string; chevron?: React.ReactNode; indent?: boolean }) {
+export function Row({ icon, label, onClick, right, color, chevron, indent }: { icon: React.ReactNode; label: string; onClick: () => void; right?: React.ReactNode; color?: string; chevron?: React.ReactNode; indent?: boolean }) {
   return (
     <div className={`mh-row${indent ? ' is-indent' : ''}`}>
       <span className="mh-row-lead">{chevron}</span>

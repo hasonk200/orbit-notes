@@ -1,41 +1,70 @@
 import { useMemo, useState } from 'react';
 import { addDays } from 'date-fns';
-import { ArrowRightLeft, BookOpen, CalendarDays, ChevronRight, CircleCheck, Settings } from 'lucide-react';
+import { ArrowLeftRight, BookOpen, CalendarDays, ChevronRight, CircleCheck, Search, Settings } from 'lucide-react';
 import type { Obj, TaskRec } from '../db/schema';
 import { getOrCreateAiLog, moveToSpace } from '../db/indexers';
-import { dateLabel, fromISODate, toISODate, todayISO } from '../lib/dates';
+import { dateLabel, fromISODate, shortDate, toISODate, todayISO } from '../lib/dates';
 import { AI_DOC_TYPE, AI_LOG_TYPE, aiDocStatus, aiLogEntries, daysSince, isStaleAiTodo, RECENT_LOG_DAYS, spaceOf, type AiDocStatus } from '../lib/spaces';
 import { displayTitle, useData, useObjMap, useTypeMap } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
-import { useT } from '../store/uiStore';
+import { useT, useUI } from '../store/uiStore';
 import { TaskRow } from '../components/TaskRow';
-import { ObjectRow } from '../components/ObjectCard';
 import { SpaceSwitcher } from '../components/SpaceSwitcher';
 import { SyncIndicator } from '../components/CloudSync';
 import { ensureHandbook } from '../components/aiHandbook';
 import { MobileHeader } from '../mobile/MobileHeader';
+import { Row, Section } from '../mobile/MobileHome';
 import { useIsMobile } from '../mobile/useIsMobile';
 
-function Block({ title, count, tone, children, action }: { title: string; count?: number; tone?: 'attention'; children: React.ReactNode; action?: React.ReactNode }) {
+type Click = (e?: React.MouseEvent) => void;
+
+/** A section: the phone home screen's heading on phones, Explore's small label on the computer. */
+function Sec({ mobile, title, count, badge, children }: { mobile: boolean; title: string; count: number; badge?: boolean; children: React.ReactNode }) {
+  const counter = badge && count ? <span className="space-badge">{count}</span> : null;
+  if (mobile) {
+    return (
+      <Section title={title} count={counter ? undefined : count} badge={counter}>
+        {children}
+      </Section>
+    );
+  }
   return (
-    <section className={`aiw-block${tone ? ' is-' + tone : ''}`}>
-      <header className="aiw-block-head">
-        <h2>{title}</h2>
-        {count != null && <span className={`aiw-count${tone && count ? ' is-' + tone : ''}`}>{count}</span>}
-        {action && <span className="aiw-block-action">{action}</span>}
-      </header>
-      {children}
+    <section>
+      <h4 className="section-label aiw-label">
+        {title}
+        {counter ?? <span className="aiw-count">{count}</span>}
+      </h4>
+      <div className="row-list">{children}</div>
     </section>
   );
 }
 
-const Empty = ({ children }: { children: React.ReactNode }) => <p className="aiw-empty">{children}</p>;
+/** A row: the phone home screen's row on phones, Explore's note row on the computer. */
+function Line({ mobile, icon, color, label, right, onClick }: { mobile: boolean; icon: React.ReactNode; color?: string; label: string; right?: React.ReactNode; onClick: Click }) {
+  if (mobile) return <Row icon={icon} color={color} label={label} right={right} onClick={() => onClick()} />;
+  return (
+    <button type="button" className="obj-row" onClick={onClick}>
+      <span className="obj-row-icon" style={color ? { ['--type-color' as string]: color } : undefined}>
+        {icon}
+      </span>
+      <span className="obj-row-title">{label}</span>
+      {right != null && <span className="obj-row-type">{right}</span>}
+    </button>
+  );
+}
 
-/** The AI workspace home: what waits for you first, then today's work, the AI's own to-dos, documents and the archive. */
+const Empty = ({ mobile, children }: { mobile: boolean; children: React.ReactNode }) => <p className={mobile ? 'mh-empty' : 'muted small aiw-empty'}>{children}</p>;
+
+/**
+ * The AI workspace home, built from the same pieces as the rest of Orbit: on the computer it looks
+ * like Explore, on phones like the home screen of My space. What waits for you comes first, then
+ * today's work, the AI's own to-dos, documents, this week and the archive.
+ */
 export function AiHome() {
   const tr = useT();
   const open = useOpen();
   const mobile = useIsMobile();
+  const setPalette = useUI((s) => s.setPalette);
   const objects = useData((s) => s.objects);
   const tasks = useData((s) => s.tasks);
   const objMap = useObjMap();
@@ -68,8 +97,7 @@ export function AiHome() {
     return { confirm: confirm.sort(byAge), next: next.sort(byAge) };
   }, [tasks, objMap]);
 
-  const todayLog = logs.get(today);
-  const todayEntries = aiLogEntries(todayLog?.content);
+  const todayEntries = aiLogEntries(logs.get(today)?.content);
 
   // The last seven days, oldest on the left, with the number of work entries each day.
   const week = useMemo(
@@ -94,15 +122,19 @@ export function AiHome() {
     }
     return [...months.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([month, list]) => ({ month, list: list.sort((a, b) => b.dailyDate!.localeCompare(a.dailyDate!)) }));
   }, [logs, week]);
+  const archivedLogs = archive.reduce((n, m) => n + m.list.length, 0);
 
   const docGroups = useMemo(() => {
     const by = (s: AiDocStatus) => docs.filter((d) => aiDocStatus(d) === s).sort((a, b) => b.updatedAt - a.updatedAt);
     return { review: by('To review'), draft: by('Draft'), adopted: by('Adopted'), archived: by('Archived').length };
   }, [docs]);
+  const adoptedShown = showAllAdopted ? docGroups.adopted : docGroups.adopted.slice(0, 3);
+  const openDocs = docGroups.review.length + docGroups.draft.length;
 
-  const openToday = async () => {
+  const openToday: Click = async (e) => {
+    const altKey = e?.altKey;
     await getOrCreateAiLog(today);
-    open(`/calendar?mode=day&date=${today}`);
+    open(`/calendar?mode=day&date=${today}`, { altKey });
   };
 
   const staleChip = (t: TaskRec) =>
@@ -112,176 +144,154 @@ export function AiHome() {
       </span>
     ) : null;
 
-  const docRow = (d: Obj, extra?: React.ReactNode) => (
-    <ObjectRow key={d.id} obj={d} type={typeMap.get(d.typeId)} right={<span className="aiw-doc-meta">{d.props?.source ? `${d.props.source} · ` : ''}{d.props?.date ?? ''}{extra}</span>} />
+  const docType = typeMap.get(AI_DOC_TYPE);
+  const logType = typeMap.get(AI_LOG_TYPE);
+  const docLine = (d: Obj) => (
+    <Line key={d.id} mobile={mobile} icon={d.icon || docType?.icon} color={docType?.color} label={displayTitle(d, tr)} right={[mobile ? null : d.props?.source, d.props?.date ? shortDate(d.props.date, tr) : null].filter(Boolean).join(' · ')} onClick={(e) => open(objPath(d.id), e)} />
   );
-
-  const adoptedShown = showAllAdopted ? docGroups.adopted : docGroups.adopted.slice(0, 3);
+  const subLabel = (text: string) => <div className={`aiw-sub${mobile ? ' is-mobile' : ''}`}>{text}</div>;
+  const todoRow = (t: TaskRec) => <TaskRow key={t.id} task={t} showStatus={false} hideEmptyMeta extraActions={staleChip(t)} />;
 
   return (
     <div className={mobile ? 'mh aiw-home is-mobile' : 'page aiw-home'}>
       {mobile ? (
-        <MobileHeader
-          left={<SpaceSwitcher />}
-          right={
-            <div className="m-pill">
-              <button type="button" onClick={() => open('/settings')} aria-label={tr('Settings')}>
-                <Settings size={21} />
-              </button>
-            </div>
-          }
-        />
-      ) : (
-        <header className="page-head aiw-head">
-          <h1>
-            <span aria-hidden>🤖</span> {tr('AI workspace')}
-          </h1>
-          <p className="muted">{tr('What AI apps did for you, what waits for your OK, and what they will do next.')}</p>
-        </header>
-      )}
-
-      <div className="aiw-top">
-        <button type="button" className="mh-today aiw-today" onClick={() => void openToday()}>
-          <span className="mh-today-icon aiw-today-icon">
-            <span className="mh-today-month">{dateLabel(new Date(), tr, 'MMM', 'M月')}</span>
-            <span className="mh-today-day">{new Date().getDate()}</span>
-          </span>
-          <span className="mh-today-text">
-            <strong>{tr('Today’s AI log')}</strong>
-            <span>{todayEntries.length ? tr('{count} piece(s) of work today', { count: todayEntries.length }) : tr('No work recorded yet today')}</span>
-          </span>
-          <ChevronRight size={20} className="mh-chevron" />
-        </button>
-        <div className="aiw-quick">
-          <button type="button" className="chip" onClick={(e) => open('/todos', e)}>
-            <CircleCheck size={14} /> {tr('To-do')}
+        <>
+          <MobileHeader
+            left={<SpaceSwitcher />}
+            right={
+              <div className="m-pill">
+                <button type="button" onClick={() => open('/settings')} aria-label={tr('Settings')}>
+                  <Settings size={21} />
+                </button>
+              </div>
+            }
+          />
+          <button type="button" className="mh-today" onClick={() => openToday()}>
+            <span className="mh-today-icon aiw-today-icon">
+              <span className="mh-today-month">{dateLabel(new Date(), tr, 'MMM', 'M月')}</span>
+              <span className="mh-today-day">{new Date().getDate()}</span>
+            </span>
+            <span className="mh-today-text">
+              <strong>{tr('Today’s AI log')}</strong>
+              <span>{todayEntries.length ? tr('{count} piece(s) of work today', { count: todayEntries.length }) : tr('No work recorded yet today')}</span>
+            </span>
+            <ChevronRight size={20} className="mh-chevron" />
           </button>
-          <button type="button" className="chip" onClick={(e) => open('/calendar?mode=month', e)}>
-            <CalendarDays size={14} /> {tr('Calendar')}
-          </button>
-          <button type="button" className="chip" onClick={async (e) => open(await ensureHandbook(tr), { altKey: e.altKey })}>
-            <BookOpen size={14} /> {tr('AI handbook')}
-          </button>
-        </div>
-        {mobile && (
           <div className="mh-sync">
             <SyncIndicator />
           </div>
+        </>
+      ) : (
+        <>
+          <header className="page-head">
+            <h1>{tr('AI workspace')}</h1>
+            <p className="muted">{tr('What AI apps did for you, what waits for your OK, and what they will do next.')}</p>
+          </header>
+          <div className="explore-cards">
+            <button type="button" className="explore-card" onClick={(e) => openToday(e)}>
+              <CalendarDays size={20} />
+              <span>{tr('Today’s AI log')}</span>
+            </button>
+            <button type="button" className="explore-card" onClick={(e) => open('/todos', e)}>
+              <CircleCheck size={20} />
+              <span>{tr('To-do')}</span>
+            </button>
+            <button type="button" className="explore-card" onClick={async (e) => open(await ensureHandbook(tr), { altKey: e.altKey })}>
+              <BookOpen size={20} />
+              <span>{tr('AI handbook')}</span>
+            </button>
+            <button type="button" className="explore-card" onClick={() => setPalette(true)}>
+              <Search size={20} />
+              <span>{tr('Search')}</span>
+              <kbd>Ctrl K</kbd>
+            </button>
+          </div>
+        </>
+      )}
+
+      <Sec mobile={mobile} title={tr('Waiting for you')} count={confirm.length} badge>
+        {confirm.length === 0 ? <Empty mobile={mobile}>{tr('Nothing waits for you. When an AI needs your OK, it shows up here.')}</Empty> : confirm.map(todoRow)}
+      </Sec>
+
+      <Sec mobile={mobile} title={tr('Today’s AI log')} count={todayEntries.length}>
+        {todayEntries.length === 0 ? (
+          <Empty mobile={mobile}>{tr('No work recorded yet today.')}</Empty>
+        ) : (
+          todayEntries.map((e, i) => <Line key={i} mobile={mobile} icon={logType?.icon} color={logType?.color} label={`${e.time} · ${e.title}`} right={e.by} onClick={(ev) => openToday(ev)} />)
         )}
-      </div>
+      </Sec>
 
-      <div className="aiw-grid">
-        <div className="aiw-col">
-          <Block title={tr('Waiting for you')} count={confirm.length} tone="attention">
-            {confirm.length === 0 ? <Empty>{tr('Nothing waits for you. When an AI needs your OK, it shows up here.')}</Empty> : confirm.map((t) => <TaskRow key={t.id} task={t} showStatus={false} hideEmptyMeta extraActions={staleChip(t)} />)}
-          </Block>
+      <Sec mobile={mobile} title={tr('AI next time')} count={next.length}>
+        {next.length === 0 ? <Empty mobile={mobile}>{tr('Nothing left over. Unfinished work from AI sessions shows up here.')}</Empty> : next.map(todoRow)}
+      </Sec>
 
-          <Block title={tr('Today’s AI log')} count={todayEntries.length}>
-            {todayEntries.length === 0 ? (
-              <Empty>{tr('No work recorded yet today.')}</Empty>
-            ) : (
-              <div className="aiw-entries">
-                {todayEntries.map((e, i) => (
-                  <button key={i} type="button" className="aiw-entry" onClick={() => void openToday()}>
-                    <span className="aiw-entry-time">{e.time}</span>
-                    <span className="aiw-entry-title">{e.title}</span>
-                    <span className="aiw-entry-by">{e.by}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </Block>
+      <Sec mobile={mobile} title={tr('AI documents')} count={openDocs}>
+        {openDocs + docGroups.adopted.length === 0 && <Empty mobile={mobile}>{tr('Reports, drafts and scan results from AI apps go here.')}</Empty>}
+        {docGroups.review.length > 0 && subLabel(tr('To review'))}
+        {docGroups.review.map(docLine)}
+        {docGroups.draft.length > 0 && subLabel(tr('Draft'))}
+        {docGroups.draft.map(docLine)}
+        {docGroups.adopted.length > 0 && subLabel(tr('Recently adopted'))}
+        {adoptedShown.map((d) => (
+          <div key={d.id} className="aiw-adopted">
+            {docLine(d)}
+            <button type="button" className="icon-btn" title={tr('Move to my space')} aria-label={tr('Move to my space')} onClick={() => void moveToSpace(d.id, 'me')}>
+              <ArrowLeftRight size={16} />
+            </button>
+          </div>
+        ))}
+        {docGroups.adopted.length > 3 && (
+          <button type="button" className="aiw-more" onClick={() => setShowAllAdopted((v) => !v)}>
+            {tr(showAllAdopted ? 'Show fewer' : 'Show all {count}', { count: docGroups.adopted.length })}
+          </button>
+        )}
+        {docGroups.archived > 0 && (
+          <button type="button" className="aiw-more" onClick={(e) => open(`/type/${AI_DOC_TYPE}`, e)}>
+            {tr('{count} archived document(s), hidden', { count: docGroups.archived })}
+          </button>
+        )}
+      </Sec>
 
-          <Block title={tr('AI next time')} count={next.length}>
-            {next.length === 0 ? <Empty>{tr('Nothing left over. Unfinished work from AI sessions shows up here.')}</Empty> : next.map((t) => <TaskRow key={t.id} task={t} showStatus={false} hideEmptyMeta extraActions={staleChip(t)} />)}
-          </Block>
+      <Sec mobile={mobile} title={tr('This week')} count={weekTotal}>
+        <div className="aiw-week" role="list" aria-label={tr('Work recorded each day this week')}>
+          {week.map((d) => (
+            <button
+              key={d.iso}
+              type="button"
+              role="listitem"
+              className={`aiw-week-day${d.iso === today ? ' is-today' : ''}`}
+              disabled={!d.log}
+              onClick={(e) => open(`/calendar?mode=day&date=${d.iso}`, e)}
+              aria-label={tr('{date}: {count} piece(s) of work', { date: dateLabel(fromISODate(d.iso), tr, 'EEE MMM d', 'M月d日 EEEE'), count: d.count })}
+            >
+              <span className="aiw-week-count">{d.count || ''}</span>
+              <span className="aiw-week-track">
+                <span className="aiw-week-bar" style={{ height: `${(d.count / weekMax) * 100}%` }} />
+              </span>
+              <span className="aiw-week-label">{dateLabel(fromISODate(d.iso), tr, 'EEEEE', 'EEEEE')}</span>
+            </button>
+          ))}
         </div>
+      </Sec>
 
-        <div className="aiw-col">
-          <Block title={tr('AI documents')} count={docGroups.review.length + docGroups.draft.length}>
-            {docGroups.review.length + docGroups.draft.length + docGroups.adopted.length === 0 && <Empty>{tr('Reports, drafts and scan results from AI apps go here.')}</Empty>}
-            {docGroups.review.length > 0 && (
-              <>
-                <h3 className="aiw-sub">{tr('To review')}</h3>
-                {docGroups.review.map((d) => docRow(d))}
-              </>
-            )}
-            {docGroups.draft.length > 0 && (
-              <>
-                <h3 className="aiw-sub">{tr('Draft')}</h3>
-                {docGroups.draft.map((d) => docRow(d))}
-              </>
-            )}
-            {docGroups.adopted.length > 0 && (
-              <>
-                <h3 className="aiw-sub">{tr('Recently adopted')}</h3>
-                {adoptedShown.map((d) => (
-                  <div key={d.id} className="aiw-adopted">
-                    {docRow(d)}
-                    <button type="button" className="btn small" title={tr('Move to my space')} onClick={() => void moveToSpace(d.id, 'me')}>
-                      <ArrowRightLeft size={13} /> {tr('Move to my space')}
-                    </button>
-                  </div>
-                ))}
-                {docGroups.adopted.length > 3 && (
-                  <button type="button" className="aiw-more" onClick={() => setShowAllAdopted((v) => !v)}>
-                    {tr(showAllAdopted ? 'Show fewer' : 'Show all {count}', { count: docGroups.adopted.length })}
-                  </button>
-                )}
-              </>
-            )}
-            {docGroups.archived > 0 && (
-              <button type="button" className="aiw-more" onClick={(e) => open(`/type/${AI_DOC_TYPE}`, e)}>
-                {tr('{count} archived document(s), hidden', { count: docGroups.archived })}
-              </button>
-            )}
-          </Block>
-
-          <Block title={tr('This week')} count={weekTotal}>
-            <div className="aiw-week" role="list" aria-label={tr('Work recorded each day this week')}>
-              {week.map((d) => (
-                <button
-                  key={d.iso}
-                  type="button"
-                  role="listitem"
-                  className={`aiw-week-day${d.iso === today ? ' is-today' : ''}`}
-                  disabled={!d.log}
-                  onClick={() => open(`/calendar?mode=day&date=${d.iso}`)}
-                  aria-label={tr('{date}: {count} piece(s) of work', { date: dateLabel(fromISODate(d.iso), tr, 'EEE MMM d', 'M月d日 EEEE'), count: d.count })}
-                >
-                  <span className="aiw-week-count">{d.count || ''}</span>
-                  <span className="aiw-week-track">
-                    <span className="aiw-week-bar" style={{ height: `${(d.count / weekMax) * 100}%` }} />
-                  </span>
-                  <span className="aiw-week-label">{dateLabel(fromISODate(d.iso), tr, 'EEEEE', 'EEEEE')}</span>
-                </button>
+      <Sec mobile={mobile} title={tr('Archive')} count={archivedLogs}>
+        {archive.length === 0 ? (
+          <Empty mobile={mobile}>{tr('Logs older than a week move here, grouped by month. Nothing is deleted.')}</Empty>
+        ) : (
+          archive.map(({ month, list }) => (
+            <details key={month} className={`aiw-month${mobile ? ' is-mobile' : ''}`}>
+              <summary>
+                <ChevronRight size={16} className="aiw-month-chevron" />
+                <span className="aiw-month-name">{dateLabel(fromISODate(month + '-01'), tr, 'MMMM yyyy', 'yyyy年M月')}</span>
+                <span className="aiw-month-count">{tr('{count} log(s)', { count: list.length })}</span>
+              </summary>
+              {list.map((log) => (
+                <Line key={log.id} mobile={mobile} icon={logType?.icon} color={logType?.color} label={displayTitle(log, tr)} right={tr('{count} piece(s) of work', { count: aiLogEntries(log.content).length })} onClick={(e) => open(objPath(log.id), e)} />
               ))}
-            </div>
-          </Block>
-
-          <Block title={tr('Archive')} count={archive.reduce((n, m) => n + m.list.length, 0)}>
-            {archive.length === 0 ? (
-              <Empty>{tr('Logs older than a week move here, grouped by month. Nothing is deleted.')}</Empty>
-            ) : (
-              archive.map(({ month, list }) => (
-                <details key={month} className="aiw-month">
-                  <summary>
-                    <span>{dateLabel(fromISODate(month + '-01'), tr, 'MMMM yyyy', 'yyyy年M月')}</span>
-                    <span className="muted">{tr('{count} log(s)', { count: list.length })}</span>
-                  </summary>
-                  {list.map((log) => (
-                    <button key={log.id} type="button" className="aiw-archive-row" onClick={(e) => open(objPath(log.id), e)}>
-                      <span>{displayTitle(log, tr)}</span>
-                      <span className="muted small">{tr('{count} piece(s) of work', { count: aiLogEntries(log.content).length })}</span>
-                    </button>
-                  ))}
-                </details>
-              ))
-            )}
-          </Block>
-        </div>
-      </div>
+            </details>
+          ))
+        )}
+      </Sec>
     </div>
   );
 }
-
