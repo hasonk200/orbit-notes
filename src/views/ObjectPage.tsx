@@ -1,11 +1,13 @@
 import { useT } from '../store/uiStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Columns2, ImagePlus, Link2, Pin, PinOff, RotateCcw, Shapes, Trash, X } from 'lucide-react';
+import { ArrowLeftRight, Columns2, ImagePlus, Link2, Pin, PinOff, RotateCcw, Shapes, Trash, X } from 'lucide-react';
 import { relativeTime } from '../lib/dates';
 import { isComposing } from '../lib/keyboard';
 import { togglePinned, useData, useObject } from '../store/dataStore';
 import { objPath, useOpen, usePane } from '../store/pane';
-import { restoreObject, saveObject, softDelete } from '../db/indexers';
+import { moveToSpace, restoreObject, saveObject, softDelete } from '../db/indexers';
+import { AI_DOC_TYPE, aiDocStatus, otherSpace, spaceOf } from '../lib/spaces';
+import { useUI } from '../store/uiStore';
 import { registerDraft } from '../db/drafts';
 import { saveImage, useBlobUrl } from '../db/blobs';
 import { ObjectEditor } from '../editor/Editor';
@@ -123,6 +125,7 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
   const open = useOpen();
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
+  const currentSpace = useUI((s) => s.space);
   const iconBtn = useRef<HTMLButtonElement>(null);
   const typeBtn = useRef<HTMLDivElement>(null);
 
@@ -146,6 +149,11 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
     input.click();
   };
 
+  const space = spaceOf(obj);
+  const target = otherSpace(space);
+  const moveLabel = tr(target === 'ai' ? 'Move to the AI workspace' : 'Move to my space');
+  const move = () => void moveToSpace(obj.id, target);
+
   // On phones these live in the "⋯" sheet instead of the small toolbar icons.
   const mobileActions: MenuAction[] = [
     { key: 'pin', icon: pinned ? <PinOff size={20} /> : <Pin size={20} />, label: tr(pinned ? 'Unpin from Home' : 'Pin to Home'), onClick: () => void togglePinned(obj.id) },
@@ -153,6 +161,7 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
       ? [{ key: 'cover', icon: <ImagePlus size={20} />, label: tr('Change cover'), onClick: addCover }]
       : [{ key: 'cover', icon: <ImagePlus size={20} />, label: tr('Add cover image'), onClick: addCover }]),
     { key: 'type', icon: <Shapes size={20} />, label: tr('Change type'), onClick: () => setConvertOpen(true) },
+    { key: 'space', icon: <ArrowLeftRight size={20} />, label: moveLabel, onClick: move },
     { key: 'link', group: 1, icon: <Link2 size={20} />, label: tr('Copy link'), onClick: () => void copyObjectLink(obj.id) },
     ...(obj.deletedAt
       ? [{ key: 'restore', group: 2, icon: <RotateCcw size={20} />, label: tr('Restore'), onClick: () => void restoreObject(obj.id) }]
@@ -176,6 +185,14 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
           </button>
         </div>
       )}
+      {obj.typeId === AI_DOC_TYPE && space === 'ai' && aiDocStatus(obj) === 'Adopted' && !obj.deletedAt && (
+        <div className="banner ai-adopted-banner">
+          {tr('You adopted this document. Move it to your space to keep it with your own notes.')}
+          <button type="button" className="btn" onClick={move}>
+            <ArrowLeftRight size={14} /> {tr('Move to my space')}
+          </button>
+        </div>
+      )}
       {cover && (
         <div className="obj-cover">
           <img src={cover} alt="" />
@@ -194,6 +211,11 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
           <div ref={typeBtn}>
             <TypeBadge type={type} onClick={() => setConvertOpen(true)} />
           </div>
+          {(space === 'ai' || currentSpace === 'ai') && (
+            <span className={`space-chip is-${space}`} title={tr('This note is in {space}', { space: tr(space === 'ai' ? 'AI workspace' : 'My space') })}>
+              {space === 'ai' ? '🤖' : '🪐'} {tr(space === 'ai' ? 'AI workspace' : 'My space')}
+            </span>
+          )}
           <span className="muted small">{tr('Edited {time}', { time: relativeTime(obj.updatedAt, tr) })}</span>
           <div className="spacer" />
           {!cover && (
@@ -201,6 +223,9 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
               <ImagePlus size={16} />
             </button>
           )}
+          <button type="button" className="icon-btn" title={moveLabel} aria-label={moveLabel} onClick={move}>
+            <ArrowLeftRight size={16} />
+          </button>
           <button type="button" className="icon-btn" title={pinned ? tr('Unpin') : tr('Pin to sidebar')} onClick={() => togglePinned(obj.id)}>
             {pinned ? <PinOff size={16} /> : <Pin size={16} />}
           </button>

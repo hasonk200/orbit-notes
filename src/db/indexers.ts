@@ -3,7 +3,9 @@ import { assignTaskIds, emptyDoc, extractBlobIds, extractLinkIds, extractTags, e
 import { dailyTitle, toISODate } from '../lib/dates';
 import { classifyTaskKind } from '../lib/tasks';
 import { defaultTemplate } from '../lib/typeLabels';
-import { getT } from '../store/uiStore';
+import { getT, useUI } from '../store/uiStore';
+import { AI_LOG_TYPE, aiLogId, aiLogTitle, spaceMark } from '../lib/spaces';
+import type { Space } from './schema';
 
 /** Rebuild links / tasks / tags for one object. Must be called inside a rw transaction on objects, links, tasks. */
 async function reindex(obj: Obj, type?: ObjType) {
@@ -57,7 +59,8 @@ async function reindex(obj: Obj, type?: ObjType) {
       (prev.explicitKind ?? null) !== t.explicitKind ||
       (prev.due ?? null) !== t.due ||
       (prev.priority ?? null) !== t.priority ||
-      (prev.contextId ?? null) !== t.contextId;
+      (prev.contextId ?? null) !== t.contextId ||
+      JSON.stringify(prev.aiTodo ?? null) !== JSON.stringify(t.aiTodo);
     return {
       id: t.id,
       objectId: obj.id,
@@ -70,6 +73,7 @@ async function reindex(obj: Obj, type?: ObjType) {
       due: t.due,
       priority: t.priority,
       completedAt: t.done ? (t.completedAt ?? prev?.completedAt ?? now) : null,
+      ...(t.aiTodo ? { aiTodo: t.aiTodo } : {}),
       createdAt: prev?.createdAt ?? now,
       updatedAt: changed ? now : prev!.updatedAt,
     };
@@ -95,8 +99,11 @@ export async function createObject(typeId: string, init: Partial<Obj> = {}): Pro
     updatedAt: now,
     dailyDate: null,
     deletedAt: null,
+    // New notes go to the space you are in, unless the caller says otherwise.
+    ...spaceMark(init.space ?? useUI.getState().space),
     ...init,
   };
+  if (obj.space !== 'ai') delete obj.space;
   obj.tags = extractTags(obj.content);
   await db.transaction('rw', db.objects, db.links, db.tasks, db.types, async () => {
     await db.objects.add(obj);
@@ -112,6 +119,8 @@ export async function saveObject(id: string, patchOrFn: Partial<Obj> | ((cur: Ob
     const patch = typeof patchOrFn === 'function' ? patchOrFn(cur) : patchOrFn;
     if (!Object.keys(patch).length) return;
     const next: Obj = { ...cur, ...patch, updatedAt: Date.now() };
+    // My space is stored as no mark at all, so a note moved back is the same as one that never left.
+    if (next.space !== 'ai') delete next.space;
     if (patch.content) next.tags = extractTags(patch.content);
     await db.objects.put(next);
     if (patch.content || patch.props || patch.typeId) await reindex(next);
@@ -136,11 +145,37 @@ export async function getOrCreateDaily(date: string | Date): Promise<Obj> {
     return existing;
   }
   try {
-    return await createObject('daily', { id, dailyDate: iso, title: dailyTitle(iso) });
+    return await createObject('daily', { id, dailyDate: iso, title: dailyTitle(iso), space: 'me' });
   } catch {
     // Created concurrently (e.g. React strict mode double effect)
     return (await db.objects.get(id))!;
   }
+}
+
+/** Today's (or any day's) AI log: one per day, in the AI workspace. */
+export async function getOrCreateAiLog(date: string | Date): Promise<Obj> {
+  const iso = typeof date === 'string' ? date : toISODate(date);
+  const id = aiLogId(iso);
+  const existing = await db.objects.get(id);
+  if (existing) {
+    if (existing.deletedAt) await saveObject(id, { deletedAt: null });
+    return existing;
+  }
+  try {
+    return await createObject(AI_LOG_TYPE, { id, dailyDate: iso, title: aiLogTitle(iso), space: 'ai' });
+  } catch {
+    return (await db.objects.get(id))!;
+  }
+}
+
+/** The day's own note in a space: the daily note in my space, the AI log in the AI workspace. */
+export function getOrCreateDayNote(date: string | Date, space: Space = useUI.getState().space) {
+  return space === 'ai' ? getOrCreateAiLog(date) : getOrCreateDaily(date);
+}
+
+/** Move a note to the other space. Only the mark changes; links and tasks stay as they are. */
+export async function moveToSpace(id: string, space: Space) {
+  await saveObject(id, (cur) => ((cur.space === 'ai') === (space === 'ai') ? {} : spaceMark(space)));
 }
 
 export async function softDelete(id: string) {
@@ -200,7 +235,7 @@ export async function convertType(id: string, newTypeId: string) {
     const oldDef = cur?.properties.find((d) => d.key === def.key && d.kind === def.kind);
     if (oldDef && obj.props[def.key] !== undefined) props[def.key] = obj.props[def.key];
   }
-  await saveObject(id, { typeId: newTypeId, props, collectionIds: [], dailyDate: newTypeId === 'daily' ? obj.dailyDate : null });
+  await saveObject(id, { typeId: newTypeId, props, collectionIds: [], dailyDate: newTypeId === 'daily' || newTypeId === AI_LOG_TYPE ? obj.dailyDate : null });
 }
 
 export async function createCollection(typeId: string, name: string, icon?: string | null): Promise<CollectionRec> {
@@ -322,7 +357,8 @@ export async function createTask(opts: {
   const cleanText = opts.text.trim();
   if (!cleanText) return null;
   const targetId = opts.targetObjectId && opts.targetObjectId !== '__today' ? opts.targetObjectId : null;
-  const note = targetId ? await db.objects.get(targetId) : await getOrCreateDaily(toISODate(new Date()));
+  // Without a target, the task goes to today's note of the space you are in.
+  const note = targetId ? await db.objects.get(targetId) : await getOrCreateDayNote(toISODate(new Date()));
   if (!note) return null;
   const fresh = await db.objects.get(note.id);
   if (!fresh) return null;

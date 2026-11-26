@@ -10,6 +10,9 @@ export type JSONContent = {
   text?: string;
 };
 
+/** 'me' is the user's own space; 'ai' is the AI workspace. Missing means 'me'. */
+export type Space = 'me' | 'ai';
+
 export type PropertyKind = 'text' | 'number' | 'date' | 'select' | 'checkbox' | 'url' | 'relation';
 
 export interface PropertyDef {
@@ -31,6 +34,8 @@ export interface ObjType {
   /** Supertag: list and task items tagged #tag show this type's properties as fields. */
   tag?: string | null;
   builtin?: boolean;
+  /** Types that belong to one space only (the AI workspace's own types). */
+  space?: Space;
   order: number;
   updatedAt?: number;
 }
@@ -53,6 +58,19 @@ export interface Obj {
   syncConflictDeleted?: boolean;
   /** Notes left for future AI sessions (and by the user for them), kept apart from the body. */
   aiNotes?: AiNote[];
+  /** 'ai' puts the note in the AI workspace. Left off for the user's own space. */
+  space?: Space;
+}
+
+/** "Waiting for you" (the user should check) or "AI next time" (left for the next AI session). */
+export type AiTodoKind = 'confirm' | 'next';
+
+export interface AiTodo {
+  kind: AiTodoKind;
+  /** Local calendar date the AI made it. */
+  at: string;
+  /** Notes the to-do is about. */
+  notes?: string[];
 }
 
 export interface AiNote {
@@ -109,6 +127,8 @@ export interface TaskRec {
   due?: string | null; // yyyy-MM-dd
   priority?: TaskPriority | null;
   completedAt?: number | null;
+  /** Set for the AI workspace's two kinds of to-do. */
+  aiTodo?: AiTodo | null;
   createdAt: number;
   updatedAt: number;
 }

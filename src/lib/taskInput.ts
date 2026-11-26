@@ -1,4 +1,4 @@
-import type { JSONContent, TaskKind, TaskPriority, TaskStatus } from '../db/schema';
+import type { AiTodo, JSONContent, TaskKind, TaskPriority, TaskStatus } from '../db/schema';
 import { parseQuickDate } from './dates';
 
 export function parseTaskInput(raw: string, now?: Date) {
@@ -20,6 +20,7 @@ export interface AppendTaskOptions {
   kind?: TaskKind | null;
   status?: TaskStatus;
   contextId?: string | null;
+  aiTodo?: AiTodo | null;
 }
 
 export function appendTask(
@@ -41,6 +42,7 @@ export function appendTask(
     ...(status !== 'open' ? { status } : {}),
     ...(opts?.kind ? { kind: opts.kind } : {}),
     ...(opts?.contextId ? { contextId: opts.contextId } : {}),
+    ...(opts?.aiTodo ? { aiTodo: opts.aiTodo } : {}),
     ...(checked ? { completedAt: Date.now() } : {}),
   };
   const item = {

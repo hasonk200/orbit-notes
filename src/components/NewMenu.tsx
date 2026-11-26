@@ -1,7 +1,8 @@
 import { typeLabel } from '../lib/typeLabels';
 import { Plus } from 'lucide-react';
-import { createObject, getOrCreateDaily } from '../db/indexers';
-import { useData } from '../store/dataStore';
+import { createObject, getOrCreateDayNote } from '../db/indexers';
+import { useSpaceTypes } from '../store/dataStore';
+import { AI_LOG_TYPE } from '../lib/spaces';
 import { objPath, useOpen } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
 import { todayISO } from '../lib/dates';
@@ -9,7 +10,7 @@ import { Popover } from './Popover';
 
 export function NewMenu({ anchor, onClose }: { anchor: HTMLElement | null; onClose: () => void }) {
   const tr = useT();
-  const types = useData((s) => s.types);
+  const types = useSpaceTypes();
   const open = useOpen();
   const setTypeEditor = useUI((s) => s.setTypeEditor);
   return (
@@ -23,8 +24,8 @@ export function NewMenu({ anchor, onClose }: { anchor: HTMLElement | null; onClo
           onClick={async (e) => {
             const altKey = e.altKey;
             onClose();
-            if (t.id === 'daily') {
-              await getOrCreateDaily(todayISO());
+            if (t.id === 'daily' || t.id === AI_LOG_TYPE) {
+              await getOrCreateDayNote(todayISO());
               open(`/calendar?mode=day&date=${todayISO()}`, { altKey });
               return;
             }

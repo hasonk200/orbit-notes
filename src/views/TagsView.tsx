@@ -1,6 +1,6 @@
 import { useT } from '../store/uiStore';
 import { useMemo } from 'react';
-import { useActiveObjects, useTypeMap } from '../store/dataStore';
+import { useSpaceObjects, useTypeMap } from '../store/dataStore';
 import { useOpen } from '../store/pane';
 import { ObjectRow } from '../components/ObjectCard';
 import { LiveSearchTable } from '../components/LiveSearchTable';
@@ -59,7 +59,7 @@ function SupertagPanel({ tag }: { tag: string }) {
 
 export function TagsView({ tag }: { tag?: string }) {
   const tr = useT();
-  const objects = useActiveObjects();
+  const objects = useSpaceObjects();
   const typeMap = useTypeMap();
   const open = useOpen();
   const counts = useMemo(() => {

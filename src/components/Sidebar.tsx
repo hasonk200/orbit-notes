@@ -1,15 +1,16 @@
 import { typeLabel } from '../lib/typeLabels';
 import { useMemo, useRef } from 'react';
 import { CalendarDays, CircleCheck, Compass, Hash, Moon, Network, PanelLeft, Plus, Search, Settings, SquareCheckBig, Sun, Monitor, Trash } from 'lucide-react';
-import { displayTitle, useData, useObjMap } from '../store/dataStore';
+import { displayTitle, useData, useObjMap, useSpaceTasks, useSpaceTypes } from '../store/dataStore';
 import { useT, useUI } from '../store/uiStore';
 import { objPath, useOpen, usePane } from '../store/pane';
-import { getOrCreateDaily } from '../db/indexers';
+import { getOrCreateDayNote } from '../db/indexers';
 import { todayISO } from '../lib/dates';
+import { spaceOf } from '../lib/spaces';
 import { classifyTaskKind } from '../lib/tasks';
 import { NewMenu } from './NewMenu';
 import { SyncIndicator } from './CloudSync';
-import { OrbitLogo } from './OrbitLogo';
+import { SpaceSwitcher } from './SpaceSwitcher';
 
 function NavItem({ icon, label, path, active, badge, onClick }: { icon: React.ReactNode; label: string; path?: string; active?: boolean; badge?: React.ReactNode; onClick?: (e: React.MouseEvent) => void }) {
   const open = useOpen();
@@ -27,9 +28,11 @@ export function Sidebar() {
   const { path } = usePane();
   const objects = useData((s) => s.objects);
   const types = useData((s) => s.types);
+  const spaceTypes = useSpaceTypes();
   const collections = useData((s) => s.collections);
-  const tasks = useData((s) => s.tasks);
+  const tasks = useSpaceTasks();
   const pinned = useData((s) => s.pinned);
+  const space = useUI((s) => s.space);
   const objMap = useObjMap();
   const { toggleSidebar, setPalette, theme, setTheme, setTypeEditor, newMenuOpen, setNewMenu } = useUI();
   const open = useOpen();
@@ -41,13 +44,13 @@ export function Sidebar() {
     let trash = 0;
     for (const o of objects) {
       if (o.deletedAt) trash++;
-      else {
+      else if (spaceOf(o) === space) {
         c.set(o.typeId, (c.get(o.typeId) ?? 0) + 1);
         for (const cid of o.collectionIds ?? []) col.set(cid, (col.get(cid) ?? 0) + 1);
       }
     }
     return { c, col, trash };
-  }, [objects]);
+  }, [objects, space]);
 
   const { openTodos, openTasks } = useMemo(() => {
     const today = todayISO();
@@ -84,10 +87,7 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sb-head">
-        <button type="button" className="brand" onClick={(e) => open('/', e)} title={tr('Home')}>
-          <OrbitLogo />
-          Orbit
-        </button>
+        <SpaceSwitcher />
         <button type="button" className="icon-btn" onClick={toggleSidebar} title={tr('Hide sidebar (Ctrl+\\)')}>
           <PanelLeft size={17} />
         </button>
@@ -110,23 +110,23 @@ export function Sidebar() {
           label={tr('Today')}
           onClick={async (e) => {
             const altKey = e.altKey;
-            await getOrCreateDaily(todayISO());
+            await getOrCreateDayNote(todayISO());
             open(`/calendar?mode=day&date=${todayISO()}`, { altKey });
           }}
         />
         <NavItem icon={<CircleCheck size={16} />} label={tr('To-do')} path="/todos" active={p === '/todos'} badge={openTodos || null} />
         <NavItem icon={<SquareCheckBig size={16} />} label={tr('Tasks')} path="/tasks" active={p === '/tasks'} badge={openTasks || null} />
-        <NavItem icon={<Compass size={16} />} label={tr('Explore')} path="/home" active={p === '/home'} />
+        <NavItem icon={<Compass size={16} />} label={tr(space === 'ai' ? 'AI workspace home' : 'Explore')} path="/home" active={p === '/home'} />
         <NavItem icon={<Network size={16} />} label={tr('Graph')} path="/graph" active={p === '/graph'} />
         <NavItem icon={<Hash size={16} />} label={tr('Tags')} path="/tags" active={p.startsWith('/tags')} />
       </nav>
 
       <div className="sb-scroll">
         <div className="sb-section">{tr('Pinned')}</div>
-        {pinned.filter((id) => objMap.get(id) && !objMap.get(id)!.deletedAt).length === 0 && <div className="sb-empty">{tr('No pinned objects')}</div>}
+        {pinned.filter((id) => objMap.get(id) && !objMap.get(id)!.deletedAt && spaceOf(objMap.get(id)) === space).length === 0 && <div className="sb-empty">{tr('No pinned objects')}</div>}
         {pinned.map((id) => {
           const o = objMap.get(id);
-          if (!o || o.deletedAt) return null;
+          if (!o || o.deletedAt || spaceOf(o) !== space) return null;
           const t = types.find((x) => x.id === o.typeId);
           return (
             <NavItem
@@ -145,8 +145,8 @@ export function Sidebar() {
             <Plus size={14} />
           </button>
         </div>
-        {types.map((t) => {
-          const cols = collections.filter((c) => c.typeId === t.id);
+        {spaceTypes.map((t) => {
+          const cols = space === 'me' ? collections.filter((c) => c.typeId === t.id) : [];
           return (
             <div key={t.id} className="sb-type-group">
               <NavItem

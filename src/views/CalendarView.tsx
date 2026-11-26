@@ -1,10 +1,11 @@
-import { useT } from '../store/uiStore';
+import { useT, useUI } from '../store/uiStore';
 import { useMemo, useState } from 'react';
 import { CalendarCheck, CalendarDays, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, CirclePlus, Clock, Link2, Pin, PinOff, Plus, Trash } from 'lucide-react';
 import { addDays, addMonths, endOfMonth, endOfWeek, getWeek, isSameMonth, isValid, startOfMonth, startOfWeek } from 'date-fns';
 import type { Obj, ObjType, TaskRec } from '../db/schema';
-import { getOrCreateDaily, softDelete } from '../db/indexers';
-import { displayTitle, togglePinned, useData, useObjMap, useTypeMap } from '../store/dataStore';
+import { getOrCreateDayNote, softDelete } from '../db/indexers';
+import { displayTitle, togglePinned, useData, useObjMap, useSpaceTasks, useTypeMap } from '../store/dataStore';
+import { AI_LOG_TYPE, spaceOf } from '../lib/spaces';
 import { objPath, useOpen, usePane } from '../store/pane';
 import { dailyTitle, dateLabel, fromISODate, toISODate, todayISO } from '../lib/dates';
 import { propertyLabel } from '../lib/typeLabels';
@@ -38,9 +39,12 @@ interface CalIndex {
 function useCalIndex(): CalIndex {
   const tr = useT();
   const objects = useData((s) => s.objects);
-  const tasks = useData((s) => s.tasks);
+  const tasks = useSpaceTasks();
+  const space = useUI((s) => s.space);
   const typeMap = useTypeMap();
   const objMap = useObjMap();
+  // Each space has its own day note: the daily note in my space, the AI log in the AI workspace.
+  const dayType = space === 'ai' ? AI_LOG_TYPE : 'daily';
   return useMemo(() => {
     const daily = new Map<string, Obj>();
     const created = new Map<string, Obj[]>();
@@ -52,8 +56,8 @@ function useCalIndex(): CalIndex {
       else m.set(k, [v]);
     };
     for (const o of objects) {
-      if (o.deletedAt) continue;
-      if (o.typeId === 'daily' && o.dailyDate) {
+      if (o.deletedAt || spaceOf(o) !== space) continue;
+      if (o.typeId === dayType && o.dailyDate) {
         daily.set(o.dailyDate, o);
         continue;
       }
@@ -70,7 +74,7 @@ function useCalIndex(): CalIndex {
       push(due, t.due, t);
     }
     return { daily, created, dated, due };
-  }, [objects, tasks, typeMap, objMap, tr]);
+  }, [objects, tasks, typeMap, objMap, tr, space, dayType]);
 }
 
 const weekdayColor = (d: Date) => `var(--wd-${d.getDay()})`;
@@ -95,9 +99,10 @@ function DayHeader({ iso, size = 'lg' }: { iso: string; size?: 'lg' | 'md' }) {
 
 function AddDailyButton({ iso }: { iso: string }) {
   const tr = useT();
+  const space = useUI((s) => s.space);
   return (
-    <button type="button" className="btn add-daily" onClick={() => getOrCreateDaily(iso)}>
-      <Plus size={15} /> {tr('Daily Note')}
+    <button type="button" className="btn add-daily" onClick={() => getOrCreateDayNote(iso, space)}>
+      <Plus size={15} /> {tr(space === 'ai' ? 'AI log' : 'Daily Note')}
     </button>
   );
 }
@@ -131,6 +136,7 @@ type DayTab = 'all' | 'note' | 'created' | 'tasks';
 function DayDetail({ iso, idx, tab: shownTab, onTab, hideTabs }: { iso: string; idx: CalIndex; tab?: DayTab; onTab?: (t: DayTab) => void; hideTabs?: boolean }) {
   const tr = useT();
   const typeMap = useTypeMap();
+  const isAi = useUI((s) => s.space) === 'ai';
   const [ownTab, setOwnTab] = useState<DayTab>('all');
   // The phone layout drives the tab from its top bar; the desktop keeps its own.
   const tab = shownTab ?? ownTab;
@@ -141,7 +147,7 @@ function DayDetail({ iso, idx, tab: shownTab, onTab, hideTabs }: { iso: string; 
   const due = [...(idx.due.get(iso) ?? [])].sort((a, b) => Number(a.done) - Number(b.done));
   const tabs: [DayTab, string, number | null][] = [
     ['all', tr('All'), null],
-    ['note', tr('Daily note'), null],
+    ['note', tr(isAi ? 'AI log' : 'Daily note'), null],
     ['created', tr('Created'), created.length],
     ['tasks', tr('Due'), due.length],
   ];
@@ -161,7 +167,7 @@ function DayDetail({ iso, idx, tab: shownTab, onTab, hideTabs }: { iso: string; 
       )}
       {showNote && (note ? (
         <div className="day-note">
-          <ObjectEditor key={note.id} obj={note} placeholder={tr('What’s on your mind today? Type / for commands, [[ to link, @ for dates')} />
+          <ObjectEditor key={note.id} obj={note} placeholder={tr(isAi ? 'AI apps record each piece of work here. You can write here too.' : 'What’s on your mind today? Type / for commands, [[ to link, @ for dates')} />
           <AiNotesPanel obj={note} />
           <Backlinks objectId={note.id} />
         </div>
@@ -212,6 +218,7 @@ function MonthView({ month, idx, onPickDay, onPickMonth }: { month: Date; idx: C
     return out;
   }, [month]);
   const today = todayISO();
+  const isAi = useUI((s) => s.space) === 'ai';
   const noteCount = days.filter((d) => isSameMonth(d, month) && idx.daily.has(toISODate(d))).length;
   return (
     <div className="month-view">
@@ -241,7 +248,7 @@ function MonthView({ month, idx, onPickDay, onPickMonth }: { month: Date; idx: C
             <div key={iso} className={`month-cell${isSameMonth(d, month) ? '' : ' other'}${iso === today ? ' today' : ''}`} onClick={() => onPickDay(iso)}>
               <button type="button" className="month-cell-head" aria-label={dailyTitle(iso, tr)}>
                 <span className="month-num">{d.getDate()}</span>
-                {note && <span className="month-note" title={tr('Daily note')}>📅</span>}
+                {note && <span className="month-note" title={tr(isAi ? 'AI log' : 'Daily note')}>{isAi ? '🤖' : '📅'}</span>}
               </button>
               {items.slice(0, 3).map((it) => (
                 <button
@@ -264,8 +271,8 @@ function MonthView({ month, idx, onPickDay, onPickMonth }: { month: Date; idx: C
       </div>
       {noteCount === 0 && (
         <div className="empty-inline center">
-          <strong>{tr('No daily notes for this month yet.')}</strong>
-          <span>{tr('Click any day to open it and add a daily note.')}</span>
+          <strong>{tr(isAi ? 'No AI logs for this month yet.' : 'No daily notes for this month yet.')}</strong>
+          <span>{tr(isAi ? 'AI apps start the day’s log when they record their work.' : 'Click any day to open it and add a daily note.')}</span>
         </div>
       )}
     </div>
@@ -278,6 +285,7 @@ function MobileDay({ date, idx, set }: { date: string; idx: CalIndex; set: (m: C
   const pinned = useData((s) => s.pinned);
   const [tab, setTab] = useState<DayTab>('all');
   const [monthOpen, setMonthOpen] = useState(false);
+  const isAi = useUI((s) => s.space) === 'ai';
   const marks = useMemo(() => new Set(idx.daily.keys()), [idx]);
   const note = idx.daily.get(date);
   const created = idx.created.get(date) ?? [];
@@ -299,7 +307,7 @@ function MobileDay({ date, idx, set }: { date: string; idx: CalIndex; set: (m: C
             icon: <Trash size={20} />,
             label: tr('Move to Trash'),
             onClick: () => {
-              if (window.confirm(tr('Move this daily note to Trash? You can restore it from Trash.'))) void softDelete(note.id);
+              if (window.confirm(tr(isAi ? 'Move this AI log to Trash? You can restore it from Trash.' : 'Move this daily note to Trash? You can restore it from Trash.'))) void softDelete(note.id);
             },
           },
         ]
@@ -315,7 +323,7 @@ function MobileDay({ date, idx, set }: { date: string; idx: CalIndex; set: (m: C
             value={tab === 'note' ? 'all' : tab}
             onChange={setTab}
             options={[
-              { value: 'all', icon: <CalendarCheck size={17} />, label: tr('Daily note') },
+              { value: 'all', icon: <CalendarCheck size={17} />, label: tr(isAi ? 'AI log' : 'Daily note') },
               { value: 'created', icon: <CirclePlus size={17} />, label: tr('Created'), count: created.length },
               { value: 'tasks', icon: <Clock size={17} />, label: tr('Due'), count: due.length },
             ]}
@@ -444,7 +452,7 @@ export function CalendarView({ mode, date: requestedDate }: { mode: CalMode; dat
 
 function UpcomingTasks() {
   const tr = useT();
-  const tasks = useData((s) => s.tasks);
+  const tasks = useSpaceTasks();
   const objMap = useObjMap();
   const today = todayISO();
   const week = toISODate(addDays(new Date(), 7));
