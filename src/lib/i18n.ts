@@ -4,6 +4,16 @@ type Values = Record<string, string | number>;
 export type Translate = ((message: string, values?: Values) => string) & { language: Language };
 
 const zhHant: Record<string, string> = {
+  "Current version": "目前版本",
+  "Recovered version": "保留的版本",
+  "Deleted": "已刪除",
+  "The text of both versions is the same; only formatting or details differ.": "兩個版本的文字一樣，只有格式或細節不同。",
+  "{removed} line(s) only in the current version, {added} line(s) only in the recovered version.": "有 {removed} 行只在目前版本，{added} 行只在保留的版本。",
+  "Compare differences": "比較差異",
+  "Hide differences": "收起差異",
+  "Differences": "差異",
+  "Only in the current version": "只在目前版本",
+  "Only in the recovered version": "只在保留的版本",
   "Sort": "排序",
   "Filter": "篩選",
   "Contains…": "包含…",

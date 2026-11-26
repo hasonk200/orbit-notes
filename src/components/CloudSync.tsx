@@ -1,5 +1,8 @@
 import { useT } from '../store/uiStore';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { Obj } from '../db/schema';
+import { docText } from '../lib/content';
+import { diffCounts, diffHunks, diffLines } from '../lib/textDiff';
 import { Cloud, CloudCheck, CloudOff, LogIn, LogOut, RefreshCw } from 'lucide-react';
 import { relativeTime } from '../lib/dates';
 import { syncNow, useSync, type SyncStatus } from '../sync/engine';
@@ -156,28 +159,86 @@ export function SyncConflicts() {
     <section className="card-section">
       <h3>{tr('Sync conflicts')}</h3>
       <p className="muted small">{tr('Orbit kept both versions. Review them before choosing which version to use.')}</p>
-      {conflicts.map((copy) => {
-        const current = objects.find((o) => o.id === copy.syncConflictOf);
-        return (
-          <div key={copy.id}>
-            <h4>{displayTitle(copy, tr)}</h4>
-            {copy.syncConflictDeleted && <p className="muted small">{tr('This recovered version was moved to Trash.')}</p>}
-            <div className="btn-row">
-              {current && !current.deletedAt && (
-                <button type="button" className="btn" onClick={(e) => open(objPath(current.id), e)}>{tr('Open current version')}</button>
-              )}
-              <button type="button" className="btn" onClick={(e) => open(objPath(copy.id), e)}>{tr('Open recovered version')}</button>
-            </div>
-            <div className="btn-row">
-              <button type="button" className="btn" disabled={busy} onClick={() => choose(copy.id, false)}>
-                {current && !current.deletedAt ? tr('Keep current version') : tr('Keep deletion')}
-              </button>
-              <button type="button" className="btn" disabled={busy} onClick={() => choose(copy.id, true)}>{tr('Use recovered version')}</button>
-            </div>
-          </div>
-        );
-      })}
+      {conflicts.map((copy) => (
+        <ConflictItem key={copy.id} copy={copy} current={objects.find((o) => o.id === copy.syncConflictOf)} busy={busy} choose={choose} />
+      ))}
       {error && <div className="banner warn" role="alert">{error}</div>}
     </section>
+  );
+}
+
+/** One conflict: when each version was edited, how much differs, and the differing lines on request. */
+function ConflictItem({ copy, current, busy, choose }: { copy: Obj; current?: Obj; busy: boolean; choose: (id: string, useCopy: boolean) => void }) {
+  const tr = useT();
+  const open = useOpen();
+  const objects = useData((s) => s.objects);
+  const [showDiff, setShowDiff] = useState(false);
+  const live = current && !current.deletedAt ? current : undefined;
+  // The kept copy has no date of its own; it is the same day as the note, so it gets the same localized title.
+  const withDay = (o: Obj) => ({ ...o, dailyDate: o.dailyDate ?? current?.dailyDate ?? (copy.syncConflictOf?.startsWith('daily-') ? copy.syncConflictOf.slice(6) : null) });
+  const lines = useMemo(() => {
+    const titleOf = (id: string) => displayTitle(objects.find((o) => o.id === id), tr);
+    // Compare the title too, as the first line, since a rename is a difference as well.
+    const text = (o?: Obj) => (o ? [displayTitle(withDay(o), tr), docText(o.content, titleOf)].join('\n') : '');
+    return diffLines(text(live), text(copy));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, copy, objects, tr]);
+  const { removed, added } = diffCounts(lines);
+  const same = removed === 0 && added === 0;
+  return (
+    <div className="conflict-item">
+      <h4>{displayTitle(withDay(live ?? copy), tr)}</h4>
+      <dl className="conflict-versions">
+        <div>
+          <dt>{tr('Current version')}</dt>
+          <dd>{live ? tr('Edited {time}', { time: relativeTime(live.updatedAt, tr) }) : tr('Deleted')}</dd>
+        </div>
+        <div>
+          <dt>{tr('Recovered version')}</dt>
+          <dd>{tr('Edited {time}', { time: relativeTime(copy.updatedAt, tr) })}</dd>
+        </div>
+      </dl>
+      {copy.syncConflictDeleted && <p className="muted small">{tr('This recovered version was moved to Trash.')}</p>}
+      <p className="conflict-summary">
+        {same
+          ? tr('The text of both versions is the same; only formatting or details differ.')
+          : tr('{removed} line(s) only in the current version, {added} line(s) only in the recovered version.', { removed, added })}
+      </p>
+      {!same && (
+        <button type="button" className="btn" aria-expanded={showDiff} onClick={() => setShowDiff((v) => !v)}>
+          {tr(showDiff ? 'Hide differences' : 'Compare differences')}
+        </button>
+      )}
+      {showDiff && (
+        <div className="conflict-diff" role="region" aria-label={tr('Differences')}>
+          <div className="conflict-legend">
+            <span className="is-removed">− {tr('Only in the current version')}</span>
+            <span className="is-added">+ {tr('Only in the recovered version')}</span>
+          </div>
+          {diffHunks(lines).map((l, i) =>
+            l === null ? (
+              <div key={i} className="diff-gap">⋯</div>
+            ) : (
+              <div key={i} className={`diff-line is-${l.kind}`}>
+                <span className="diff-mark" aria-hidden>{l.kind === 'removed' ? '−' : l.kind === 'added' ? '+' : ' '}</span>
+                <span className="diff-text">{l.text || ' '}</span>
+              </div>
+            ),
+          )}
+        </div>
+      )}
+      <div className="btn-row">
+        {live && (
+          <button type="button" className="btn" onClick={(e) => open(objPath(live.id), e)}>{tr('Open current version')}</button>
+        )}
+        <button type="button" className="btn" onClick={(e) => open(objPath(copy.id), e)}>{tr('Open recovered version')}</button>
+      </div>
+      <div className="btn-row">
+        <button type="button" className="btn" disabled={busy} onClick={() => choose(copy.id, false)}>
+          {live ? tr('Keep current version') : tr('Keep deletion')}
+        </button>
+        <button type="button" className="btn" disabled={busy} onClick={() => choose(copy.id, true)}>{tr('Use recovered version')}</button>
+      </div>
+    </div>
   );
 }

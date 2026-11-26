@@ -6748,3 +6748,77 @@ img.connect-logo {
   border-left: 0;
   padding-left: 0;
 }
+
+/* ---------- sync conflicts: what differs between the two versions ---------- */
+.conflict-item + .conflict-item {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.conflict-versions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+.conflict-versions div {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.conflict-versions dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.conflict-versions dd {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+}
+.conflict-summary {
+  margin: 8px 0;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+.conflict-diff {
+  margin: 10px 0;
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.conflict-legend {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 12px;
+}
+.conflict-legend .is-removed { color: var(--danger); }
+.conflict-legend .is-added { color: var(--ok); }
+.diff-line {
+  display: flex;
+  gap: 8px;
+  padding: 1px 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.diff-line.is-same { color: var(--muted); }
+.diff-line.is-removed { background: var(--danger-soft); }
+.diff-line.is-added { background: var(--ok-soft); }
+.diff-mark {
+  flex: none;
+  width: 10px;
+  font-family: var(--mono);
+}
+.diff-line.is-removed .diff-mark { color: var(--danger); }
+.diff-line.is-added .diff-mark { color: var(--ok); }
+.diff-gap {
+  padding: 0 10px;
+  color: var(--muted);
+}
