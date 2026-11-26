@@ -205,7 +205,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
       {typeId !== 'daily' && (
         <div className="collections-bar">
           <button type="button" className={`col-pill${!activeCol ? ' active' : ''}`} onClick={(e) => open(`/type/${typeId}`, e)}>
-            All <span className="count">{allOfType.length}</span>
+            {tr('All')} <span className="count">{allOfType.length}</span>
           </button>
           {typeCollections.map((c) => (
             <button

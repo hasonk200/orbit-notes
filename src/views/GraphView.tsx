@@ -118,7 +118,7 @@ export function GraphView() {
           <input type="checkbox" checked={hideOrphans} onChange={(e) => setHideOrphans(e.target.checked)} /> {tr('Hide unlinked')}
         </label>
         <span className="muted small">
-          {data.nodes.length} objects · {data.links.length} links · Alt+Click opens in split view
+          {tr('{objects} objects · {links} links · Alt+Click opens in split view', { objects: data.nodes.length, links: data.links.length })}
         </span>
       </div>
       <div className="graph-wrap" ref={wrap}>
