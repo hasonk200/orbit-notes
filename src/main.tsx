@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { ensureSeed } from './db/seed';
 import { startDataSync } from './store/dataStore';
-import { applyTheme, getT, useUI } from './store/uiStore';
+import { applySpace, applyTheme, getT, useUI } from './store/uiStore';
 import { autoBackupIfDue } from './db/fsSync';
 import { upgradeTaskIndex } from './db/indexers';
 import { initSync } from './sync/engine';
@@ -15,6 +15,7 @@ import './styles/app.css';
 import './styles/motion.css';
 
 applyTheme(useUI.getState().theme);
+applySpace(useUI.getState().space);
 initNative();
 initPwa();
 document.documentElement.lang = getT().language;

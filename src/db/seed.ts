@@ -1,4 +1,5 @@
 import { db, getMeta, setMeta, SCHEMA_VERSION, type JSONContent, type ObjType } from './schema';
+import { AI_TYPES } from '../lib/spaces';
 
 const h = (text: string, level = 2): JSONContent => ({ type: 'heading', attrs: { level }, content: [{ type: 'text', text }] });
 const p = (text?: string): JSONContent => (text ? { type: 'paragraph', content: [{ type: 'text', text }] } : { type: 'paragraph' });
@@ -57,6 +58,8 @@ export const BUILTIN_TYPES: ObjType[] = [
     ],
     defaultTemplate: doc(h('Agenda'), bullets(), h('Notes'), p(), h('Action Items'), tasks()),
   },
+  // The AI workspace's own types. They are listed only there.
+  ...AI_TYPES,
 ];
 
 export async function ensureSeed() {
@@ -68,4 +71,14 @@ export async function ensureSeed() {
       await setMeta('schemaVersion', SCHEMA_VERSION);
     });
   }
+  await ensureAiTypes();
+}
+
+/** Add the AI workspace's types to databases made before they existed. Existing copies are left alone. */
+export async function ensureAiTypes() {
+  await db.transaction('rw', db.types, async () => {
+    const have = new Set((await db.types.bulkGet(AI_TYPES.map((t) => t.id))).filter(Boolean).map((t) => t!.id));
+    const missing = AI_TYPES.filter((t) => !have.has(t.id));
+    if (missing.length) await db.types.bulkPut(missing);
+  });
 }
