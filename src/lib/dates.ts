@@ -1,17 +1,21 @@
 import { addDays, format, formatDistanceToNow, isValid, parseISO } from 'date-fns';
+import { zhCN } from 'date-fns/locale/zh-CN';
 import { zhTW } from 'date-fns/locale/zh-TW';
-import { translators, type Translate } from './i18n';
+import { translators, type Language, type Translate } from './i18n';
+
+const dateLocale = (language: Language) => (language === 'zh-Hans' ? zhCN : language === 'zh-Hant' ? zhTW : undefined);
 
 export const toISODate = (d: Date) => format(d, 'yyyy-MM-dd');
 export const todayISO = () => toISODate(new Date());
 export const fromISODate = (s: string) => parseISO(s);
 
 export function dateLabel(date: Date, t: Translate, enPattern: string, zhPattern = enPattern) {
-  return t.language === 'zh-Hant' ? format(date, zhPattern, { locale: zhTW }) : format(date, enPattern);
+  const locale = dateLocale(t.language);
+  return locale ? format(date, zhPattern, { locale }) : format(date, enPattern);
 }
 
 export function relativeTime(time: number, t: Translate) {
-  return formatDistanceToNow(time, { addSuffix: true, locale: t.language === 'zh-Hant' ? zhTW : undefined });
+  return formatDistanceToNow(time, { addSuffix: true, locale: dateLocale(t.language) });
 }
 
 export function dailyTitle(iso: string, t = translators.en) {

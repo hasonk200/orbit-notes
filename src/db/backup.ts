@@ -5,7 +5,8 @@ import { reindexAll } from './indexers';
 import { extractBlobIds } from '../lib/content';
 import { LocalizedError } from '../lib/i18n';
 
-const LOCAL_META_KEYS = new Set(['backupDirHandle']);
+// Device-only settings: the WebDAV entries hold a password and this device's sync state.
+const LOCAL_META_KEYS = new Set(['backupDirHandle', 'webdavConfig', 'webdavBase']);
 
 export async function buildBackupZip(): Promise<Blob> {
   const [meta, types, collections, objects, links, tasks, blobs] = await db.transaction(

@@ -5856,6 +5856,47 @@ img.connect-logo {
 }
 
 /* ---------- Settings: AI access ---------- */
+/* WebDAV sync form: two columns of labelled fields, one on phones. */
+.dav-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.dav-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.dav-form label span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.dav-form input {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 14px;
+}
+.dav-form input:hover {
+  border-color: var(--line-strong);
+}
+.dav-form input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.app.is-mobile .dav-form {
+  grid-template-columns: minmax(0, 1fr);
+}
+.app.is-mobile .dav-form input {
+  height: 40px;
+  font-size: 16px;
+}
 .ai-lead {
   color: var(--text-2);
 }

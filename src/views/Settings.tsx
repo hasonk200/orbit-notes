@@ -6,11 +6,12 @@ import { backupToFolder, chooseBackupFolder, forgetBackupFolder, fsSupported, ge
 import { pruneOrphans, reindexAll } from '../db/indexers';
 import { db } from '../db/schema';
 import { relativeTime } from '../lib/dates';
-import { localizeError } from '../lib/i18n';
+import { isChinese, localizeError } from '../lib/i18n';
 import { useData } from '../store/dataStore';
 import { useT, useUI, type Theme } from '../store/uiStore';
 import { AiAccessSettings } from '../components/AiAccessSettings';
 import { CloudSyncSettings, SyncConflicts } from '../components/CloudSync';
+import { WebDavSyncSettings } from '../components/WebDavSync';
 import { AppInstallSettings } from '../components/AppInstall';
 
 export function Settings() {
@@ -68,7 +69,7 @@ export function Settings() {
         icon={<Palette size={18} />}
         tone="#e0864a"
         title={tr('Appearance')}
-        summary={`${themes.find(([t]) => t === theme)?.[1] ?? ''} · ${language === 'zh-Hant' ? '繁體中文' : 'English'}`}
+        summary={`${themes.find(([t]) => t === theme)?.[1] ?? ''} · ${language === 'zh-Hant' ? '繁體中文' : language === 'zh-Hans' ? '简体中文' : 'English'}`}
       >
         <div className="segmented">
           {themes.map(([t, label, icon]) => (
@@ -85,11 +86,15 @@ export function Settings() {
           <button type="button" lang="zh-Hant" className={language === 'zh-Hant' ? 'active' : ''} aria-pressed={language === 'zh-Hant'} onClick={() => setLanguage('zh-Hant')}>
             繁體中文
           </button>
+          <button type="button" lang="zh-Hans" className={language === 'zh-Hans' ? 'active' : ''} aria-pressed={language === 'zh-Hans'} onClick={() => setLanguage('zh-Hans')}>
+            简体中文
+          </button>
         </div>
       </SettingsSection>
 
       <AppInstallSettings />
       <CloudSyncSettings />
+      <WebDavSyncSettings />
       <SyncConflicts />
       <AiAccessSettings />
 
@@ -98,10 +103,10 @@ export function Settings() {
         icon={<Archive size={18} />}
         tone="#e5b12e"
         title={tr('Backup & restore')}
-        summary={`${tr('Last backup')}${tr.language === 'zh-Hant' ? '：' : ': '}${lastBackupAt ? relativeTime(lastBackupAt, tr) : tr('never')}${folder ? ' · ' + tr('Folder: {folder}', { folder }) : ''}`}
+        summary={`${tr('Last backup')}${isChinese(tr.language) ? '：' : ': '}${lastBackupAt ? relativeTime(lastBackupAt, tr) : tr('never')}${folder ? ' · ' + tr('Folder: {folder}', { folder }) : ''}`}
       >
         <p className="muted">
-          {tr('Orbit stores your data in this browser (IndexedDB).')} {tr('Last backup')}{tr.language === 'zh-Hant' ? '：' : ': '}
+          {tr('Orbit stores your data in this browser (IndexedDB).')} {tr('Last backup')}{isChinese(tr.language) ? '：' : ': '}
           <strong>{lastBackupAt ? relativeTime(lastBackupAt, tr) : tr('never')}</strong>
         </p>
         <div className="btn-row">

@@ -171,6 +171,8 @@ Animate only `opacity` and `transform`. Every new animation needs a `prefers-red
 ## 9. Writing and language
 
 - Every visible string goes through `tr('English text')` (`const tr = useT()`), with a Traditional Chinese entry in `src/lib/i18n.ts`. Check that the key doesn't already exist with another meaning ("Shortcuts" = 快捷鍵, "Note" = 備註).
+- Simplified Chinese is generated: after adding zh-Hant entries run `npm run i18n:hans`. Don't edit `src/lib/i18n.zh-Hans.ts` by hand; put mainland word choices (e.g. 設定 → 设置, 專案 → 项目) in `scripts/zh-hans.mjs`.
+- Language checks: use `isChinese(tr.language)` for anything both Chinese UIs share (date formats, `、`, full-width colons), not `=== 'zh-Hant'`.
 - Tone: short, friendly, plain. Sentence case ("Sign in with Google", not "Sign In With Google").
 - Say what happened and what to do next. Avoid technical words in the UI ("Couldn't save. You're offline, so it'll retry automatically.").
 - Counts: use the singular/plural keys (`'{count} task'` / `'{count} tasks'`).
