@@ -62,6 +62,37 @@ export async function writeLocalMarkdown(path: string, content: string): Promise
   await invoke('write_local_markdown', { path, content });
 }
 
+/** Open the native Save As dialog for Markdown files when running inside Tauri Desktop. */
+export async function pickMarkdownSavePath(defaultPath: string): Promise<string | null> {
+  if (!isTauri()) return null;
+  const { save } = await import('@tauri-apps/plugin-dialog');
+  const picked = await save({
+    defaultPath,
+    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+  });
+  return typeof picked === 'string' && picked.trim() ? picked : null;
+}
+
+/** Extract file basename across Windows and Unix path separators. */
+export function fileNameFromPath(filePath: string): string {
+  const parts = filePath.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? filePath;
+}
+
+/** Suggest a default copy filename such as `notes.md` -> `notes-copy.md`. */
+export function suggestCopyPath(filePath: string): string {
+  if (!filePath) return 'note-copy.md';
+  const match = filePath.match(/^(.*?)(\.(?:md|markdown))$/i);
+  return match ? `${match[1]}-copy${match[2]}` : `${filePath}-copy.md`;
+}
+
+/** Ensure a target path ends with `.md` or `.markdown`. */
+export function ensureMarkdownExt(filePath: string): string {
+  const trimmed = filePath.trim();
+  if (!trimmed) return '';
+  return /\.(?:md|markdown)$/i.test(trimmed) ? trimmed : `${trimmed}.md`;
+}
+
 /** Validate loopback port + CSRF state parameters for /desktop-auth. */
 export function parseDesktopAuthParams(search: string): { port: number; state: string } | null {
   const params = new URLSearchParams(search);

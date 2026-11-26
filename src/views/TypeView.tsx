@@ -1,12 +1,29 @@
 import { useMemo, useRef, useState } from 'react';
-import { ArrowUpDown, FolderPlus, Funnel, LayoutGrid, List, Pencil, Plus, Table, Trash, X } from 'lucide-react';
+import {
+  ArrowDownWideNarrow,
+  ArrowUpDown,
+  ArrowUpNarrowWide,
+  Check,
+  Columns2,
+  FolderPlus,
+  Funnel,
+  LayoutGrid,
+  List,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  Table,
+  Trash,
+  X,
+} from 'lucide-react';
 import { relativeTime } from '../lib/dates';
 import { includesText } from '../lib/search';
 import { propertyLabel, typeLabel } from '../lib/typeLabels';
-import { createCollection, createObject, deleteCollection, getOrCreateDayNote, updateCollection } from '../db/indexers';
+import { createCollection, createObject, deleteCollection, getOrCreateDayNote, saveObject, softDelete, updateCollection } from '../db/indexers';
 import { AI_DOC_TYPE, AI_LOG_TYPE, aiDocStatus, spaceOf } from '../lib/spaces';
 import { MenuSelect } from '../components/MenuSelect';
-import { displayTitle, useData } from '../store/dataStore';
+import { displayTitle, togglePinned, useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
 import { todayISO } from '../lib/dates';
@@ -35,11 +52,24 @@ function writePref(key: string, v: unknown) {
   }
 }
 
+function defaultSortDir(key: string): 'asc' | 'desc' {
+  return key === 'updated' || key === 'created' || key === 'daily' ? 'desc' : 'asc';
+}
+
+function parseSortPref(raw: string): { key: string; dir: 'asc' | 'desc' } {
+  const [key, dir] = raw.split(':');
+  return {
+    key: key || 'updated',
+    dir: dir === 'asc' || dir === 'desc' ? dir : defaultSortDir(key || 'updated'),
+  };
+}
+
 export function TypeView({ typeId, collectionId }: { typeId: string; collectionId?: string | null }) {
   const tr = useT();
   const type = useData((s) => s.types.find((t) => t.id === typeId));
   const collections = useData((s) => s.collections);
   const objects = useData((s) => s.objects);
+  const pinned = useData((s) => s.pinned);
   const space = useUI((s) => s.space);
   const open = useOpen();
   const setTypeEditor = useUI((s) => s.setTypeEditor);
@@ -47,7 +77,10 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
   // Archived AI documents are hidden unless asked for.
   const [showArchived, setShowArchived] = useState(false);
   const [view, setViewState] = useState<ViewMode>(() => readPref(`orbit-view-${typeId}`, isDayType ? 'list' : 'grid'));
-  const [sort, setSort] = useState<string>(() => readPref(`orbit-sort-${typeId}`, 'updated'));
+  const [sort, setSort] = useState<string>(() => {
+    const { key, dir } = parseSortPref(readPref(`orbit-sort-${typeId}`, 'updated:desc'));
+    return `${key}:${dir}`;
+  });
   const [filterKey, setFilterKey] = useState('');
   const [filterVal, setFilterVal] = useState('');
   const [addingCol, setAddingCol] = useState(false);
@@ -55,6 +88,9 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
   const [newColIcon, setNewColIcon] = useState('📁');
   const [editingCol, setEditingCol] = useState(false);
   const [editColName, setEditColName] = useState('');
+  const [ctxMenu, setCtxMenu] = useState<{ objId: string; rect: DOMRect } | null>(null);
+  const [ctxNewFolder, setCtxNewFolder] = useState(false);
+  const [ctxFolderName, setCtxFolderName] = useState('');
   const addColBtn = useRef<HTMLButtonElement>(null);
 
   const setView = (v: ViewMode) => {
@@ -90,7 +126,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
         if (def) list = list.filter((o) => includesText(formatPropValue(def, o.props[def.key], objectMap, type, tr), q));
       }
     }
-    const [key, dir] = sort.split(':');
+    const { key: sortKey, dir } = parseSortPref(sort);
     const mul = dir === 'asc' ? 1 : -1;
     const cmp = (a: any, b: any) => {
       const missingA = a == null || a === '';
@@ -99,11 +135,11 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
       return a < b ? -mul : a > b ? mul : 0;
     };
     return [...list].sort((a, b) => {
-      if (key === 'updated') return b.updatedAt - a.updatedAt;
-      if (key === 'created') return b.createdAt - a.createdAt;
-      if (key === 'title') return displayTitle(a, tr).localeCompare(displayTitle(b, tr), tr.language);
-      if (key === 'daily') return (b.dailyDate ?? '').localeCompare(a.dailyDate ?? '');
-      return cmp(a.props[key], b.props[key]);
+      if (sortKey === 'updated') return (a.updatedAt - b.updatedAt) * mul;
+      if (sortKey === 'created') return (a.createdAt - b.createdAt) * mul;
+      if (sortKey === 'title') return displayTitle(a, tr).localeCompare(displayTitle(b, tr), tr.language) * mul;
+      if (sortKey === 'daily') return (a.dailyDate ?? '').localeCompare(b.dailyDate ?? '') * mul;
+      return cmp(a.props[sortKey], b.props[sortKey]);
     });
   }, [allOfType, objectMap, type, activeCol, sort, filterKey, filterVal, tr, showArchived, typeId]);
 
@@ -131,6 +167,40 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
 
   const typeName = typeLabel(type, tr);
   const sortable = type.properties.filter((p) => ['text', 'number', 'date', 'select', 'checkbox', 'url'].includes(p.kind));
+  const { key: sortKey, dir: sortDir } = parseSortPref(sort);
+  const updateSort = (nextKey: string, nextDir: 'asc' | 'desc') => {
+    const next = `${nextKey}:${nextDir}`;
+    setSort(next);
+    writePref(`orbit-sort-${typeId}`, next);
+  };
+  const sortDirLabel =
+    sortKey === 'updated' || sortKey === 'created' || sortKey === 'daily'
+      ? tr(sortDir === 'desc' ? 'Newest first (click to reverse)' : 'Oldest first (click to reverse)')
+      : tr(sortDir === 'asc' ? 'First to end (click to reverse)' : 'End to first (click to reverse)');
+  const openContextMenu = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxNewFolder(false);
+    setCtxFolderName('');
+    setCtxMenu({ objId: id, rect: new DOMRect(e.clientX, e.clientY, 0, 0) });
+  };
+  const ctxObj = ctxMenu ? objectMap.get(ctxMenu.objId) ?? null : null;
+  const ctxPinned = ctxObj ? pinned.includes(ctxObj.id) : false;
+  const toggleCtxFolder = async (colId: string) => {
+    if (!ctxObj) return;
+    const cur = ctxObj.collectionIds ?? [];
+    const next = cur.includes(colId) ? cur.filter((id) => id !== colId) : [...cur, colId];
+    await saveObject(ctxObj.id, { collectionIds: next });
+  };
+  const createAndAddFolder = async () => {
+    const name = ctxFolderName.trim();
+    if (!name || !ctxObj) return;
+    const col = await createCollection(typeId, name, '📁');
+    const cur = ctxObj.collectionIds ?? [];
+    if (!cur.includes(col.id)) await saveObject(ctxObj.id, { collectionIds: [...cur, col.id] });
+    setCtxFolderName('');
+    setCtxNewFolder(false);
+  };
 
   return (
     <div className="page wide" style={{ ['--type-color' as any]: type.color }}>
@@ -263,25 +333,30 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
             <Table size={15} />
           </button>
         </div>
-        <MenuSelect
-          label={tr('Sort')}
-          icon={<ArrowUpDown size={14} />}
-          value={sort}
-          onChange={(v) => {
-            setSort(v);
-            writePref(`orbit-sort-${typeId}`, v);
-          }}
-          options={[
-            { value: 'updated', label: tr('Last edited') },
-            { value: 'created', label: tr('Created') },
-            { value: 'title', label: tr('Title A–Z') },
-            ...(isDayType ? [{ value: 'daily', label: tr('Date') }] : []),
-            ...sortable.flatMap((p) => [
-              { value: `${p.key}:asc`, label: `${propertyLabel(type, p, tr)} ↑` },
-              { value: `${p.key}:desc`, label: `${propertyLabel(type, p, tr)} ↓` },
-            ]),
-          ]}
-        />
+        <div className="control-pair">
+          <MenuSelect
+            label={tr('Sort')}
+            icon={<ArrowUpDown size={14} />}
+            value={sortKey}
+            onChange={(nextKey) => updateSort(nextKey, defaultSortDir(nextKey))}
+            options={[
+              { value: 'updated', label: tr('Last edited') },
+              { value: 'created', label: tr('Created') },
+              { value: 'title', label: tr('Title') },
+              ...(isDayType ? [{ value: 'daily', label: tr('Date') }] : []),
+              ...sortable.map((p) => ({ value: p.key, label: propertyLabel(type, p, tr) })),
+            ]}
+          />
+          <button
+            type="button"
+            className="control sort-dir-btn"
+            onClick={() => updateSort(sortKey, sortDir === 'asc' ? 'desc' : 'asc')}
+            title={sortDirLabel}
+            aria-label={sortDirLabel}
+          >
+            {sortDir === 'asc' ? <ArrowUpNarrowWide size={14} /> : <ArrowDownWideNarrow size={14} />}
+          </button>
+        </div>
         <div className="control-pair">
           <MenuSelect
             label={tr('Filter')}
@@ -322,14 +397,20 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
       {view === 'grid' && (
         <div className="card-grid">
           {items.map((o) => (
-            <ObjectCard key={o.id} obj={o} type={type} />
+            <ObjectCard key={o.id} obj={o} type={type} onContextMenu={(e) => openContextMenu(o.id, e)} />
           ))}
         </div>
       )}
       {view === 'list' && (
         <div className="row-list">
           {items.map((o) => (
-            <ObjectRow key={o.id} obj={o} type={type} right={<span className="muted small">{relativeTime(o.updatedAt, tr)}</span>} />
+            <ObjectRow
+              key={o.id}
+              obj={o}
+              type={type}
+              right={<span className="muted small">{relativeTime(o.updatedAt, tr)}</span>}
+              onContextMenu={(e) => openContextMenu(o.id, e)}
+            />
           ))}
         </div>
       )}
@@ -348,7 +429,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
             </thead>
             <tbody>
               {items.map((o) => (
-                <tr key={o.id} onClick={(e) => open(objPath(o.id), e)}>
+                <tr key={o.id} onClick={(e) => open(objPath(o.id), e)} onContextMenu={(e) => openContextMenu(o.id, e)}>
                   <td className="t-title">
                     {o.icon || type.icon} {displayTitle(o, tr)}
                   </td>
@@ -362,6 +443,84 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
             </tbody>
           </table>
         </div>
+      )}
+
+      {ctxMenu && ctxObj && (
+        <Popover rect={ctxMenu.rect} onClose={() => setCtxMenu(null)} className="menu obj-ctx-menu">
+          <button
+            type="button"
+            className="menu-item"
+            onClick={() => {
+              open(objPath(ctxObj.id), { altKey: true });
+              setCtxMenu(null);
+            }}
+          >
+            <Columns2 size={14} /> {tr('Open in split view')}
+          </button>
+          <button
+            type="button"
+            className="menu-item"
+            onClick={() => {
+              void togglePinned(ctxObj.id);
+              setCtxMenu(null);
+            }}
+          >
+            {ctxPinned ? <PinOff size={14} /> : <Pin size={14} />}
+            {tr(ctxPinned ? 'Unpin' : 'Pin to sidebar')}
+          </button>
+
+          {typeId !== 'daily' && (
+            <>
+              <div className="menu-sep" />
+              <div className="menu-label">{tr('Add to folder')}</div>
+              {typeCollections.map((c) => {
+                const inside = ctxObj.collectionIds?.includes(c.id) ?? false;
+                return (
+                  <button key={c.id} type="button" className="menu-item" onClick={() => void toggleCtxFolder(c.id)}>
+                    <span>{c.icon || '📁'}</span>
+                    <span className="menu-item-label">{c.name}</span>
+                    {inside && <Check size={14} className="menu-select-check" />}
+                  </button>
+                );
+              })}
+              {ctxNewFolder ? (
+                <form
+                  className="col-create-form obj-ctx-folder-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void createAndAddFolder();
+                  }}
+                >
+                  <input
+                    autoFocus
+                    placeholder={tr('Folder name…')}
+                    value={ctxFolderName}
+                    onChange={(e) => setCtxFolderName(e.target.value)}
+                  />
+                  <button type="submit" className="btn small primary" disabled={!ctxFolderName.trim()}>
+                    {tr('Add')}
+                  </button>
+                </form>
+              ) : (
+                <button type="button" className="menu-item" onClick={() => setCtxNewFolder(true)}>
+                  <FolderPlus size={14} /> {tr('New folder…')}
+                </button>
+              )}
+            </>
+          )}
+
+          <div className="menu-sep" />
+          <button
+            type="button"
+            className="menu-item danger"
+            onClick={() => {
+              void softDelete(ctxObj.id);
+              setCtxMenu(null);
+            }}
+          >
+            <Trash size={14} /> {tr('Move to Trash')}
+          </button>
+        </Popover>
       )}
     </div>
   );
