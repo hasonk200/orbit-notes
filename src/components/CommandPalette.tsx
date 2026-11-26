@@ -215,6 +215,10 @@ export function CommandPalette() {
             }
           }}
         />
+        <kbd>Esc</kbd>
+      </div>
+      <div className="palette-scope-bar">
+        <span className="muted small">{tr('Where to search')}</span>
         <div className="palette-scope" role="group" aria-label={tr('Where to search')}>
           <button type="button" aria-pressed={scope === 'space'} onClick={() => setScope('space')} title={tr('Search only {space}', { space: tr(space === 'ai' ? 'AI workspace' : 'My space') })}>
             {space === 'ai' ? '🤖' : '🪐'} {tr('This space')}
@@ -223,7 +227,6 @@ export function CommandPalette() {
             {tr('All')}
           </button>
         </div>
-        <kbd>Esc</kbd>
       </div>
       <div className="palette-list" ref={listRef}>
         {cmds.map((c, i) => {
