@@ -697,6 +697,76 @@ h4 {
   font-size: 13px;
 }
 
+/* "Are you sure?" dialog (ConfirmDialog.tsx) */
+.modal.confirm-modal {
+  width: min(480px, 100%);
+}
+.confirm-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 18px 8px 20px;
+}
+.confirm-head h2 {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.confirm-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-2);
+}
+.confirm-icon.is-danger {
+  color: var(--danger);
+}
+.confirm-body {
+  padding: 0 20px 4px;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.confirm-body p {
+  margin: 0 0 10px;
+}
+.confirm-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.confirm-items .chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.confirm-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px 20px;
+}
+.btn.danger-solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.btn.danger-solid:hover:not(:disabled) {
+  background: var(--danger);
+  filter: brightness(1.07);
+}
+/* The dialog lives outside .app, so it uses the phone breakpoint directly. */
+@media (max-width: 820px) {
+  .confirm-foot .btn {
+    flex: 1;
+    height: 44px;
+    justify-content: center;
+  }
+}
+
 /* palette */
 .palette {
   width: min(660px, 100%);

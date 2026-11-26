@@ -9,6 +9,7 @@ import { CommandPalette } from './components/CommandPalette';
 import { SuggestPopup } from './components/SuggestPopup';
 import { TypeEditorModal } from './components/TypeEditorModal';
 import { BackupBanner } from './components/BackupBanner';
+import { ConfirmHost } from './components/ConfirmDialog';
 import { UpdateNotice } from './components/AppInstall';
 import { getOrCreateDayNote } from './db/indexers';
 import { todayISO } from './lib/dates';
@@ -137,6 +138,7 @@ export default function App() {
         {typeEditor && <TypeEditorModal key={typeEditor} typeId={typeEditor} />}
         <SuggestPopup />
         <BackupBanner />
+        <ConfirmHost />
         <UpdateNotice />
       </div>
     </PaneContext.Provider>

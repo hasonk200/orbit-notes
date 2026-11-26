@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { askConfirm } from '../components/ConfirmDialog';
 import { Archive, Database, Download, FolderOpen, Keyboard, Monitor, Moon, Palette, RotateCcw, Sun, Upload } from 'lucide-react';
 import { SettingsSection } from '../components/SettingsSection';
 import { downloadBackup, importBackupZip } from '../db/backup';
@@ -121,11 +122,11 @@ export function Settings() {
             type="file"
             accept=".zip,application/zip"
             hidden
-            onChange={(e) => {
+            onChange={async (e) => {
               const f = e.target.files?.[0];
               e.target.value = '';
               if (!f) return;
-              if (!confirm(tr('Importing replaces ALL current data with the backup. Export a backup first if unsure. Continue?'))) return;
+              if (!(await askConfirm({ title: tr('Replace all data?'), message: tr('Importing replaces ALL current data with the backup. Export a backup first if unsure. Continue?'), items: [f.name], confirmLabel: tr('Import'), danger: true }))) return;
               void run(async () => {
                 const r = await importBackupZip(f);
                 return tr('Imported {objects} objects and {images} images.', { objects: r.objects, images: r.blobs });

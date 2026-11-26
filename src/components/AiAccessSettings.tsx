@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { askConfirm } from './ConfirmDialog';
 import { Bot, Check, Copy, Eye, FilePlus2, KeyRound, ListPlus, ListTodo, Pencil, Plug, RotateCcw, TextCursorInput, Trash2, Undo2, Unplug, X } from 'lucide-react';
 import { relativeTime, shortDate, toISODate } from '../lib/dates';
 import { uid } from '../lib/uid';
@@ -173,8 +174,8 @@ function ConnectedAiSettings({ account, onCount }: { account: string; onCount: (
                   disabled={busy}
                   aria-label={tr('Revoke access for {name}', { name: client.name })}
                   title={tr('Revoke access')}
-                  onClick={() => {
-                    if (!window.confirm(tr('Revoke access for {name}? It will no longer be able to read or change your notes.', { name: client.name }))) return;
+                  onClick={async () => {
+                    if (!(await askConfirm({ title: tr('Revoke access'), message: tr('Revoke access for {name}? It will no longer be able to read or change your notes.', { name: client.name }), confirmLabel: tr('Revoke'), danger: true }))) return;
                     void run(async () => {
                       await manage(account, '/connections/' + client.id, { method: 'DELETE' });
                       setConnections((items) => items.filter((item) => item.id !== client.id));
@@ -267,8 +268,8 @@ function ConnectedAiSettings({ account, onCount }: { account: string; onCount: (
                       <Eye size={14} /> {detail?.id === change.id ? tr('Close preview') : tr('View previous version')}
                     </button>
                   )}
-                  <button type="button" className="ai-mini" disabled={busy} onClick={() => {
-                    if (!window.confirm(tr('Undo this AI change? Orbit will check for newer edits first.'))) return;
+                  <button type="button" className="ai-mini" disabled={busy} onClick={async () => {
+                    if (!(await askConfirm({ title: tr('Undo this AI change? Orbit will check for newer edits first.'), confirmLabel: tr('Undo') }))) return;
                     void run(async () => {
                       const id = undoRequests.current.get(change.id) ?? uid();
                       undoRequests.current.set(change.id, id);

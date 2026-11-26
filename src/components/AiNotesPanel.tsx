@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { askConfirm } from './ConfirmDialog';
 import { Bot, ChevronRight, Trash2 } from 'lucide-react';
 import type { Obj } from '../db/schema';
 import { saveObject } from '../db/indexers';
@@ -54,8 +55,8 @@ export function AiNotesPanel({ obj }: { obj: Obj }) {
                       type="button"
                       className="ai-notes-del"
                       aria-label={tr('Delete this AI note')}
-                      onClick={() => {
-                        if (window.confirm(tr('Delete this AI note?'))) void saveObject(obj.id, (cur) => ({ aiNotes: (cur.aiNotes ?? []).filter((x) => x.id !== n.id) }));
+                      onClick={async () => {
+                        if (await askConfirm({ title: tr('Delete this AI note?'), confirmLabel: tr('Delete'), danger: true })) void saveObject(obj.id, (cur) => ({ aiNotes: (cur.aiNotes ?? []).filter((x) => x.id !== n.id) }));
                       }}
                     >
                       <Trash2 size={14} />

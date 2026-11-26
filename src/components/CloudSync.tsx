@@ -1,4 +1,5 @@
 import { useT } from '../store/uiStore';
+import { askConfirm } from './ConfirmDialog';
 import { useMemo, useState } from 'react';
 import type { Obj } from '../db/schema';
 import { docText } from '../lib/content';
@@ -146,7 +147,7 @@ export function SyncConflicts() {
   const [error, setError] = useState<string | null>(null);
 
   const choose = async (id: string, useCopy: boolean) => {
-    if (useCopy && !window.confirm(tr('Replace the current version with the recovered version?'))) return;
+    if (useCopy && !(await askConfirm({ title: tr('Replace the current version with the recovered version?'), confirmLabel: tr('Replace'), danger: true }))) return;
     setBusy(true);
     setError(null);
     try {

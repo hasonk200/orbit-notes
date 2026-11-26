@@ -1,4 +1,5 @@
 import { typeLabel } from '../lib/typeLabels';
+import { askConfirm } from './ConfirmDialog';
 import { normalizeText } from '../lib/search';
 import { normalizeTagName } from '../lib/supertags';
 import { useRef, useState } from 'react';
@@ -101,7 +102,7 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
     if (!existing || existing.builtin) return;
     const all = objects.filter((o) => o.typeId === existing.id);
     const name = typeLabel(existing, tr);
-    if (!confirm(all.length ? tr('Delete “{name}”? Its {count} object(s) will be converted to Pages.', { name, count: all.length }) : tr('Delete “{name}”?', { name }))) return;
+    if (!(await askConfirm({ title: tr('Delete “{name}”?', { name }), message: all.length ? tr('Its {count} object(s) will be converted to Pages.', { count: all.length }) : undefined, confirmLabel: tr('Delete'), danger: true }))) return;
     for (const o of all) await convertType(o.id, 'page');
     await db.types.delete(existing.id);
     close();

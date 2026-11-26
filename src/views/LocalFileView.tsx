@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { askConfirm } from '../components/ConfirmDialog';
 import { useNavigate } from 'react-router-dom';
 import { Check, FilePlus2, FolderOpen, HardDrive, Orbit, RefreshCw, Save, X } from 'lucide-react';
 import type { JSONContent } from '../db/schema';
@@ -67,7 +68,7 @@ export function LocalFileView({ path }: { path: string | null }) {
   }, []);
 
   const loadFile = useCallback(async (target: string, askIfDirty = false) => {
-    if (askIfDirty && dirty && !window.confirm(tr('Discard unsaved edits and reload from disk?'))) return;
+    if (askIfDirty && dirty && !(await askConfirm({ title: tr('Discard unsaved edits and reload from disk?'), confirmLabel: tr('Discard'), danger: true }))) return;
     if (!target) {
       setDoc(null);
       setError(tr('No local Markdown file selected.'));
