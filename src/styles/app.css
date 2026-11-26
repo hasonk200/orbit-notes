@@ -297,6 +297,99 @@ h4 {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Tabs in the main pane's top bar (desktop). */
+.tab-strip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  margin-left: 4px;
+}
+.tab-list {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab-list::-webkit-scrollbar {
+  display: none;
+}
+.tab-item {
+  display: flex;
+  align-items: center;
+  /* A fixed preferred width, so the list sizes to its tabs rather than to their text. */
+  flex: 0 1 200px;
+  width: 200px;
+  min-width: 96px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--text-2);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.tab-item:hover {
+  background: var(--surface-2);
+}
+.tab-item.is-active {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.tab-main {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: inherit;
+}
+.tab-main:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.tab-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-2);
+}
+.tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-right: 5px;
+  border-radius: 6px;
+  color: var(--muted);
+  opacity: 0;
+}
+.tab-item:hover .tab-close,
+.tab-item.is-active .tab-close,
+.tab-close:focus-visible {
+  opacity: 1;
+}
+.tab-close:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.tab-item.is-active .tab-close:hover {
+  background: var(--surface-2);
+}
+.tab-new {
+  flex: none;
+}
 .pane-top-actions {
   margin-left: auto;
   display: flex;

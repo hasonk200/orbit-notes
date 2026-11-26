@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, type MouseEvent } from 'react';
 import { useUI } from './uiStore';
+import { openTab } from './tabs';
+import { isMobileNow } from '../mobile/useIsMobile';
 
 export interface PaneCtx {
   pane: 'main' | 'split';
@@ -28,13 +30,18 @@ export const usePane = () => useContext(PaneContext);
 /**
  * open(path, event?) navigates the pane the caller lives in.
  * Alt+Click (or { split: true }) opens the path in the split pane instead.
+ * Ctrl/Cmd+Click opens it in a new background tab (desktop).
  */
 export function useOpen() {
   const { go, pane } = usePane();
   const openSplit = useUI((s) => s.openSplit);
   const setSidebar = useUI((s) => s.setSidebar);
   return useCallback(
-    (path: string, e?: MouseEvent | { altKey?: boolean } | null, opts?: { split?: boolean }) => {
+    (path: string, e?: MouseEvent | { altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean } | null, opts?: { split?: boolean }) => {
+      if ((e?.ctrlKey || e?.metaKey) && !isMobileNow()) {
+        openTab(path, false);
+        return;
+      }
       if (opts?.split || e?.altKey) {
         if (pane === 'split') go(path);
         else openSplit(path);
