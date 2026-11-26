@@ -119,6 +119,8 @@ export async function saveObject(id: string, patchOrFn: Partial<Obj> | ((cur: Ob
     const patch = typeof patchOrFn === 'function' ? patchOrFn(cur) : patchOrFn;
     if (!Object.keys(patch).length) return;
     const next: Obj = { ...cur, ...patch, updatedAt: Date.now() };
+    // My space is stored as no mark at all, so a note moved back is the same as one that never left.
+    if (next.space !== 'ai') delete next.space;
     if (patch.content) next.tags = extractTags(patch.content);
     await db.objects.put(next);
     if (patch.content || patch.props || patch.typeId) await reindex(next);
