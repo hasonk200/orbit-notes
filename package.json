@@ -7,6 +7,7 @@
     "test": "node --test tests/*.test.mjs",
     "preview": "vite preview",
     "deploy": "node scripts/deploy-pages.mjs",
+    "release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
