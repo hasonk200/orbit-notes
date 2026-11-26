@@ -1,5 +1,8 @@
 /** Runtime helpers for native Tauri (desktop) and Capacitor (mobile) shells. */
 
+/** The public Orbit website. The apps run from an internal address, so links meant for people use this. */
+export const WEB_APP_URL = 'https://hasonk200.github.io/orbit-notes';
+
 export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }

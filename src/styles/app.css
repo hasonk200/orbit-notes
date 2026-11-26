@@ -6706,10 +6706,6 @@ img.connect-logo {
 }
 :root[data-theme='dark'] .ai-todo-chip.is-confirm { background: #3a2f17; color: #f3c46b; }
 :root[data-theme='dark'] .ai-todo-chip.is-next { background: #13332f; color: #6fdccd; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .ai-todo-chip.is-confirm { background: #3a2f17; color: #f3c46b; }
-  :root:not([data-theme='light']) .ai-todo-chip.is-next { background: #13332f; color: #6fdccd; }
-}
 
 /* ---------- the AI workspace home: Explore's and the phone home screen's own pieces, plus a few extras ---------- */
 .aiw-label {

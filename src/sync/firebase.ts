@@ -1,7 +1,7 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithCredential, signInWithPopup, signInWithRedirect, signOut, type Auth } from 'firebase/auth';
 import { initializeFirestore, type Firestore } from 'firebase/firestore';
-import { desktopGoogleSignIn, isCapacitor, isTauri } from '../lib/native';
+import { desktopGoogleSignIn, isCapacitor, isTauri, WEB_APP_URL } from '../lib/native';
 
 const env = import.meta.env;
 const config = {
@@ -50,7 +50,7 @@ function loadGis() {
   return gisLoading;
 }
 
-const DESKTOP_AUTH_ORIGIN = 'https://hasonk200.github.io/orbit-notes';
+const DESKTOP_AUTH_ORIGIN = WEB_APP_URL;
 
 /** Request an OAuth access token via Google Identity Services. */
 export async function requestGoogleAccessToken(): Promise<string> {
