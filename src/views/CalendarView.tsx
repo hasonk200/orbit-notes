@@ -1,4 +1,5 @@
 import { useT, useUI } from '../store/uiStore';
+import { askConfirm } from '../components/ConfirmDialog';
 import { useMemo, useState } from 'react';
 import { CalendarCheck, CalendarDays, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, CirclePlus, Clock, Link2, Pin, PinOff, Plus, Trash } from 'lucide-react';
 import { addDays, addMonths, endOfMonth, endOfWeek, getWeek, isSameMonth, isValid, startOfMonth, startOfWeek } from 'date-fns';
@@ -347,8 +348,8 @@ function MobileDay({ date, idx, set }: { date: string; idx: CalIndex; set: (m: C
             danger: true,
             icon: <Trash size={20} />,
             label: tr('Move to Trash'),
-            onClick: () => {
-              if (window.confirm(tr(isAi ? 'Move this AI log to Trash? You can restore it from Trash.' : 'Move this daily note to Trash? You can restore it from Trash.'))) void softDelete(note.id);
+            onClick: async () => {
+              if (await askConfirm({ title: tr(isAi ? 'Move this AI log to Trash? You can restore it from Trash.' : 'Move this daily note to Trash? You can restore it from Trash.'), confirmLabel: tr('Move to Trash'), danger: true })) void softDelete(note.id);
             },
           },
         ]

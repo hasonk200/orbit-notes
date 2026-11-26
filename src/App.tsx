@@ -9,6 +9,8 @@ import { CommandPalette } from './components/CommandPalette';
 import { SuggestPopup } from './components/SuggestPopup';
 import { TypeEditorModal } from './components/TypeEditorModal';
 import { BackupBanner } from './components/BackupBanner';
+import { ConfirmHost } from './components/ConfirmDialog';
+import { activateTabAt, closeTab, cycleTab, openTab, tabBack, tabForward, tabGo, tabPath, tabReplace, useTabs, activeTab } from './store/tabs';
 import { UpdateNotice } from './components/AppInstall';
 import { getOrCreateDayNote } from './db/indexers';
 import { todayISO } from './lib/dates';
@@ -16,9 +18,20 @@ import { isComposing } from './lib/keyboard';
 import { onOpenLocalFile, takePendingLocalFiles } from './lib/native';
 import { ConnectPage } from './views/ConnectPage';
 import { DesktopAuthPage } from './views/DesktopAuthPage';
-import { useIsMobile } from './mobile/useIsMobile';
+import { isMobileNow, useIsMobile } from './mobile/useIsMobile';
 import { MobileNav } from './mobile/MobileNav';
 import { KeyboardToolbar } from './mobile/KeyboardToolbar';
+
+/** Desktop tab shortcuts. Web browsers keep Ctrl+T/W/Tab for themselves; the desktop app gets them all. */
+function tabShortcut(e: KeyboardEvent): boolean {
+  const key = e.key.toLowerCase();
+  if (key === 't' && !e.shiftKey) openTab();
+  else if (key === 'w' && !e.shiftKey) closeTab(useTabs.getState().active);
+  else if (e.key === 'Tab') cycleTab(e.shiftKey ? -1 : 1);
+  else if (/^[1-9]$/.test(e.key) && !e.shiftKey && !e.altKey) activateTabAt(Number(e.key));
+  else return false;
+  return true;
+}
 
 export default function App() {
   const tr = useT();
@@ -39,7 +52,28 @@ export default function App() {
     lastAction.current = 'other';
   }, [idx]);
 
-  const mainCtx: PaneCtx = useMemo(
+  // Desktop: the main pane has tabs, each with its own history; the URL mirrors the active tab.
+  const tabsOn = !mobile;
+  const currentTab = useTabs((s) => activeTab(s));
+  const tabPathNow = tabPath(currentTab);
+  const firstSync = useRef(true);
+  useEffect(() => {
+    if (!tabsOn) return;
+    const first = firstSync.current;
+    firstSync.current = false;
+    // Something navigated the router directly (a shortcut, a file opened from Explorer, a link):
+    // that page opens in the active tab. At start-up, "/" is just the app loading, so the saved tabs win.
+    if (mainPath !== tabPath(activeTab()) && !(first && mainPath === '/')) tabGo(mainPath);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainPath, tabsOn]);
+  useEffect(() => {
+    // Read the store, not this render's value: the effect above may have just moved the tab.
+    const target = tabPath(activeTab());
+    if (tabsOn && target !== mainPath) navigate(target, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabPathNow, tabsOn]);
+
+  const routerCtx: PaneCtx = useMemo(
     () => ({
       pane: 'main',
       path: mainPath,
@@ -55,6 +89,22 @@ export default function App() {
     }),
     [mainPath, navigate, idx],
   );
+  const tabCtx: PaneCtx = useMemo(
+    () => ({
+      pane: 'main',
+      path: tabPathNow,
+      go: tabGo,
+      replace: tabReplace,
+      back: tabBack,
+      forward: tabForward,
+      canBack: currentTab.idx > 0,
+      canForward: currentTab.idx < currentTab.stack.length - 1,
+    }),
+    [tabPathNow, currentTab.idx, currentTab.stack.length],
+  );
+  const mainCtx = tabsOn ? tabCtx : routerCtx;
+  const mainCtxRef = useRef(mainCtx);
+  mainCtxRef.current = mainCtx;
 
   useEffect(() => {
     useUI.setState({ mainPath, mainGo: (p: string) => navigate(p) });
@@ -89,9 +139,11 @@ export default function App() {
         e.preventDefault();
         void getOrCreateDayNote(todayISO()).then(() => navigate(`/calendar?mode=day&date=${todayISO()}`));
       } else if (e.altKey && e.key === 'ArrowLeft' && !(e.target as HTMLElement)?.closest?.('.ProseMirror')) {
-        navigate(-1);
+        mainCtxRef.current.back();
       } else if (e.altKey && e.key === 'ArrowRight' && !(e.target as HTMLElement)?.closest?.('.ProseMirror')) {
-        navigate(1);
+        mainCtxRef.current.forward();
+      } else if (mod && !isMobileNow() && tabShortcut(e)) {
+        e.preventDefault();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -137,6 +189,7 @@ export default function App() {
         {typeEditor && <TypeEditorModal key={typeEditor} typeId={typeEditor} />}
         <SuggestPopup />
         <BackupBanner />
+        <ConfirmHost />
         <UpdateNotice />
       </div>
     </PaneContext.Provider>

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { askConfirm } from '../components/ConfirmDialog';
 import {
   ArrowDownWideNarrow,
   ArrowUpDown,
@@ -237,7 +238,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
               type="button"
               className="btn small danger"
               onClick={async () => {
-                if (!confirm(tr('Delete collection “{name}”? Its objects will stay in {type}.', { name: activeCol.name, type: typeName }))) return;
+                if (!(await askConfirm({ title: tr('Delete collection “{name}”? Its objects will stay in {type}.', { name: activeCol.name, type: typeName }), confirmLabel: tr('Delete'), danger: true }))) return;
                 await deleteCollection(activeCol.id);
                 open(`/type/${typeId}`);
               }}

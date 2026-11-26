@@ -1,4 +1,5 @@
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { activateTab, closeTab, openTab, tabPath, useTabs, type Tab } from '../store/tabs';
 import { ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight, CircleCheck, Columns2, Compass, FileText, Hash, Network, PanelLeft, Plus, Repeat, Search, Settings, SquareCheckBig, Trash, X } from 'lucide-react';
 import { fileNameFromPath } from '../lib/native';
 import { displayTitle, useData } from '../store/dataStore';
@@ -58,6 +59,60 @@ function usePathTitle(path: string): { icon: ReactNode; title: string } {
   }, [path, objects, types, collections, tr, space]);
 }
 
+function TabItem({ tab, active, closable }: { tab: Tab; active: boolean; closable: boolean }) {
+  const tr = useT();
+  const { icon, title } = usePathTitle(tabPath(tab));
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (active) ref.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [active]);
+  return (
+    <div ref={ref} className={`tab-item${active ? ' is-active' : ''}`}>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={active}
+        className="tab-main"
+        title={title}
+        onClick={() => activateTab(tab.id)}
+        onAuxClick={(e) => {
+          // Middle-click closes, as in a browser.
+          if (e.button === 1 && closable) {
+            e.preventDefault();
+            closeTab(tab.id);
+          }
+        }}
+      >
+        <span className="tab-icon">{icon}</span>
+        <span className="tab-title">{title}</span>
+      </button>
+      {closable && (
+        <button type="button" className="tab-close" onClick={() => closeTab(tab.id)} title={tr('Close tab')} aria-label={tr('Close tab')}>
+          <X size={13} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** The main pane's tabs: one per open page, each with its own back/forward history. */
+function TabStrip() {
+  const tr = useT();
+  const { tabs, active } = useTabs();
+  return (
+    <div className="tab-strip">
+      <div className="tab-list" role="tablist" aria-label={tr('Open pages')}>
+        {tabs.map((t) => (
+          <TabItem key={t.id} tab={t} active={t.id === active} closable={tabs.length > 1} />
+        ))}
+      </div>
+      <button type="button" className="icon-btn tab-new" onClick={() => openTab()} title={tr('New tab (Ctrl+T) · Ctrl+click a link to open it in a new tab')}>
+        <Plus size={16} />
+      </button>
+    </div>
+  );
+}
+
 function PaneTopBar() {
   const tr = useT();
   const ctx = usePane();
@@ -85,10 +140,14 @@ function PaneTopBar() {
       <button type="button" className="icon-btn" disabled={!ctx.canForward} onClick={ctx.forward} title={tr('Forward')}>
         <ChevronRight size={17} />
       </button>
-      <div className="pane-title">
-        <span className="pane-title-icon">{icon}</span>
-        <span className="pane-title-text">{title}</span>
-      </div>
+      {ctx.pane === 'main' ? (
+        <TabStrip />
+      ) : (
+        <div className="pane-title">
+          <span className="pane-title-icon">{icon}</span>
+          <span className="pane-title-text">{title}</span>
+        </div>
+      )}
       <div className="pane-top-actions">
         {ctx.pane === 'main' && (
           <>

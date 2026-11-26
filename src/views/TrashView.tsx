@@ -1,4 +1,5 @@
 import { useT } from '../store/uiStore';
+import { askConfirm } from '../components/ConfirmDialog';
 import { RotateCcw, Trash } from 'lucide-react';
 import { relativeTime } from '../lib/dates';
 import { typeLabel } from '../lib/typeLabels';
@@ -26,7 +27,7 @@ export function TrashView() {
             type="button"
             className="btn danger"
             onClick={async () => {
-              if (confirm(tr('Permanently delete {count} object(s)? This cannot be undone.', { count: trashed.length }))) await emptyTrash();
+              if (await askConfirm({ title: tr('Empty Trash?'), message: tr('Permanently delete {count} object(s)? This cannot be undone.', { count: trashed.length }), confirmLabel: tr('Empty Trash'), danger: true })) await emptyTrash();
             }}
           >
             <Trash size={14} /> {tr('Empty Trash')}
@@ -59,7 +60,7 @@ export function TrashView() {
                 type="button"
                 className="btn small danger"
                 onClick={async () => {
-                  if (confirm(tr('Permanently delete “{title}”? This cannot be undone.', { title: displayTitle(o, tr) }))) await deletePermanently(o.id);
+                  if (await askConfirm({ title: tr('Delete permanently?'), message: tr('This cannot be undone.'), items: [displayTitle(o, tr)], confirmLabel: tr('Delete'), danger: true })) await deletePermanently(o.id);
                 }}
               >
                 {tr('Delete')}

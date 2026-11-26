@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { askConfirm } from './ConfirmDialog';
 import { CloudCheck, CloudOff, FolderSync, KeyRound, Link2, RefreshCw, Unplug } from 'lucide-react';
 import { useT } from '../store/uiStore';
 import { localizeError } from '../lib/i18n';
@@ -114,8 +115,8 @@ export function WebDavSyncSettings() {
               type="button"
               className="btn-ghost"
               disabled={busy}
-              onClick={() => {
-                if (window.confirm(tr('Stop syncing with this folder on this device? Notes stay on this device and in the folder.'))) void run(disconnectWebDav);
+              onClick={async () => {
+                if (await askConfirm({ title: tr('Stop syncing with this folder on this device? Notes stay on this device and in the folder.'), confirmLabel: tr('Disconnect') })) void run(disconnectWebDav);
               }}
             >
               <Unplug size={15} /> {tr('Disconnect')}

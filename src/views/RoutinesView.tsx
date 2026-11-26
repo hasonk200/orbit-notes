@@ -1,3 +1,4 @@
+import { askConfirm } from '../components/ConfirmDialog';
 import {
   CalendarClock,
   CheckCircle2,
@@ -244,8 +245,8 @@ export function RoutinesView() {
     setModalOpen(false);
   };
 
-  const confirmDelete = (r: RoutineRec) => {
-    if (window.confirm(tr('Delete routine “{title}”?', { title: r.title }))) {
+  const confirmDelete = async (r: RoutineRec) => {
+    if (await askConfirm({ title: tr('Delete this routine?'), message: tr('Its check-off history is deleted too.'), items: [r.title], confirmLabel: tr('Delete'), danger: true })) {
       void deleteRoutine(r.id);
     }
   };
