@@ -187,14 +187,20 @@ export function routineStreak(
 export type RoutineDotState = 'done' | 'missed' | 'today-open' | 'off';
 
 export function last7DaysStatus(
-  r: Pick<RoutineRec, 'cadence' | 'weekdays' | 'monthDay' | 'completions'>,
+  r: Pick<RoutineRec, 'cadence' | 'weekdays' | 'monthDay' | 'completions'> & { createdAt?: number },
   refIso = todayISO(),
 ): { iso: string; state: RoutineDotState }[] {
   const ref = fromISODate(refIso);
   if (!isValid(ref)) return [];
+  // Days before the routine existed weren't missed; show them as neutral.
+  const createdIso = r.createdAt ? toISODate(new Date(r.createdAt)) : '';
   const out: { iso: string; state: RoutineDotState }[] = [];
   for (let offset = -6; offset <= 0; offset++) {
     const iso = toISODate(addDays(ref, offset));
+    if (createdIso && iso < createdIso && !r.completions?.[iso]) {
+      out.push({ iso, state: 'off' });
+      continue;
+    }
     const scheduled = isRoutineScheduledOnDate(r, iso);
     const doneExplicit = Boolean(r.completions?.[iso]);
     const donePeriod = isRoutineDoneForDate(r, iso);
@@ -321,4 +327,33 @@ export async function toggleRoutine(id: string, iso = todayISO()): Promise<Routi
 
 export async function deleteRoutine(id: string) {
   await db.meta.delete(routineMetaKey(id));
+}
+
+/** The weekdays (0 = Sun) a cadence repeats on, for the day picker. Monthly routines have none. */
+export function routineDays(cadence: RoutineCadence, weekdays?: number[]): number[] {
+  switch (cadence) {
+    case 'daily':
+      return [0, 1, 2, 3, 4, 5, 6];
+    case 'weekdays':
+      return [1, 2, 3, 4, 5];
+    case 'weekends':
+      return [0, 6];
+    case 'weekly':
+      return weekdays?.length ? [...weekdays].sort((a, b) => a - b) : [1];
+    case 'monthly':
+      return [];
+  }
+}
+
+/**
+ * Tapping a day in the picker: switch that day on or off and pick the cadence that means exactly those days.
+ * At least one day stays on. "Weekends" (done once per weekend) is never chosen this way: picking Sat and Sun means both days.
+ */
+export function pickRoutineDay(cadence: RoutineCadence, weekdays: number[] | undefined, day: number): { cadence: RoutineCadence; weekdays: number[] } {
+  const current = cadence === 'monthly' ? [] : routineDays(cadence, weekdays);
+  const next = current.includes(day) ? current.filter((d) => d !== day) : [...current, day].sort((a, b) => a - b);
+  if (!next.length) return { cadence, weekdays: current };
+  if (next.length === 7) return { cadence: 'daily', weekdays: next };
+  if (next.join() === '1,2,3,4,5') return { cadence: 'weekdays', weekdays: next };
+  return { cadence: 'weekly', weekdays: next };
 }

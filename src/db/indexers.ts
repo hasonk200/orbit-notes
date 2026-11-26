@@ -4,7 +4,7 @@ import { dailyTitle, toISODate } from '../lib/dates';
 import { classifyTaskKind } from '../lib/tasks';
 import { defaultTemplate } from '../lib/typeLabels';
 import { getT, useUI } from '../store/uiStore';
-import { AI_LOG_TYPE, aiLogId, aiLogTitle, spaceMark } from '../lib/spaces';
+import { AI_LOG_TYPE, aiLogId, aiLogTitle, spaceMark, spaceOf } from '../lib/spaces';
 import type { Space } from './schema';
 
 /** Rebuild links / tasks / tags for one object. Must be called inside a rw transaction on objects, links, tasks. */
@@ -144,7 +144,11 @@ export async function getOrCreateDaily(date: string | Date): Promise<Obj> {
   const id = dailyId(iso);
   const existing = await db.objects.get(id);
   if (existing) {
-    if (existing.deletedAt) await saveObject(id, { deletedAt: null });
+    // A day's note that was trashed or moved to the AI workspace would stay hidden: bring it back.
+    if (existing.deletedAt || spaceOf(existing) !== 'me' || existing.typeId !== 'daily') {
+      await saveObject(id, { deletedAt: null, space: undefined, typeId: 'daily' });
+      return (await db.objects.get(id))!;
+    }
     return existing;
   }
   try {
@@ -161,7 +165,11 @@ export async function getOrCreateAiLog(date: string | Date): Promise<Obj> {
   const id = aiLogId(iso);
   const existing = await db.objects.get(id);
   if (existing) {
-    if (existing.deletedAt) await saveObject(id, { deletedAt: null });
+    // Otherwise "+ AI log" does nothing for a log that was trashed, moved to My space, or synced without its AI mark.
+    if (existing.deletedAt || spaceOf(existing) !== 'ai' || existing.typeId !== AI_LOG_TYPE) {
+      await saveObject(id, { deletedAt: null, space: 'ai', typeId: AI_LOG_TYPE });
+      return (await db.objects.get(id))!;
+    }
     return existing;
   }
   try {

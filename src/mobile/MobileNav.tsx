@@ -31,7 +31,7 @@ export function MobileNav() {
     <>
       <nav className={`m-nav${typing ? ' is-hidden' : ''}`} aria-label={tr('Main')} aria-hidden={typing || undefined}>
         {item(isHome, tr('Home screen'), <Home size={23} />, () => (isHome ? void refreshFromHome() : open('/home')))}
-        {item(isCalendar, tr('Calendar'), <CalendarDays size={23} />, async () => {
+        {item(isCalendar, tr('Diary'), <CalendarDays size={23} />, async () => {
           await getOrCreateDayNote(todayISO());
           open(`/calendar?mode=day&date=${todayISO()}`);
         })}

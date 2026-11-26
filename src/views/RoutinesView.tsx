@@ -28,6 +28,8 @@ import {
   updateRoutine,
   weekdayShortLabel,
   type RoutineCadence,
+  pickRoutineDay,
+  routineDays,
   type RoutineRec,
   type RoutineTimeSlot,
 } from '../lib/routines';
@@ -175,15 +177,6 @@ export function RoutinesView() {
       }),
     ];
   }, [activeObjects, typeMap, tr]);
-
-  const toggleDayIn = (list: number[], day: number, setter: (next: number[]) => void) => {
-    if (list.includes(day)) {
-      if (list.length === 1) return; // keep at least 1 selected day
-      setter(list.filter((d) => d !== day));
-    } else {
-      setter([...list, day].sort((a, b) => a - b));
-    }
-  };
 
   const submitQuickAdd = async () => {
     if (!draft.trim()) return;
@@ -447,14 +440,19 @@ export function RoutinesView() {
               {label}
             </button>
           ))}
-          {quickCadence === 'weekly' && (
+          {quickCadence !== 'monthly' && (
             <div className="weekday-pills" role="group" aria-label={tr('Days of week')}>
               {WEEKDAY_ORDER.map((d) => (
                 <button
                   key={d}
                   type="button"
-                  className={`weekday-pill${quickWeekdays.includes(d) ? ' active' : ''}`}
-                  onClick={() => toggleDayIn(quickWeekdays, d, setQuickWeekdays)}
+                  aria-pressed={routineDays(quickCadence, quickWeekdays).includes(d)}
+                  className={`weekday-pill${routineDays(quickCadence, quickWeekdays).includes(d) ? ' active' : ''}`}
+                  onClick={() => {
+                    const next = pickRoutineDay(quickCadence, quickWeekdays, d);
+                    setQuickCadence(next.cadence);
+                    setQuickWeekdays(next.weekdays);
+                  }}
                 >
                   {weekdayShortLabel(d, tr)}
                 </button>
@@ -656,16 +654,21 @@ export function RoutinesView() {
               </div>
             </div>
 
-            {formCadence === 'weekly' && (
+            {formCadence !== 'monthly' && (
               <div className="routine-modal-field">
                 <span>{tr('Days of week')}</span>
-                <div className="weekday-pills">
+                <div className="weekday-pills" role="group" aria-label={tr('Days of week')}>
                   {WEEKDAY_ORDER.map((d) => (
                     <button
                       key={d}
                       type="button"
-                      className={`weekday-pill${formWeekdays.includes(d) ? ' active' : ''}`}
-                      onClick={() => toggleDayIn(formWeekdays, d, setFormWeekdays)}
+                      aria-pressed={routineDays(formCadence, formWeekdays).includes(d)}
+                      className={`weekday-pill${routineDays(formCadence, formWeekdays).includes(d) ? ' active' : ''}`}
+                      onClick={() => {
+                        const next = pickRoutineDay(formCadence, formWeekdays, d);
+                        setFormCadence(next.cadence);
+                        setFormWeekdays(next.weekdays);
+                      }}
                     >
                       {weekdayShortLabel(d, tr)}
                     </button>

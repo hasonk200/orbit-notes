@@ -5,7 +5,17 @@ import { useData } from '../store/dataStore';
 import { downloadBackup } from '../db/backup';
 import { backupToFolder, getBackupFolder } from '../db/fsSync';
 
-const WEEK = 7 * 24 * 3600 * 1000;
+const DAY = 24 * 3600 * 1000;
+const WEEK = 7 * DAY;
+const SNOOZE_KEY = 'orbit-backup-snooze-until';
+
+function snoozedUntil() {
+  try {
+    return Number(localStorage.getItem(SNOOZE_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
 
 export function BackupBanner() {
   const tr = useT();
@@ -14,6 +24,7 @@ export function BackupBanner() {
   const count = useData((s) => s.objects.filter((o) => !o.deletedAt && o.typeId !== 'daily').length + s.objects.filter((o) => o.typeId === 'daily').length);
   const [hasFolder, setHasFolder] = useState(false);
   const [dismissed, setDismissed] = useState(() => {
+    if (snoozedUntil() > Date.now()) return true;
     try {
       return sessionStorage.getItem('orbit-backup-dismissed') === '1';
     } catch {
@@ -33,6 +44,16 @@ export function BackupBanner() {
     setDismissed(true);
     try {
       sessionStorage.setItem('orbit-backup-dismissed', '1');
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // Hide the reminder for three days, remembered across restarts (the ✕ only hides it until the app reopens).
+  const snooze = () => {
+    setDismissed(true);
+    try {
+      localStorage.setItem(SNOOZE_KEY, String(Date.now() + 3 * DAY));
     } catch {
       /* ignore */
     }
@@ -73,6 +94,9 @@ export function BackupBanner() {
         }}
       >
         {tr('Export .zip')}
+      </button>
+      <button type="button" className="btn-ghost small" onClick={snooze}>
+        {tr('Hide for 3 days')}
       </button>
       <button type="button" className="icon-btn tiny" onClick={dismiss} title={tr('Remind me later')}>
         <X size={14} />

@@ -159,7 +159,7 @@ export function MobileHome() {
         <Row icon={<CircleCheck size={18} />} label={tr('To-do')} onClick={() => open('/todos')} right={dueToday.todos || null} />
         <Row icon={<Repeat size={18} />} label={tr('Routines')} onClick={() => open('/routines')} right={dueToday.dueRoutines || null} />
         <Row icon={<SquareCheckBig size={18} />} label={tr('Tasks')} onClick={() => open('/tasks')} right={dueToday.projectTasks || null} />
-        <Row icon={<CalendarDays size={18} />} label={tr('Calendar')} onClick={() => open('/calendar?mode=month')} />
+        <Row icon={<CalendarDays size={18} />} label={tr('Diary')} onClick={() => open('/calendar?mode=month')} />
         <Row icon={<Network size={18} />} label={tr('Graph')} onClick={() => open('/graph')} />
         <Row icon={<Hash size={18} />} label={tr('Tags')} onClick={() => open('/tags')} />
         <Row icon={<BookOpen size={18} />} label={tr('AI handbook')} onClick={async () => open(await ensureHandbook(tr))} />

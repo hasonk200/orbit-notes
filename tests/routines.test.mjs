@@ -17,6 +17,8 @@ const {
   isRoutineDueOnDate,
   isRoutineScheduledOnDate,
   last7DaysStatus,
+  pickRoutineDay,
+  routineDays,
   routineStreak,
   toggleRoutineForDate,
 } = await vite.ssrLoadModule('/src/lib/routines.ts');
@@ -120,4 +122,27 @@ test('routineStreak and last7DaysStatus compute streaks accurately without break
     dots.map((d) => d.state),
     ['missed', 'missed', 'missed', 'done', 'done', 'done', 'today-open'],
   );
+});
+
+test('the day picker turns taps into the matching cadence', () => {
+  assert.deepEqual(routineDays('weekends'), [0, 6]);
+  assert.deepEqual(routineDays('monthly', [3]), []);
+  // Daily minus Sunday: Mon–Sat, per day.
+  assert.deepEqual(pickRoutineDay('daily', undefined, 0), { cadence: 'weekly', weekdays: [1, 2, 3, 4, 5, 6] });
+  // Adding Friday to Mon–Thu gives the weekday preset.
+  assert.deepEqual(pickRoutineDay('weekly', [1, 2, 3, 4], 5), { cadence: 'weekdays', weekdays: [1, 2, 3, 4, 5] });
+  // Adding Sunday to Mon–Sat gives every day.
+  assert.deepEqual(pickRoutineDay('weekly', [1, 2, 3, 4, 5, 6], 0), { cadence: 'daily', weekdays: [0, 1, 2, 3, 4, 5, 6] });
+  // "Once per weekend" becomes Saturday only, not a silent change of meaning.
+  assert.deepEqual(pickRoutineDay('weekends', undefined, 0), { cadence: 'weekly', weekdays: [6] });
+  // The last day can't be switched off.
+  assert.deepEqual(pickRoutineDay('weekly', [3], 3), { cadence: 'weekly', weekdays: [3] });
+  // From monthly, a tap starts a weekly routine on that day.
+  assert.deepEqual(pickRoutineDay('monthly', undefined, 2), { cadence: 'weekly', weekdays: [2] });
+});
+
+test('days before a routine was created are not shown as missed', () => {
+  const r = makeRoutine({ cadence: 'daily', createdAt: new Date(2026, 10, 25, 9).getTime(), completions: {} });
+  const states = last7DaysStatus(r, '2026-11-26').map((d) => d.state);
+  assert.deepEqual(states, ['off', 'off', 'off', 'off', 'off', 'missed', 'today-open']);
 });
