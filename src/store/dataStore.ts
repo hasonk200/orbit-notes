@@ -4,7 +4,8 @@ import { useMemo } from 'react';
 import { db, type CollectionRec, type LinkRec, type Obj, type ObjType, type TaskRec } from '../db/schema';
 import { dailyTitle } from '../lib/dates';
 import { translators } from '../lib/i18n';
-import { AI_LOG_TYPE, aiLogTitle, objectsInSpace, tasksInSpace, typesForSpace } from '../lib/spaces';
+import { AI_LOG_TYPE, aiLogTitle, objectsInSpace, spaceOf, tasksInSpace, typesForSpace } from '../lib/spaces';
+import { ROUTINE_KEY_PREFIX, sortRoutines, type RoutineRec } from '../lib/routines';
 import { useUI } from './uiStore';
 
 interface DataState {
@@ -14,6 +15,7 @@ interface DataState {
   collections: CollectionRec[];
   tasks: TaskRec[];
   links: LinkRec[];
+  routines: RoutineRec[];
   pinned: string[];
   lastBackupAt: number | null;
 }
@@ -26,6 +28,7 @@ export const useData = create<DataState>(() => ({
   collections: [],
   tasks: [],
   links: [],
+  routines: [],
   pinned: [],
   lastBackupAt: null,
 }));
@@ -35,21 +38,28 @@ export function startDataSync() {
   if (started) return;
   started = true;
   liveQuery(async () => {
-    const [objects, types, collections, tasks, links, pinned, lastBackupAt] = await Promise.all([
+    const [objects, types, collections, tasks, links, routineRows, pinned, lastBackupAt] = await Promise.all([
       db.objects.toArray(),
       db.types.orderBy('order').toArray(),
       db.collections.orderBy('order').toArray(),
       db.tasks.toArray(),
       db.links.toArray(),
+      db.meta.where('key').startsWith(ROUTINE_KEY_PREFIX).toArray(),
       db.meta.get('pinned'),
       db.meta.get('lastBackupAt'),
     ]);
+    const routines = sortRoutines(
+      routineRows
+        .map((r) => r.value as RoutineRec | undefined)
+        .filter((r): r is RoutineRec => Boolean(r && r.id && r.title)),
+    );
     return {
       objects,
       types,
       collections: collections.filter((c) => !c.deletedAt),
       tasks,
       links,
+      routines,
       pinned: (pinned?.value as string[]) ?? [],
       lastBackupAt: (lastBackupAt?.value as number) ?? null,
     };
@@ -87,6 +97,13 @@ export function useSpaceTasks() {
   const objMap = useObjMap();
   const space = useUI((s) => s.space);
   return useMemo(() => tasksInSpace(tasks, objMap, space), [tasks, objMap, space]);
+}
+
+/** Routines belonging to the space you are in. */
+export function useSpaceRoutines() {
+  const routines = useData((s) => s.routines);
+  const space = useUI((s) => s.space);
+  return useMemo(() => routines.filter((r) => spaceOf(r) === space), [routines, space]);
 }
 
 /** Object types listed in the space you are in. */

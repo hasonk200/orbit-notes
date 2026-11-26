@@ -7347,6 +7347,258 @@ img.connect-logo {
   border-radius: 8px;
 }
 
+/* ---------- Routines page (/routines) & Day routines ---------- */
+.routines-brand-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  background: color-mix(in srgb, #2fa57a 14%, var(--surface));
+  color: var(--ok);
+}
+.routine-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.routine-summary.is-complete {
+  border-color: color-mix(in srgb, var(--ok) 35%, var(--line));
+  background: color-mix(in srgb, var(--ok-soft) 55%, var(--surface));
+}
+.routine-summary-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.routine-summary-text strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.routine-summary-progress {
+  flex: none;
+}
+.routine-summary-progress .proj-progress-bar {
+  width: 80px;
+}
+.routine-summary.is-complete .proj-progress-fill {
+  background: var(--ok);
+}
+
+.routine-row {
+  gap: 10px;
+}
+.routine-main {
+  min-width: 0;
+}
+.routine-title-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.routine-emoji {
+  flex: none;
+}
+.routine-note {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.routine-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.routine-cadence-chip,
+.routine-slot-chip {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+.routine-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+}
+.routine-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+.routine-dot.is-done {
+  background: var(--ok);
+}
+.routine-dot.is-missed {
+  background: color-mix(in srgb, var(--danger) 45%, var(--surface-3));
+}
+.routine-dot.is-today-open {
+  background: transparent;
+  border: 1.5px solid var(--accent);
+  width: 8px;
+  height: 8px;
+}
+.routine-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.routine-row-act {
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.routine-row:hover .routine-row-act,
+.routine-row:focus-within .routine-row-act {
+  opacity: 1;
+}
+
+.weekday-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.weekday-pill {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+.weekday-pill:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.weekday-pill.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.emoji-quick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.emoji-pick-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+}
+.emoji-pick-btn:hover {
+  background: var(--surface-2);
+}
+.emoji-pick-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.routine-modal-note {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+.routine-modal-note:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.routine-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.routine-modal-field > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.routine-cadence-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.routine-cadence-picks .chip.is-picked {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+.day-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.day-section-head h4 {
+  margin: 0;
+}
+.routine-day-row {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+@media (max-width: 820px) {
+  .routine-summary {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .routine-row {
+    flex-wrap: wrap;
+  }
+  .routine-meta {
+    width: 100%;
+    padding-left: 28px;
+  }
+  .routine-row-act {
+    opacity: 1;
+  }
+  .routine-modal-note {
+    font-size: 16px;
+  }
+  .weekday-pill {
+    min-width: 34px;
+    height: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .routine-row-act {
+    transition: none;
+  }
+}
+
 /* ---------- Option B: Task Bundle Card in /todos & /tasks ---------- */
 .task-bundle {
   border: 1px solid var(--line);

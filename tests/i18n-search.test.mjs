@@ -110,6 +110,7 @@ test('renders the main screens in Traditional Chinese and handles an invalid cal
     ['Settings', '繁體中文', '備份與還原'],
     ['HomeView', '探索', '快速建立'],
     ['TodosView', '待辦', '隨時', '已完成紀錄'],
+    ['RoutinesView', '例行任務', '每天'],
     ['TasksView', '專案任務', '狀態', '進行中'],
     ['CalendarView', '今', '未來 7 天'],
     ['TagsView', '標籤', '還沒有標籤'],

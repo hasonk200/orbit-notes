@@ -1,13 +1,14 @@
 import { typeLabel } from '../lib/typeLabels';
 import { useMemo, useRef } from 'react';
-import { CalendarDays, CircleCheck, Compass, Hash, Moon, Network, PanelLeft, Plus, Search, Settings, SquareCheckBig, Sun, Monitor, Trash } from 'lucide-react';
-import { displayTitle, useData, useObjMap, useSpaceTasks, useSpaceTypes } from '../store/dataStore';
+import { CalendarDays, CircleCheck, Compass, Hash, Moon, Network, PanelLeft, Plus, Repeat, Search, Settings, SquareCheckBig, Sun, Monitor, Trash } from 'lucide-react';
+import { displayTitle, useData, useObjMap, useSpaceRoutines, useSpaceTasks, useSpaceTypes } from '../store/dataStore';
 import { useT, useUI } from '../store/uiStore';
 import { objPath, useOpen, usePane } from '../store/pane';
 import { getOrCreateDayNote } from '../db/indexers';
 import { todayISO } from '../lib/dates';
 import { spaceOf } from '../lib/spaces';
 import { classifyTaskKind } from '../lib/tasks';
+import { isRoutineDoneForDate, isRoutineDueOnDate } from '../lib/routines';
 import { NewMenu } from './NewMenu';
 import { SyncIndicator } from './CloudSync';
 import { SpaceSwitcher } from './SpaceSwitcher';
@@ -31,6 +32,7 @@ export function Sidebar() {
   const spaceTypes = useSpaceTypes();
   const collections = useData((s) => s.collections);
   const tasks = useSpaceTasks();
+  const routines = useSpaceRoutines();
   const pinned = useData((s) => s.pinned);
   const space = useUI((s) => s.space);
   const objMap = useObjMap();
@@ -52,7 +54,7 @@ export function Sidebar() {
     return { c, col, trash };
   }, [objects, space]);
 
-  const { openTodos, openTasks } = useMemo(() => {
+  const { openTodos, openTasks, openRoutines } = useMemo(() => {
     const today = todayISO();
     let todosC = 0;
     let tasksC = 0;
@@ -74,8 +76,9 @@ export function Sidebar() {
         if ((t.due && t.due <= today) || t.status === 'in_progress') tasksC++;
       }
     }
-    return { openTodos: todosC, openTasks: tasksC };
-  }, [tasks, objMap]);
+    const routinesC = routines.filter((r) => isRoutineDueOnDate(r, today, today) && !isRoutineDoneForDate(r, today)).length;
+    return { openTodos: todosC, openTasks: tasksC, openRoutines: routinesC };
+  }, [tasks, objMap, routines]);
 
   const parsedUrl = new URL(path, 'http://orbit.local');
   const p = parsedUrl.pathname;
@@ -115,6 +118,7 @@ export function Sidebar() {
           }}
         />
         <NavItem icon={<CircleCheck size={16} />} label={tr('To-do')} path="/todos" active={p === '/todos'} badge={openTodos || null} />
+        <NavItem icon={<Repeat size={16} />} label={tr('Routines')} path="/routines" active={p === '/routines'} badge={openRoutines || null} />
         <NavItem icon={<SquareCheckBig size={16} />} label={tr('Tasks')} path="/tasks" active={p === '/tasks'} badge={openTasks || null} />
         <NavItem icon={<Compass size={16} />} label={tr(space === 'ai' ? 'AI workspace home' : 'Explore')} path="/home" active={p === '/home'} />
         <NavItem icon={<Network size={16} />} label={tr('Graph')} path="/graph" active={p === '/graph'} />

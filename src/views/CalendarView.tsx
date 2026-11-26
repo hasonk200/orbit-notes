@@ -4,10 +4,11 @@ import { CalendarCheck, CalendarDays, CalendarRange, ChevronDown, ChevronLeft, C
 import { addDays, addMonths, endOfMonth, endOfWeek, getWeek, isSameMonth, isValid, startOfMonth, startOfWeek } from 'date-fns';
 import type { Obj, ObjType, TaskRec } from '../db/schema';
 import { getOrCreateDayNote, softDelete } from '../db/indexers';
-import { displayTitle, togglePinned, useData, useObjMap, useSpaceTasks, useTypeMap } from '../store/dataStore';
+import { displayTitle, togglePinned, useData, useObjMap, useSpaceRoutines, useSpaceTasks, useTypeMap } from '../store/dataStore';
 import { AI_LOG_TYPE, spaceOf } from '../lib/spaces';
 import { objPath, useOpen, usePane } from '../store/pane';
 import { dailyTitle, dateLabel, fromISODate, toISODate, todayISO } from '../lib/dates';
+import { formatRoutineCadence, isRoutineDoneForDate, isRoutineDueOnDate, isRoutineScheduledOnDate, toggleRoutine } from '../lib/routines';
 import { propertyLabel } from '../lib/typeLabels';
 import { Backlinks } from '../components/Backlinks';
 import { AiNotesPanel } from '../components/AiNotesPanel';
@@ -135,7 +136,9 @@ type DayTab = 'all' | 'note' | 'created' | 'tasks';
 
 function DayDetail({ iso, idx, tab: shownTab, onTab, hideTabs }: { iso: string; idx: CalIndex; tab?: DayTab; onTab?: (t: DayTab) => void; hideTabs?: boolean }) {
   const tr = useT();
+  const open = useOpen();
   const typeMap = useTypeMap();
+  const routines = useSpaceRoutines();
   const isAi = useUI((s) => s.space) === 'ai';
   const [ownTab, setOwnTab] = useState<DayTab>('all');
   // The phone layout drives the tab from its top bar; the desktop keeps its own.
@@ -145,6 +148,14 @@ function DayDetail({ iso, idx, tab: shownTab, onTab, hideTabs }: { iso: string; 
   const created = idx.created.get(iso) ?? [];
   const dated = idx.dated.get(iso) ?? [];
   const due = [...(idx.due.get(iso) ?? [])].sort((a, b) => Number(a.done) - Number(b.done));
+  const today = todayISO();
+  const dayRoutines = useMemo(() => {
+    const list =
+      iso === today
+        ? routines.filter((r) => isRoutineDueOnDate(r, iso, today))
+        : routines.filter((r) => isRoutineScheduledOnDate(r, iso) || Boolean(r.completions?.[iso]));
+    return list.sort((a, b) => Number(isRoutineDoneForDate(a, iso)) - Number(isRoutineDoneForDate(b, iso)));
+  }, [routines, iso, today]);
   const tabs: [DayTab, string, number | null][] = [
     ['all', tr('All'), null],
     ['note', tr(isAi ? 'AI log' : 'Daily note'), null],
@@ -178,6 +189,34 @@ function DayDetail({ iso, idx, tab: shownTab, onTab, hideTabs }: { iso: string; 
           {dated.map(({ obj, prop, fieldId }) => (
             <ObjectRow key={obj.id + fieldId} obj={obj} type={typeMap.get(obj.typeId)} right={<span className="muted small">{prop}</span>} />
           ))}
+        </section>
+      )}
+      {(tab === 'all' || tab === 'tasks') && dayRoutines.length > 0 && (
+        <section className="day-section">
+          <div className="day-section-head">
+            <h4>{tr('Routines')}</h4>
+            <button type="button" className="btn-ghost small" onClick={(e) => open('/routines', e)}>
+              {tr('Manage')}
+            </button>
+          </div>
+          {dayRoutines.map((r) => {
+            const done = isRoutineDoneForDate(r, iso);
+            return (
+              <div key={r.id} className={`task-row routine-day-row${done ? ' done' : ''}`}>
+                <label className="task-check">
+                  <input type="checkbox" checked={done} onChange={() => void toggleRoutine(r.id, iso)} />
+                  <span className="task-box round" />
+                </label>
+                <div className="task-row-main">
+                  <div className="task-row-text">
+                    {r.icon && <span className="routine-emoji">{r.icon}</span>}
+                    <span>{r.title}</span>
+                  </div>
+                </div>
+                <span className="chip plain routine-cadence-chip">{formatRoutineCadence(r, tr)}</span>
+              </div>
+            );
+          })}
         </section>
       )}
       {(tab === 'all' || tab === 'tasks') && (due.length > 0 || tab === 'tasks') && (

@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { BookOpen, CalendarDays, Check, ChevronRight, CircleCheck, Hash, Monitor, Moon, Network, Plus, Settings, SquareCheckBig, Sun, Trash } from 'lucide-react';
+import { BookOpen, CalendarDays, Check, ChevronRight, CircleCheck, Hash, Monitor, Moon, Network, Plus, Repeat, Settings, SquareCheckBig, Sun, Trash } from 'lucide-react';
 import { getOrCreateDaily } from '../db/indexers';
 import { dateLabel, todayISO } from '../lib/dates';
+import { isRoutineDoneForDate, isRoutineDueOnDate } from '../lib/routines';
 import { spaceOf } from '../lib/spaces';
 import { classifyTaskKind } from '../lib/tasks';
 import { typeLabel } from '../lib/typeLabels';
-import { displayTitle, useData, useObjMap, useSpaceObjects, useSpaceTasks, useSpaceTypes } from '../store/dataStore';
+import { displayTitle, useData, useObjMap, useSpaceObjects, useSpaceRoutines, useSpaceTasks, useSpaceTypes } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
 import { SpaceSwitcher } from '../components/SpaceSwitcher';
@@ -56,6 +57,7 @@ export function MobileHome() {
   const types = useSpaceTypes();
   const collections = useData((s) => s.collections);
   const tasks = useSpaceTasks();
+  const routines = useSpaceRoutines();
   const pinned = useData((s) => s.pinned);
   const objMap = useObjMap();
   const { theme, setTheme, setTypeEditor, setPalette } = useUI();
@@ -89,8 +91,9 @@ export function MobileHome() {
         if (t.due && t.due <= today) todos++;
       } else if ((t.due && t.due <= today) || t.status === 'in_progress') projectTasks++;
     }
-    return { todos, projectTasks };
-  }, [tasks, objMap]);
+    const dueRoutines = routines.filter((r) => isRoutineDueOnDate(r, today, today) && !isRoutineDoneForDate(r, today)).length;
+    return { todos, projectTasks, dueRoutines };
+  }, [tasks, objMap, routines]);
 
   const pinnedObjects = pinned.map((id) => objMap.get(id)).filter((o) => o && !o.deletedAt && spaceOf(o) === 'me');
   const recent = useMemo(() => [...spaceObjects].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8), [spaceObjects]);
@@ -154,6 +157,7 @@ export function MobileHome() {
 
       <Section title={tr('Quick links')}>
         <Row icon={<CircleCheck size={18} />} label={tr('To-do')} onClick={() => open('/todos')} right={dueToday.todos || null} />
+        <Row icon={<Repeat size={18} />} label={tr('Routines')} onClick={() => open('/routines')} right={dueToday.dueRoutines || null} />
         <Row icon={<SquareCheckBig size={18} />} label={tr('Tasks')} onClick={() => open('/tasks')} right={dueToday.projectTasks || null} />
         <Row icon={<CalendarDays size={18} />} label={tr('Calendar')} onClick={() => open('/calendar?mode=month')} />
         <Row icon={<Network size={18} />} label={tr('Graph')} onClick={() => open('/graph')} />
