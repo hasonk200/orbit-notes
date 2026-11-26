@@ -1,6 +1,5 @@
 param(
-  [Parameter(Mandatory = $true)]
-  [string]$Version,
+  [string]$Version = '',
   [switch]$DirectToMain,
   [switch]$SkipChecks,
   [switch]$DryRun
@@ -8,12 +7,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-$CleanVer = $Version.Trim().TrimStart('v')
-if ($CleanVer -notmatch '^\d+\.\d+\.\d+$') {
-  Write-Host "[ERROR] Version must be semver like 0.3.1 or v0.3.1 (got: $Version)" -ForegroundColor Red
-  exit 1
-}
-$Tag = "v$CleanVer"
 
 function RunStep([string]$Label, [scriptblock]$Action) {
   Write-Host "=== $Label ==="
@@ -28,6 +21,31 @@ function WriteUtf8NoBom([string]$Path, [string]$Content) {
   [IO.File]::WriteAllText($Path, $Content, (New-Object System.Text.UTF8Encoding $false))
 }
 
+function EnsureDepsSynced([string]$Dir, [string]$NpmPrefix = '') {
+  $lockPath = Join-Path $Dir 'package-lock.json'
+  $nmPath = Join-Path $Dir 'node_modules'
+  $stampPath = Join-Path $nmPath '.orbit-lock.sha256'
+  if (-not (Test-Path $lockPath)) { return }
+  $hash = (Get-FileHash $lockPath -Algorithm SHA256).Hash
+  $prevHash = if (Test-Path $stampPath) { (Get-Content $stampPath -Raw).Trim() } else { '' }
+  if ((Test-Path $nmPath) -and $prevHash -eq $hash) {
+    return
+  }
+  $label = if ($NpmPrefix) { "$NpmPrefix dependencies" } else { 'root dependencies' }
+  Write-Host "Syncing $label via npm ci..."
+  if ($NpmPrefix) {
+    npm.cmd --prefix $NpmPrefix ci
+  } else {
+    npm.cmd ci
+  }
+  if ($LASTEXITCODE -ne 0) {
+    throw "npm ci failed for $label"
+  }
+  if (Test-Path $nmPath) {
+    WriteUtf8NoBom $stampPath $hash
+  }
+}
+
 Push-Location $RepoRoot
 try {
   $branch = (git rev-parse --abbrev-ref HEAD).Trim()
@@ -38,31 +56,52 @@ try {
   if ($dirty) {
     throw "Tracked files have uncommitted changes. Commit or stash them before releasing.`n$dirty"
   }
+
+  $pkgPath = Join-Path $RepoRoot 'package.json'
+  $curPkg = [IO.File]::ReadAllText($pkgPath, [Text.Encoding]::UTF8) | ConvertFrom-Json
+  $curVer = [string]$curPkg.version
+
+  if (-not $Version.Trim()) {
+    $parts = $curVer -split '\.'
+    $suggested = if ($parts.Count -eq 3) { "$($parts[0]).$($parts[1]).$([int]$parts[2] + 1)" } else { '0.4.0' }
+    Write-Host "Current Orbit version: v$curVer" -ForegroundColor Cyan
+    $entered = Read-Host "Enter new version (e.g. 0.4.0, or press Enter for $suggested)"
+    $Version = if ($entered.Trim()) { $entered.Trim() } else { $suggested }
+  }
+
+  $CleanVer = $Version.Trim().TrimStart('v')
+  if ($CleanVer -notmatch '^\d+\.\d+\.\d+$') {
+    Write-Host "[ERROR] Version must be semver like 0.4.0 or v0.4.0 (got: $Version)" -ForegroundColor Red
+    exit 1
+  }
+  $Tag = "v$CleanVer"
+
   $existingTag = git tag -l $Tag
   if ($existingTag) {
     throw "Tag $Tag already exists locally."
   }
 
   if ($DryRun) {
-    Write-Host "[DRY-RUN] Verified clean main branch. Would pull main, run checks, bump to $CleanVer, open/merge PR (or push main), and tag $Tag."
+    Write-Host "[DRY-RUN] Verified clean main branch. Would pull main, auto-sync npm ci if lockfiles changed, run checks, bump $curVer -> $CleanVer, open/merge PR (or push main), and tag $Tag."
     exit 0
   }
 
-  RunStep '1/6 Pulling latest main' { git pull origin main }
+  RunStep '1/7 Pulling latest main' { git pull origin main }
+
+  RunStep '2/7 Syncing dependencies (npm ci if needed)' {
+    EnsureDepsSynced $RepoRoot
+    EnsureDepsSynced (Join-Path $RepoRoot 'functions') 'functions'
+  }
 
   if (-not $SkipChecks) {
-    RunStep '2/6 Installing packages, running unit tests, web build, and functions check' {
-      # The pull may bring new packages (e.g. opencc-js); install exactly what the lock files list.
-      npm.cmd ci --no-audit --no-fund
-      if ($LASTEXITCODE -eq 0) { npm.cmd --prefix functions ci --no-audit --no-fund }
-      if ($LASTEXITCODE -eq 0) { npm.cmd test }
+    RunStep '3/7 Running unit tests, web build, and functions check' {
+      npm.cmd test
       if ($LASTEXITCODE -eq 0) { npm.cmd run build }
       if ($LASTEXITCODE -eq 0) { npm.cmd --prefix functions run check }
     }
   }
 
-  Write-Host "=== 3/6 Bumping version files to $CleanVer ==="
-  $pkgPath = Join-Path $RepoRoot 'package.json'
+  Write-Host "=== 4/7 Bumping version files to $CleanVer ==="
   $pkgText = [IO.File]::ReadAllText($pkgPath, [Text.Encoding]::UTF8)
   $pkgNext = [regex]::Replace($pkgText, '("version"\s*:\s*")\d+\.\d+\.\d+(")', "`${1}$CleanVer`$2", 1)
   WriteUtf8NoBom $pkgPath $pkgNext
@@ -88,14 +127,14 @@ try {
   $files = @('package.json', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'android/app/build.gradle')
 
   if ($DirectToMain) {
-    RunStep '4/6 Committing and pushing to main' {
+    RunStep '5/7 Committing and pushing to main' {
       git add -- $files
       if ($LASTEXITCODE -eq 0) { git commit -m "chore: bump version to $CleanVer" }
       if ($LASTEXITCODE -eq 0) { git push origin main }
     }
   } else {
     $relBranch = "chore/release-$Tag"
-    RunStep "4/6 Opening and merging PR for $Tag" {
+    RunStep "5/7 Opening and merging PR for $Tag" {
       git checkout -b $relBranch
       if ($LASTEXITCODE -eq 0) { git add -- $files }
       if ($LASTEXITCODE -eq 0) { git commit -m "chore: bump version to $CleanVer" }
@@ -111,14 +150,14 @@ try {
     }
   }
 
-  RunStep "5/6 Creating and pushing tag $Tag" {
+  RunStep "6/7 Creating and pushing tag $Tag" {
     git tag -a $Tag -m "Orbit $Tag"
     if ($LASTEXITCODE -eq 0) { git push origin $Tag }
   }
 
-  Write-Host "=== 6/6 Done ===" -ForegroundColor Green
+  Write-Host '=== 7/7 Done ===' -ForegroundColor Green
   Write-Host "Release $Tag pushed! GitHub Actions is now building Web, Windows, and Android."
-  Write-Host 'Once finished, run Update-Orbit-Desktop.bat (or scripts\update-desktop.ps1) to upgrade locally.'
+  Write-Host 'Once finished (~3 min), double-click Update Orbit Desktop to upgrade locally.'
 } finally {
   Pop-Location
 }
