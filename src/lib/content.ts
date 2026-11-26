@@ -2,6 +2,7 @@ import type { AiTodo, JSONContent, TaskKind, TaskPriority, TaskStatus } from '..
 import { uid } from './uid';
 import { resolveTaskStatus } from './tasks';
 import { parseAiTodo } from './spaces';
+import { eachTaggedLine, isTaskTag, lineDate, setLineDue, setLineText, tagTaskKind, tagTaskName } from './tagTasks';
 
 export const emptyDoc = (): JSONContent => ({ type: 'doc', content: [{ type: 'paragraph' }] });
 
@@ -115,6 +116,32 @@ export function extractTasks(doc: JSONContent | undefined, titleOf?: (id: string
       });
     }
   });
+  // Lines tagged #待辦 / #專案任務 are tasks too; the tag holds their state.
+  eachTaggedLine(doc, (line, tag) => {
+    const a = tag.attrs ?? {};
+    if (!a.taskId) return;
+    const done = !!a.checked || a.status === 'done';
+    // The task's words: the line without its task tag and without the @date that is its due date.
+    const dueRef = line.content?.find((c) => c.type === 'dateRef' && c.attrs?.date);
+    const words = { ...line, content: (line.content ?? []).filter((c) => c !== tag && c !== dueRef) };
+    const linkIds = new Set<string>();
+    walk(words, (c) => {
+      if (c.type === 'objectLink' && c.attrs?.id) linkIds.add(c.attrs.id);
+    });
+    out.push({
+      id: a.taskId,
+      text: nodeText(words, titleOf).replace(/\s+/g, ' ').trim(),
+      done,
+      status: resolveTaskStatus(done, a.status),
+      explicitKind: tagTaskKind(a.name),
+      linkIds: [...linkIds],
+      due: lineDate(line) ?? a.due ?? null,
+      priority: (a.priority as TaskPriority) || null,
+      contextId: a.contextId || null,
+      completedAt: typeof a.completedAt === 'number' ? a.completedAt : null,
+      aiTodo: null,
+    });
+  });
   return out;
 }
 
@@ -123,7 +150,7 @@ export function assignTaskIds(doc: JSONContent, fresh = false): JSONContent {
   const copy: JSONContent = JSON.parse(JSON.stringify(doc ?? emptyDoc()));
   const seen = new Set<string>();
   walk(copy, (n) => {
-    if (n.type === 'taskItem') {
+    if (n.type === 'taskItem' || isTaskTag(n)) {
       n.attrs = n.attrs ?? {};
       if (fresh || !n.attrs.taskId || seen.has(n.attrs.taskId)) n.attrs.taskId = uid();
       seen.add(n.attrs.taskId);
@@ -191,6 +218,17 @@ export function patchTasksInDoc(doc: JSONContent, patches: Record<string, TaskPa
       found = true;
     }
   });
+  eachTaggedLine(copy, (line, tag) => {
+    const id = tag.attrs?.taskId;
+    if (!id || !Object.prototype.hasOwnProperty.call(patches, id)) return;
+    const { kind, due, text, ...rest } = patches[id];
+    applyTaskPatch(tag, rest);
+    // The kind is the tag itself; a task tag cannot be "unset" to auto, so null keeps it as it is.
+    if (kind) tag.attrs = { ...tag.attrs, name: tagTaskName(kind, tag.attrs?.name) };
+    if (due !== undefined) setLineDue(line, tag, due);
+    if (text !== undefined) setLineText(line, text);
+    found = true;
+  });
   return found ? copy : null;
 }
 
@@ -208,6 +246,11 @@ export function removeTaskFromDoc(doc: JSONContent, taskId: string): JSONContent
     const next: JSONContent[] = [];
     for (const child of node.content) {
       if (child.type === 'taskItem' && child.attrs?.taskId === taskId) {
+        removed = true;
+        continue;
+      }
+      // A tagged line stays; only its task tag goes.
+      if (isTaskTag(child) && child.attrs?.taskId === taskId) {
         removed = true;
         continue;
       }

@@ -6822,3 +6822,44 @@ img.connect-logo {
   padding: 0 10px;
   color: var(--muted);
 }
+
+/* ---------- #待辦 / #專案任務: a tag that makes its line a task ---------- */
+.tag-chip.tag-task {
+  gap: 5px;
+  padding-left: 3px;
+  cursor: default;
+}
+.tag-task-box {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  color: inherit;
+  cursor: pointer;
+}
+.tag-task.is-task .tag-task-box {
+  border-radius: 4px;
+}
+.tag-task.is-done .tag-task-box {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.tag-task-name {
+  cursor: pointer;
+}
+.tag-task-due {
+  color: var(--text-2);
+  font-size: 0.92em;
+}
+/* A finished tagged line is crossed out, like a ticked task. */
+:is(p, h1, h2, h3):has(.tag-task.is-done) {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.tag-task.is-done {
+  text-decoration: none;
+}

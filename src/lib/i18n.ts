@@ -4,6 +4,10 @@ type Values = Record<string, string | number>;
 export type Translate = ((message: string, values?: Values) => string) & { language: Language };
 
 const zhHant: Record<string, string> = {
+  "Mark as done": "標記為完成",
+  "Mark as not done": "標記為未完成",
+  "Make this line a to-do": "把這一行變成待辦",
+  "Make this line a project task": "把這一行變成專案任務",
   "Current version": "目前版本",
   "Recovered version": "保留的版本",
   "Deleted": "已刪除",
@@ -344,7 +348,7 @@ const zhHant: Record<string, string> = {
   "Today’s date": "今日日期",
   "Calendar": "行事曆",
   "Tasks": "專案任務",
-  "Task": "待辦事項",
+  "Task": "專案任務",
   "Graph": "關聯圖",
   "Tags": "標籤",
   "Tag": "標籤",

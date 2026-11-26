@@ -30,6 +30,7 @@ Choose **English** or **繁體中文** in **Settings → Appearance → Language
 | `#` | Add a tag |
 | `@` | Insert a date; inside a task it sets the due date (`@today`, `@tomorrow`, `@fri`, `@2026-12-24`, `@+3`) |
 | `[ ] ` | Start a task |
+| `#待辦` / `#專案任務` (or `#todo` / `#task`) | Make the line a to-do or project task without turning it into a checkbox; tick the tag to finish it |
 | Paste / drop an image | Compressed and stored as a binary blob |
 
 ## Shortcuts
