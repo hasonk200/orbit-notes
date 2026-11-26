@@ -6621,6 +6621,10 @@ img.connect-logo {
   max-width: 100%;
   font: inherit;
   cursor: pointer;
+  /* A tap must not select the box's text (inside a note it would otherwise light up like selected text). */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 /* A tap on the text or the arrow counts as a tap on the box (a note's editor ignores taps on its own buttons only). */
 .menu-select > * {
@@ -6783,6 +6787,8 @@ img.connect-logo {
 .menu-select-pop {
   min-width: 180px;
   padding: 5px;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .menu-select-list {
   position: relative;

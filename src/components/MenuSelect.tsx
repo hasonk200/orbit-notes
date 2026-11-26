@@ -55,6 +55,8 @@ export function MenuSelect<T extends string>({
   const btn = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const typed = useRef({ text: '', at: 0 });
+  // Where the pointer was last seen over the menu (null until it is first seen after opening).
+  const pointer = useRef<string | null>(null);
   const current = options.find((o) => o.value === value) ?? options[0];
 
   const items = () => [...(list.current?.querySelectorAll<HTMLButtonElement>('.menu-item') ?? [])];
@@ -87,6 +89,7 @@ export function MenuSelect<T extends string>({
     setMaxHeight(Math.min(360, below >= 160 ? below : Math.max(below, r.top - 30)));
     // A form field's menu is at least as wide as the field (less the menu's padding and border).
     setMinWidth(look === 'box' ? 0 : Math.round(r.width) - 12);
+    pointer.current = null;
     setOpen(true);
   };
   const close = (refocus: boolean) => {
@@ -172,8 +175,14 @@ export function MenuSelect<T extends string>({
                 title={o.label.length > 40 ? o.label : undefined}
                 className={`menu-item${o.value === value ? ' is-current' : ''}`}
                 onClick={() => pick(o.value)}
-                // The pointer and the keyboard share one highlight, as in a native list.
-                onMouseEnter={(e) => e.currentTarget.focus({ preventScroll: true })}
+                // The pointer and the keyboard share one highlight, as in a native list. Only a real move
+                // counts: a menu that opens under a resting pointer must not jump away from the current choice.
+                onMouseMove={(e) => {
+                  const at = `${e.screenX},${e.screenY}`;
+                  const moved = pointer.current !== null && pointer.current !== at;
+                  pointer.current = at;
+                  if (moved && document.activeElement !== e.currentTarget) e.currentTarget.focus({ preventScroll: true });
+                }}
               >
                 <span className="menu-select-label">{o.label}</span>
                 {o.value === value && <Check size={15} className="menu-select-check" aria-hidden="true" />}

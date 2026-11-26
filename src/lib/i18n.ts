@@ -200,6 +200,7 @@ const zhHant: Record<string, string> = {
   "contains “{text}”": "包含「{text}」",
   "Live search: pick a tag to list every item that has it": "即時搜尋：選一個標籤，列出所有加了它的項目",
   "Edit search": "修改搜尋條件",
+  "Filter tasks": "篩選任務",
   "Item": "項目",
   "Source note": "所在筆記",
   "Open where this item is written": "打開這個項目所在的位置",
