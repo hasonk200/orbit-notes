@@ -1,7 +1,7 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithCredential, signInWithPopup, signOut, type Auth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithCredential, signInWithPopup, signInWithRedirect, signOut, type Auth } from 'firebase/auth';
 import { initializeFirestore, type Firestore } from 'firebase/firestore';
-import { isTauri } from '../lib/native';
+import { isNativeApp } from '../lib/native';
 
 const env = import.meta.env;
 const config = {
@@ -50,9 +50,15 @@ function loadGis() {
   return gisLoading;
 }
 
-/** Main sign-in: Google's account window, then hand the token to Firebase. */
+/** Main sign-in: Google's account window, or redirect flow inside native desktop/mobile WebViews. */
 export async function signInWithGoogle() {
-  if (isTauri() || !googleClientId) return signInWithFirebasePopup();
+  if (isNativeApp()) {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    await signInWithRedirect(fb().auth, provider);
+    return;
+  }
+  if (!googleClientId) return signInWithFirebasePopup();
   await loadGis();
   const accessToken = await new Promise<string>((resolve, reject) => {
     const client = (window as any).google.accounts.oauth2.initTokenClient({
@@ -69,11 +75,19 @@ export async function signInWithGoogle() {
   await signInWithCredential(fb().auth, GoogleAuthProvider.credential(null, accessToken));
 }
 
-/** Alternative: Firebase's built-in popup (may hang if the browser blocks third-party cookies). */
+/** Alternative: Firebase's built-in popup (falls back to redirect if popups are blocked). */
 export async function signInWithFirebasePopup() {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  await signInWithPopup(fb().auth, provider);
+  try {
+    await signInWithPopup(fb().auth, provider);
+  } catch (err: any) {
+    if (err?.code === 'auth/popup-blocked') {
+      await signInWithRedirect(fb().auth, provider);
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function signOutOfCloud() {
