@@ -4,7 +4,7 @@ import { createServer } from 'vite';
 
 const vite = await createServer({ configFile: false, appType: 'custom', server: { middlewareMode: true, ws: false, watch: null }, optimizeDeps: { noDiscovery: true, include: [] } });
 after(() => vite.close());
-const { markdownToBlocks, parseInline, looksLikeMarkdown, isAllowedLinkUrl, MARKDOWN_LINK_INPUT_RE } = await vite.ssrLoadModule('/src/lib/markdown.ts');
+const { markdownToBlocks, blocksToMarkdown, parseInline, looksLikeMarkdown, isAllowedLinkUrl, MARKDOWN_LINK_INPUT_RE } = await vite.ssrLoadModule('/src/lib/markdown.ts');
 const { extractTasks, docText } = await vite.ssrLoadModule('/src/lib/content.ts');
 const { insertMarkdown } = await vite.ssrLoadModule('/src/lib/insertMarkdown.ts');
 
@@ -193,4 +193,34 @@ test('a full manual-style document converts block by block', async () => {
   assert.deepEqual(blockTypes(prompt), ['paragraph', 'paragraph', 'paragraph', 'paragraph', 'orderedList']);
   assert.deepEqual(blocks[21].content.map((t) => t.attrs.checked), [false, true]);
   assert.equal(blocks[16].content[1].content[1].content[0].content[0].content[0].marks[0].type, 'italic');
+});
+
+test('blocksToMarkdown round-trips headings, tasks, links, code blocks, and tables cleanly', () => {
+  const src = [
+    '# 本地 Markdown 測試',
+    '',
+    '普通段落包含 **粗體**、`code`、[網站](https://example.com) 同 [本地檔](file:///C:/notes/a.md)。',
+    '',
+    '- [ ] 未完成事項',
+    '- [x] 已完成事項',
+    '',
+    '```ts',
+    'const x = 1;',
+    '```',
+    '',
+    '| 欄A | 欄B |',
+    '| --- | --- |',
+    '| 1 | 2 |',
+  ].join('\n');
+  const blocks = markdownToBlocks(src);
+  const out = blocksToMarkdown(blocks);
+  const blocksAgain = markdownToBlocks(out);
+  assert.deepEqual(blockTypes(blocksAgain), blockTypes(blocks));
+  assert.deepEqual(
+    hrefs(blocksAgain[1].content),
+    ['https://example.com', 'file:///C:/notes/a.md'],
+  );
+  assert.deepEqual(blocksAgain[3].content.map((t) => t.attrs.checked), [false, true]);
+  assert.match(out, /```ts\nconst x = 1;\n```/);
+  assert.match(out, /\| 欄A \| 欄B \|/);
 });

@@ -30,6 +30,38 @@ export async function desktopGoogleSignIn(webAppUrl: string): Promise<string> {
   return invoke<string>('desktop_google_sign_in', { webAppUrl });
 }
 
+/** Drain any local Markdown file paths passed on cold start before UI listeners mounted. */
+export async function takePendingLocalFiles(): Promise<string[]> {
+  if (!isTauri()) return [];
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<string[]>('take_pending_files');
+  } catch {
+    return [];
+  }
+}
+
+/** Listen for local Markdown file open events forwarded from Windows "Open with" while running. */
+export async function onOpenLocalFile(cb: (path: string) => void): Promise<() => void> {
+  if (!isTauri()) return () => {};
+  const { listen } = await import('@tauri-apps/api/event');
+  return listen<string>('orbit://open-file', (event) => {
+    if (event.payload) cb(event.payload);
+  });
+}
+
+/** Read a local Markdown file from disk inside Tauri Desktop. */
+export async function readLocalMarkdown(path: string): Promise<string> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<string>('read_local_markdown', { path });
+}
+
+/** Write updated Markdown text back to a local file on disk inside Tauri Desktop. */
+export async function writeLocalMarkdown(path: string, content: string): Promise<void> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('write_local_markdown', { path, content });
+}
+
 /** Validate loopback port + CSRF state parameters for /desktop-auth. */
 export function parseDesktopAuthParams(search: string): { port: number; state: string } | null {
   const params = new URLSearchParams(search);
