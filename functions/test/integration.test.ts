@@ -139,6 +139,26 @@ test('API isolates Firebase accounts and records recallable, versioned and retry
   await api(writer, 'update_note', { ...write(), note_id: md.note_id, version: inserted.resulting_version, insert_text: { anchor: '標題', text: 'x' }, replace_body: 'y' }, 400);
   await manage(alice.idToken, '/changes/' + inserted.id + '/undo', write());
 
+  // AI notes and the AI handbook
+  assert.equal((await api(reader, 'get_ai_context', {})).handbook, null);
+  await api(reader, 'add_ai_note', { ...write(), note_id: md.note_id, text: 'x' }, 403);
+  const noted = await api(writer, 'add_ai_note', { ...write(), note_id: md.note_id, text: '把待辦改成插入的版本，等使用者確認。' });
+  const mdWithNotes = await api(reader, 'get_note', { note_id: md.note_id });
+  assert.deepEqual(mdWithNotes.ai_notes.map((n: { by: string; text: string }) => [n.by, n.text]), [['Test assistant', '把待辦改成插入的版本，等使用者確認。']]);
+  assert.match(mdWithNotes.text, /付帳單/);
+  assert.doesNotMatch(mdWithNotes.text, /等使用者確認/);
+  await api(writer, 'add_ai_note', { ...write(), note_id: 'missing-note', text: 'x' }, 404);
+  const handbookNote = await api(writer, 'add_ai_note', { ...write(), text: '使用者偏好說明書風格。' });
+  assert.equal(handbookNote.note_id, 'ai-handbook');
+  const context = await api(reader, 'get_ai_context', {});
+  assert.equal(context.handbook.id, 'ai-handbook');
+  assert.match(context.handbook.text, /關於我/);
+  assert.deepEqual(context.handbook.ai_notes.map((n: { text: string }) => n.text), ['使用者偏好說明書風格。']);
+  await api(writer, 'add_ai_note', { ...write(), text: '第二則' });
+  assert.equal((await api(reader, 'get_ai_context', {})).handbook.ai_notes.length, 2);
+  await manage(alice.idToken, '/changes/' + noted.id + '/undo', write());
+  assert.equal((await api(reader, 'get_note', { note_id: md.note_id })).ai_notes.length, 0);
+
   await Promise.all(['第一段', '第二段'].map((text) => api(writer, 'append_daily_note', { ...write(), date: '2026-11-22', text })));
   const day = await api(reader, 'get_note', { note_id: 'daily-2026-11-22' });
   assert.match(day.text, /第一段/);

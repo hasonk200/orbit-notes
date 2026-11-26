@@ -9,6 +9,7 @@ import { objPath, useOpen, usePane } from '../store/pane';
 import { dailyTitle, dateLabel, fromISODate, toISODate, todayISO } from '../lib/dates';
 import { propertyLabel } from '../lib/typeLabels';
 import { Backlinks } from '../components/Backlinks';
+import { AiNotesPanel } from '../components/AiNotesPanel';
 import { ObjectEditor } from '../editor/Editor';
 import { MiniCalendar } from '../components/MiniCalendar';
 import { TaskRow } from '../components/TaskRow';
@@ -161,6 +162,7 @@ function DayDetail({ iso, idx, tab: shownTab, onTab, hideTabs }: { iso: string; 
       {showNote && (note ? (
         <div className="day-note">
           <ObjectEditor key={note.id} obj={note} placeholder={tr('What’s on your mind today? Type / for commands, [[ to link, @ for dates')} />
+          <AiNotesPanel obj={note} />
           <Backlinks objectId={note.id} />
         </div>
       ) : <AddDailyButton iso={iso} />)}

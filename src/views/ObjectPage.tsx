@@ -11,6 +11,7 @@ import { saveImage, useBlobUrl } from '../db/blobs';
 import { ObjectEditor } from '../editor/Editor';
 import { PropertyPanel } from '../components/PropertyPanel';
 import { Backlinks } from '../components/Backlinks';
+import { AiNotesPanel } from '../components/AiNotesPanel';
 import { TaskRow } from '../components/TaskRow';
 import { EmojiPicker, TypeBadge } from '../components/TypeIcon';
 import { ConvertTypeMenu } from '../components/ConvertTypeMenu';
@@ -237,6 +238,7 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
         <div className="obj-editor">
           <ObjectEditor key={obj.id} obj={obj} />
         </div>
+        <AiNotesPanel obj={obj} />
         {linkedTasks.length > 0 && (
           <section className="ctx-tasks-section">
             <h3>

@@ -6,6 +6,9 @@ import { useT } from '../store/uiStore';
 import { useSync } from '../sync/engine';
 import { aiService as service, manage, readConsentRequestId } from '../sync/aiService';
 import { SettingsSection } from './SettingsSection';
+import { ensureHandbook } from './aiHandbook';
+import { useOpen } from '../store/pane';
+import { BookOpen } from 'lucide-react';
 
 type Connection = {
   id: string; name: string; kind: 'mcp' | 'api'; scopes: string[]; createdAt?: number; expiresAt: number; revokedAt: number | null;
@@ -48,6 +51,24 @@ function CopyButton({ text, label }: { text: string; label: string }) {
     >
       {done ? <Check size={15} /> : <Copy size={15} />} {done ? tr('Copied') : tr('Copy')}
     </button>
+  );
+}
+
+/** The AI handbook: the page every connected AI app reads first. */
+function HandbookBlock() {
+  const tr = useT();
+  const open = useOpen();
+  return (
+    <div className="ai-block">
+      <div className="ai-block-head">
+        <BookOpen size={16} />
+        <h4>{tr('AI handbook')}</h4>
+      </div>
+      <p className="ai-help">{tr('One page every AI app reads before it starts: who you are, how you like things done, and messages AI apps leave for each other. Each note also has its own folded AI notes at the bottom.')}</p>
+      <button type="button" className="btn" onClick={async (e) => open(await ensureHandbook(tr), e)}>
+        <BookOpen size={15} /> {tr('Open the AI handbook')}
+      </button>
+    </div>
   );
 }
 
@@ -106,6 +127,8 @@ function ConnectedAiSettings({ account, onCount }: { account: string; onCount: (
   return (
     <div className="ai-settings">
       <p className="ai-lead">{tr('AI connections can access the notes synced to this Orbit account.')}</p>
+
+      <HandbookBlock />
 
       <div className="ai-block">
         <div className="ai-block-head">
