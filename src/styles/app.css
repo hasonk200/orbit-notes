@@ -6338,16 +6338,17 @@ img.connect-logo {
 
 /* ---------- spaces: the switcher, space chips and the search scope ---------- */
 .space-brand {
+  flex: 1;
   min-width: 0;
-  /* Same outer size as the old Orbit button: 1px border + 1px padding = its 2px padding. */
-  padding: 1px 7px 1px 5px;
-  border: 1px solid transparent;
-  border-radius: 999px;
+  height: 32px;
+  padding: 0 10px;
+  margin-right: 4px;
+  border: 0;
+  border-radius: 8px;
 }
 .space-brand:hover,
 .space-brand[aria-expanded='true'] {
-  border-color: var(--line);
-  background: var(--surface);
+  background: var(--surface-3);
 }
 .space-brand-name {
   overflow: hidden;
