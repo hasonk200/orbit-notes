@@ -8,6 +8,7 @@ import { markdownToBlocks } from '../../src/lib/markdown';
 import { InsertError, insertMarkdown } from '../../src/lib/insertMarkdown';
 import { appendAiNote, HANDBOOK_ID, handbookTemplate, handbookTitle, MAX_AI_NOTE_LENGTH } from '../../src/lib/aiNotes';
 import { appendTask } from '../../src/lib/taskInput';
+import { AI_DOC_TYPE, AI_LOG_TYPE, AI_TYPES, aiDocTitle, aiLogId, aiLogTitle, appendAiWork, spaceOf } from '../../src/lib/spaces';
 import { classifyTaskKind } from '../../src/lib/tasks';
 import { objectFingerprint } from '../../src/sync/objectVersions';
 
@@ -30,23 +31,28 @@ const request = { request_id: z.uuid().describe('Unique request UUID. Reuse the 
 const target = { note_id: id };
 const existing = { ...target, version: z.string().max(100).describe('Version from get_note or search results.') };
 const taskKind = z.enum(['todo', 'task']);
+const space = z.enum(['me', 'ai']);
+const aiTodoKind = z.enum(['confirm', 'next']);
+const items = z.array(z.string().trim().min(1).max(500)).max(10);
 const taskFields = {
   due: date.nullable().optional(),
   priority: z.enum(['high', 'medium', 'low']).nullable().optional(),
   kind: taskKind.nullable().optional().describe('Explicitly mark as a one-off "todo" or a project "task". Omit to auto-classify.'),
 };
+const docStatus: Record<string, string> = { draft: 'Draft', review: 'To review' };
 
 export const operations = {
-  get_ai_context: { description: 'Start here. Reads the AI handbook: the user’s standing instructions for AI apps, and notes earlier AI sessions left for everyone. Call it once at the start of a session, before reading or changing notes.', input: z.object({}), write: false },
+  get_ai_context: { description: 'Start here. Reads the AI handbook (the user’s standing instructions for AI apps, and notes earlier AI sessions left for everyone) and the AI workspace: what earlier sessions left for you to do next and how many items wait for the user. Call it once at the start of a session, before reading or changing notes.', input: z.object({}), write: false },
   search_notes: { description: 'Search synced notes in your Orbit account. Use the next cursor to continue across pages.', input: z.object({
     query: z.string().max(300).default(''), type_id: id.optional(), from_date: date.optional(), to_date: date.optional(),
+    space: space.optional().describe('Only notes in the user’s own space ("me") or the AI workspace ("ai"). Omit to search both.'),
     in_trash: z.boolean().default(false), limit: page, cursor: z.string().max(1000).optional(),
   }), write: false },
   get_note: { description: 'Read a note, its version, and its tasks. Use next_offset to read more text.', input: z.object({
     ...target, offset: z.number().int().min(0).max(1000000).default(0),
   }), write: false },
-  list_tasks: { description: 'List synced tasks and to-dos with their source notes. Filter by kind ("todo" or "task"), completion, or due date, and follow next_cursor for more.', input: z.object({
-    done: z.boolean().optional(), kind: taskKind.optional(), due_from: date.optional(), due_to: date.optional(), limit: page, cursor: z.string().max(1000).optional(),
+  list_tasks: { description: 'List synced tasks and to-dos with their source notes. Filter by kind ("todo" or "task"), AI to-do kind ("confirm": waiting for the user, "next": left for the next AI session), completion, or due date, and follow next_cursor for more.', input: z.object({
+    done: z.boolean().optional(), kind: taskKind.optional(), ai_todo: aiTodoKind.optional(), due_from: date.optional(), due_to: date.optional(), limit: page, cursor: z.string().max(1000).optional(),
   }), write: false },
   list_changes: { description: 'List recent AI changes, including undo records.', input: z.object({
     limit: page, before: z.string().max(1000).optional(),
@@ -54,8 +60,22 @@ export const operations = {
   get_change: { description: 'Read the saved note text before a particular AI change.', input: z.object({
     change_id: z.uuid(), offset: z.number().int().min(0).max(1000000).default(0),
   }), write: false },
-  create_note: { description: 'Create a note. Defaults to a Page. Use append_daily_note for a dated journal entry.', input: z.object({
+  create_note: { description: 'Create a note. Notes you create go to the AI workspace unless you set space to "me" because the user asked for a note of their own. Defaults to a Page. For a report, draft or scan result, use type_id "ai-doc" (an AI document): give the topic as the title and Orbit adds the date, as in "Notion scan report (2026-11-25)". Use log_ai_work to record what you did, and append_daily_note for the user’s own journal.', input: z.object({
     ...request, title, text: markdown.optional(), type_id: id.optional(),
+    space: space.optional().describe('"ai" (default) for the AI workspace, "me" for the user’s own space.'),
+    date: date.optional().describe('AI documents: today’s date in the user’s local calendar.'),
+    status: z.enum(['draft', 'review']).optional().describe('AI documents: "draft" (default) while you work, "review" when it is ready for the user to check.'),
+    related_notes: z.array(id).max(20).optional().describe('AI documents: ids of the notes this document is about.'),
+  }), write: true },
+  log_ai_work: { description: 'Record one piece of work in today’s AI log in the AI workspace (one log per day; Orbit creates it and lays out the entry). Call it once when you finish a task: what you did, which notes you changed, what is left for next time and what the user should check. Each open item becomes an "AI next time" to-do and each confirm item a "Waiting for you" to-do.', input: z.object({
+    ...request,
+    date: date.describe('Today in the user’s local calendar.'),
+    time: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/).describe('The user’s local time now, HH:MM (24-hour).'),
+    title: z.string().trim().min(1).max(120).describe('A few words naming the work, e.g. "Tidy up the finance notes".'),
+    done: z.string().trim().min(1).max(2000).describe('What you did, in one or two sentences.'),
+    notes: z.array(id).max(20).default([]).describe('Ids of the notes you created or changed.'),
+    open: items.optional().describe('What is left unfinished, one item each, for the next AI session.'),
+    confirm: items.optional().describe('What the user needs to check or decide, one item each.'),
   }), write: true },
   append_daily_note: { description: 'Append Markdown text to the daily note for the given local calendar date, creating it if needed.', input: z.object({
     ...request, date, text: markdown,
@@ -76,8 +96,9 @@ export const operations = {
   add_ai_note: { description: 'Leave a short note for future AI sessions. With note_id it is added to that note’s AI notes: what you changed and why, what is still open, what to watch out for. Without note_id it goes to the AI handbook, for things that apply everywhere (the user’s preferences, habits, rules). AI notes are kept apart from the note body and folded away for the user; get_note and get_ai_context return them as ai_notes. Do not repeat what the note itself already says.', input: z.object({
     ...request, note_id: id.optional().describe('The note this is about. Omit to write in the AI handbook.'), text: z.string().trim().min(1).max(MAX_AI_NOTE_LENGTH),
   }), write: true },
-  add_task: { description: 'Add a linked to-do or project task inside a source note so it appears in Orbit.', input: z.object({
+  add_task: { description: 'Add a linked to-do or project task inside a source note so it appears in Orbit. Set ai_todo to make it one of the AI workspace’s to-dos: "confirm" when the user needs to check something, "next" for work you leave for the next AI session.', input: z.object({
     ...request, ...target, text: z.string().trim().min(1).max(2000), ...taskFields,
+    ai_todo: aiTodoKind.optional(), date: date.optional().describe('With ai_todo: today’s date in the user’s local calendar.'),
   }), write: true },
   update_task: { description: 'Complete, reopen, reschedule, reprioritize, or change kind ("todo" / "task") of a task in its source note. Read the note for the task ID and version.', input: z.object({
     ...request, ...existing, task_id: id, done: z.boolean().optional(), ...taskFields,
@@ -112,7 +133,7 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 
 async function summary(note: Obj, appUrl: URL) {
   return {
-    id: note.id, title: note.title, type_id: note.typeId, daily_date: note.dailyDate ?? null, tags: note.tags,
+    id: note.id, title: note.title, type_id: note.typeId, space: spaceOf(note), daily_date: note.dailyDate ?? null, tags: note.tags,
     updated_at: note.updatedAt, trashed: !!note.deletedAt, version: await version(note), url: link(appUrl, note.id),
   };
 }
@@ -187,13 +208,18 @@ function insertText(content: JSONContent, anchor: string, body: string, position
   }
 }
 
-function makeNote(noteId: string, typeId: string, noteTitle: string, now: number, dailyDate: string | null, template?: JSONContent | null): Obj {
+function makeNote(noteId: string, typeId: string, noteTitle: string, now: number, dailyDate: string | null, template?: JSONContent | null, inAi = false): Obj {
   return {
     id: noteId, typeId, title: noteTitle, icon: null, cover: null, props: {},
     content: template ? assignTaskIds(template, true) : emptyDoc(), tags: [], createdAt: now, updatedAt: now,
-    dailyDate, deletedAt: null,
+    dailyDate, deletedAt: null, ...(inAi ? { space: 'ai' as const } : {}),
   };
 }
+
+const utcToday = () => new Date().toISOString().slice(0, 10);
+const shiftDay = (iso: string, days: number) => new Date(Date.parse(iso + 'T00:00:00Z') + days * 86400000).toISOString().slice(0, 10);
+/** How far back get_ai_context looks through AI logs for open to-dos. */
+const AI_CONTEXT_DAYS = 60;
 
 export function createNotesService(db: Firestore, appUrl: URL) {
   async function invoke(name: string, raw: unknown, actor: Actor) {
@@ -221,10 +247,34 @@ export function createNotesService(db: Firestore, appUrl: URL) {
 
     switch (operation) {
       case 'get_ai_context': {
-        const handbook = decode(HANDBOOK_ID, (await notes.doc(HANDBOOK_ID).get()).data() as CloudObject | undefined);
-        const usage = 'Use add_ai_note with a note_id after changing a note, to say what you did and why. Use it without note_id for things every AI app should know. The user can read and edit all of this in Orbit.';
-        if (!handbook || handbook.deletedAt) return { handbook: null, usage: 'There is no AI handbook yet. ' + usage };
-        return { handbook: { ...await summary(handbook, appUrl), ai_notes: publicAiNotes(handbook), ...textPage(docText(handbook.content, (key) => `[[${key}]]`), 0) }, usage };
+        // Recent AI logs, newest first (one day past UTC today, so every time zone's "today" is covered).
+        const end = shiftDay(utcToday(), 1);
+        const logRefs = Array.from({ length: AI_CONTEXT_DAYS + 1 }, (_, i) => notes.doc(aiLogId(shiftDay(end, -i))));
+        const [handbookSnap, ...logSnaps] = await db.getAll(notes.doc(HANDBOOK_ID), ...logRefs);
+        const handbook = decode(HANDBOOK_ID, handbookSnap.data() as CloudObject | undefined);
+        const nextTime = [];
+        let waiting = 0;
+        const recentLogs = [];
+        for (const snap of logSnaps) {
+          let log: Obj | null;
+          try { log = decode(snap.id, snap.data() as CloudObject | undefined); } catch { continue; }
+          if (!log || log.deletedAt) continue;
+          if (recentLogs.length < 7) recentLogs.push({ id: log.id, date: log.dailyDate, url: link(appUrl, log.id) });
+          for (const t of extractTasks(log.content, (key) => `[[${key}]]`)) {
+            if (!t.aiTodo || t.done || !t.text) continue;
+            if (t.aiTodo.kind === 'confirm') waiting++;
+            else nextTime.push({ task_id: t.id, text: t.text, since: t.aiTodo.at, note_id: log.id, related_notes: t.aiTodo.notes ?? [] });
+          }
+        }
+        const usage = [
+          'Notes you create go to the AI workspace. Changes to the user’s own notes stay in their space.',
+          'When you finish a piece of work, record it once with log_ai_work. Put reports, drafts and scan results in AI documents (create_note with type_id "ai-doc"); do not scatter other notes.',
+          'Items in next_time were left for you by earlier sessions: pick them up, and complete them with update_task when done.',
+          'Use add_ai_note with a note_id after changing a note, to say what you did and why. Use it without note_id for things every AI app should know. The user can read and edit all of this in Orbit.',
+        ].join(' ');
+        const ai_workspace = { next_time: nextTime.slice(0, 30), waiting_for_user: waiting, recent_logs: recentLogs };
+        if (!handbook || handbook.deletedAt) return { handbook: null, ai_workspace, usage: 'There is no AI handbook yet. ' + usage };
+        return { handbook: { ...await summary(handbook, appUrl), ai_notes: publicAiNotes(handbook), ...textPage(docText(handbook.content, (key) => `[[${key}]]`), 0) }, ai_workspace, usage };
       }
       case 'get_note': {
         const input = operations.get_note.input.parse(validation.data);
@@ -264,6 +314,7 @@ export function createNotesService(db: Firestore, appUrl: URL) {
           let note: Obj | null;
           try { note = decode(item.id, item.data() as CloudObject); } catch { continue; }
           if (!note || !!note.deletedAt !== input.in_trash || (input.type_id && input.type_id !== note.typeId)) continue;
+          if (input.space && spaceOf(note) !== input.space) continue;
           const day = note.dailyDate ?? new Date(note.updatedAt).toISOString().slice(0, 10);
           if ((input.from_date && day < input.from_date) || (input.to_date && day > input.to_date)) continue;
           const body = docText(note.content);
@@ -308,6 +359,7 @@ export function createNotesService(db: Firestore, appUrl: URL) {
               linkedTypes: item.linkIds.map((lid) => typeCache.get(lid)),
             });
             if (input.kind !== undefined && kind !== input.kind) continue;
+            if (input.ai_todo !== undefined && item.aiTodo?.kind !== input.ai_todo) continue;
             noteVersion ??= await version(note);
             results.push({ ...item, kind, note_id: note.id, note_title: note.title, note_version: noteVersion, url: link(appUrl, note.id) });
             if (results.length === input.limit) {
@@ -369,13 +421,28 @@ export function createNotesService(db: Firestore, appUrl: URL) {
         undone = (await tx.get(changes.doc(args.change_id!))).data() as Change | undefined;
         if (!undone) throw new ApiError(404, 'Change not found.');
       }
-      const noteId = undone?.note_id ?? args.note_id ?? (operation === 'add_ai_note' ? HANDBOOK_ID : args.date ? 'daily-' + args.date : newNoteId);
+      const noteId = undone?.note_id ?? args.note_id
+        ?? (operation === 'add_ai_note' ? HANDBOOK_ID
+          : operation === 'log_ai_work' ? aiLogId(args.date!)
+          : operation === 'append_daily_note' ? 'daily-' + args.date : newNoteId);
       const noteRef = notes.doc(noteId);
       const snapshot = await tx.get(noteRef);
       const before = decode(noteId, snapshot.data() as CloudObject | undefined);
       const startsHandbook = operation === 'add_ai_note' && noteId === HANDBOOK_ID;
-      if (!before && operation !== 'create_note' && operation !== 'append_daily_note' && !startsHandbook) throw new ApiError(404, 'Note not found.');
-      if (snapshot.exists && !before && operation === 'append_daily_note') throw new ApiError(409, 'This day has a permanently deleted note. Open the day in Orbit first.');
+      const startsDay = operation === 'append_daily_note' || operation === 'log_ai_work';
+      if (!before && operation !== 'create_note' && !startsDay && !startsHandbook) throw new ApiError(404, 'Note not found.');
+      if (snapshot.exists && !before && startsDay) throw new ApiError(409, 'This day has a permanently deleted note. Open the day in Orbit first.');
+      // Notes a write links to must exist, so the log and AI documents never point at nothing.
+      const linked = operation === 'log_ai_work' ? (validation.data as { notes: string[] }).notes
+        : operation === 'create_note' ? (validation.data as { related_notes?: string[] }).related_notes ?? [] : [];
+      if (linked.length) {
+        const unique = [...new Set(linked)];
+        const found = await tx.getAll(...unique.map((nid) => notes.doc(nid)));
+        const missing = unique.filter((_, i) => {
+          try { return !decode(unique[i], found[i].data() as CloudObject | undefined); } catch { return true; }
+        });
+        if (missing.length) throw new ApiError(404, 'These notes were not found: ' + missing.join(', ') + '.');
+      }
       if (before?.syncConflictOf) throw new ApiError(409, 'Resolve this sync conflict in Orbit before making AI changes to it.');
       const expected = undone?.resulting_version ?? args.version;
       if (expected && (!before || await version(before) !== expected)) throw new ApiError(409, 'The note has changed. Read its latest version before editing, or review the change in Orbit.');
@@ -389,11 +456,32 @@ export function createNotesService(db: Firestore, appUrl: URL) {
           const args = operations.create_note.input.parse(validation.data);
           const typeId = args.type_id ?? 'page';
           if (typeId === 'daily') throw new ApiError(400, 'Use append_daily_note to create a daily note.');
+          if (typeId === AI_LOG_TYPE) throw new ApiError(400, 'Use log_ai_work to write in the AI log.');
           const typeRecord = (await tx.get(db.collection('users').doc(actor.uid).collection('types').doc(typeId))).data();
-          const type = typeRecord && !typeRecord.deleted && typeRecord.json ? JSON.parse(typeRecord.json) as ObjType : null;
+          // The AI workspace's own types are built in, so they work before the app has synced them.
+          const type = typeRecord && !typeRecord.deleted && typeRecord.json ? JSON.parse(typeRecord.json) as ObjType : AI_TYPES.find((t) => t.id === typeId) ?? null;
           if (!type && typeId !== 'page') throw new ApiError(404, 'This note type has not synced to Orbit.');
-          after = makeNote(noteId, typeId, args.title, now, null, type?.defaultTemplate);
+          const inAi = (args.space ?? 'ai') === 'ai';
+          if (typeId === AI_DOC_TYPE) {
+            if (!inAi) throw new ApiError(400, 'AI documents live in the AI workspace. Move one to the user’s space in Orbit once it is adopted.');
+            const day = args.date ?? utcToday();
+            after = makeNote(noteId, typeId, aiDocTitle(args.title, day), now, null, type?.defaultTemplate, true);
+            after.props = { source: actor.name, date: day, status: docStatus[args.status ?? 'draft'], related: [...new Set(args.related_notes ?? [])] };
+          } else {
+            if (args.status || args.related_notes?.length) throw new ApiError(400, 'status and related_notes are for AI documents (type_id "ai-doc").');
+            after = makeNote(noteId, typeId, args.title, now, null, type?.defaultTemplate, inAi);
+          }
           if (args.text) after.content = appendText(after.content, args.text);
+          break;
+        }
+        case 'log_ai_work': {
+          const args = operations.log_ai_work.input.parse(validation.data);
+          const log = before ?? makeNote(noteId, AI_LOG_TYPE, aiLogTitle(args.date), now, args.date, null, true);
+          const [h, m] = args.time.split(':');
+          after = { ...log, content: assignTaskIds(appendAiWork(log.content, {
+            time: `${h.padStart(2, '0')}:${m}`, by: actor.name, title: args.title, done: args.done, date: args.date,
+            notes: args.notes, open: args.open, confirm: args.confirm,
+          }, randomUUID)) };
           break;
         }
         case 'append_daily_note': {
@@ -432,7 +520,10 @@ export function createNotesService(db: Firestore, appUrl: URL) {
           taskId = newTaskId;
           after = {
             ...before!,
-            content: appendTask(before!.content, taskId, args.text, args.due ?? null, args.priority ?? null, { kind: args.kind ?? null }),
+            content: appendTask(before!.content, taskId, args.text, args.due ?? null, args.priority ?? null, {
+              kind: args.kind ?? (args.ai_todo ? 'todo' : null),
+              ...(args.ai_todo ? { aiTodo: { kind: args.ai_todo, at: args.date ?? before!.dailyDate ?? utcToday() } } : {}),
+            }),
           };
           break;
         }
