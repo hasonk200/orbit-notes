@@ -31,7 +31,6 @@ button:disabled {
   opacity: 0.45;
 }
 input,
-select,
 textarea {
   font: inherit;
   color: inherit;
@@ -968,8 +967,7 @@ h4 {
 .prop-value {
   min-width: 0;
 }
-.prop-input,
-.prop-select {
+.prop-input {
   width: 100%;
   max-width: 360px;
   height: 30px;
@@ -979,8 +977,7 @@ h4 {
   background: none;
   outline: 0;
 }
-.prop-input:hover,
-.prop-select:hover {
+.prop-input:hover {
   background: var(--surface-2);
 }
 .prop-input:focus {
@@ -989,15 +986,6 @@ h4 {
 }
 .prop-input::placeholder {
   color: var(--muted);
-}
-.prop-select {
-  width: auto;
-  min-width: 120px;
-  color: var(--muted);
-}
-.prop-select.has-value {
-  color: var(--text);
-  font-weight: 500;
 }
 .prop-url {
   display: flex;
@@ -1687,13 +1675,6 @@ span.olink-card {
   border-radius: 9px;
   overflow: hidden;
 }
-.mini-cal-title select {
-  border: 0;
-  background: none;
-  padding: 4px 6px;
-  outline: 0;
-  cursor: pointer;
-}
 .mini-cal-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -1980,7 +1961,6 @@ span.olink-card {
   border-radius: 10px;
   color: var(--muted);
 }
-.control select,
 .control input {
   border: 0;
   outline: 0;
@@ -1992,25 +1972,6 @@ span.olink-card {
   width: 140px;
   border-left: 1px solid var(--line);
   padding-left: 8px;
-}
-/* The sort and filter menus: the whole box opens the menu, not only the text beside the icon. */
-.control:has(> select) {
-  position: relative;
-  padding: 0;
-}
-.control:has(> select) > svg {
-  position: absolute;
-  left: 10px;
-  pointer-events: none;
-}
-.control > select {
-  height: 32px;
-  padding: 0 10px 0 30px;
-  border-radius: 10px;
-  cursor: pointer;
-}
-.control > select + input {
-  margin-right: 10px;
 }
 .card-grid {
   display: grid;
@@ -2287,8 +2248,7 @@ span.olink-card {
   border: 1px solid var(--line);
   border-radius: 10px;
 }
-.te-prop input,
-.te-prop select {
+.te-prop input {
   height: 30px;
   padding: 0 8px;
   border: 1px solid var(--line);
@@ -3010,7 +2970,6 @@ span.olink-card {
   padding-top: 8px;
   border-top: 1px solid var(--line);
 }
-.quick-add-meta select,
 .quick-add-meta input[type='date'] {
   height: 29px;
   padding: 0 8px;
@@ -3033,14 +2992,6 @@ span.olink-card {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-}
-.control-select {
-  height: 32px;
-  padding: 0 9px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--surface);
-  font-size: 12.5px;
 }
 
 /* ---------- Collections UI ---------- */
@@ -3278,14 +3229,6 @@ span.olink-card {
   flex-wrap: wrap;
   gap: 5px;
 }
-.tp-select {
-  width: 100%;
-  padding: 5px 8px;
-  border-radius: 7px;
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
-  font-size: 12.5px;
-}
 .status-pop {
   padding: 7px;
   display: flex;
@@ -3517,16 +3460,6 @@ span.olink-card {
   display: flex;
   align-items: center;
   gap: 5px;
-}
-.kanban-composer-foot select {
-  flex: 1;
-  min-width: 0;
-  height: 28px;
-  padding: 0 6px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface-2);
-  font-size: 12px;
 }
 
 /* Capacities Task Card */
@@ -3860,7 +3793,6 @@ span.olink-card {
   font-weight: 600;
   color: var(--muted);
 }
-.ntm-grid select,
 .ntm-grid input {
   height: 34px;
   padding: 0 9px;
@@ -4013,8 +3945,7 @@ span.olink-card {
   color: var(--accent-text);
   border-color: var(--accent);
 }
-.todo-quick-date,
-.todo-quick-prio {
+.todo-quick-date {
   height: 27px;
   padding: 0 8px;
   border: 1px solid var(--line);
@@ -4390,8 +4321,7 @@ span.olink-card {
   font-weight: 500;
   white-space: nowrap;
 }
-.st-input,
-.st-select {
+.st-input {
   border: 0;
   background: transparent;
   color: var(--text);
@@ -4400,8 +4330,7 @@ span.olink-card {
   min-width: 0;
   border-radius: 4px;
 }
-.st-input:focus,
-.st-select:focus {
+.st-input:focus {
   outline: none;
   background: var(--surface);
   box-shadow: 0 0 0 1.5px var(--accent-soft);
@@ -4536,8 +4465,7 @@ span.olink-card {
   gap: 6px;
   color: var(--text-2);
 }
-.ls-editor input:not([type='checkbox']),
-.ls-editor select {
+.ls-editor input:not([type='checkbox']) {
   padding: 4px 7px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -6685,14 +6613,50 @@ img.connect-logo {
 }
 
 /* ---------- MenuSelect: drop-downs in Orbit's own menu style ---------- */
+.menu-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  font: inherit;
+  cursor: pointer;
+}
+/* A tap on the text or the arrow counts as a tap on the box (a note's editor ignores taps on its own buttons only). */
+.menu-select > * {
+  pointer-events: none;
+}
+.menu-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.menu-select:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.menu-select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu-select-chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.menu-select.is-open .menu-select-chevron {
+  transform: rotate(180deg);
+}
+
+/* box: the sort and filter boxes on a type page */
 .control.menu-select {
   position: relative;
   padding: 0 8px 0 10px;
   background: var(--surface);
   color: var(--text);
-  font: inherit;
   font-size: 13.5px;
-  cursor: pointer;
 }
 .control.menu-select > svg:first-child {
   position: static;
@@ -6703,27 +6667,136 @@ img.connect-logo {
   border-color: var(--line-strong);
   background: var(--surface-2);
 }
-.menu-select-value {
-  white-space: nowrap;
+
+/* field: a bordered form field */
+.menu-select--field {
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
 }
-.menu-select-chevron {
+.menu-select--field .menu-select-value {
+  flex: 1;
+}
+.menu-select--field:hover:not(:disabled),
+.menu-select--field.is-open {
+  border-color: var(--line-strong);
+}
+.menu-select--field.is-open {
+  background: var(--surface);
+}
+
+/* bare: no border until hovered, for values shown inline */
+.menu-select--bare {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  color: inherit;
+}
+.menu-select--bare:hover:not(:disabled),
+.menu-select--bare.is-open {
+  background: var(--surface-2);
+}
+.menu-select--bare .menu-select-chevron {
+  opacity: 0.7;
+}
+
+/* Each place's own size */
+.menu-select.control-select {
+  height: 32px;
+  border-radius: 9px;
+  background: var(--surface);
+  font-size: 12.5px;
+}
+.menu-select.kanban-composer-ctx {
+  flex: 1;
+  height: 28px;
+  padding: 0 6px 0 8px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+.ntm-grid .menu-select {
+  width: 100%;
+  height: 34px;
+  border-color: var(--line-strong);
+}
+.menu-select.tp-select {
+  width: 100%;
+  height: 30px;
+  border-color: var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  font-size: 12.5px;
+}
+.menu-select.todo-quick-prio {
+  height: 27px;
+  padding: 0 6px 0 8px;
+  font-size: 12px;
+}
+.menu-select.te-prop-select {
+  height: 30px;
+  border-radius: 7px;
+  background: var(--surface);
+}
+.ls-editor .menu-select {
+  height: 28px;
+  padding: 0 6px 0 7px;
+  border-radius: 6px;
+  font-size: inherit;
+}
+.menu-select.prop-select {
+  min-width: 120px;
+  height: 30px;
+  padding: 0 8px;
   color: var(--muted);
-  transition: transform 0.15s;
 }
-.menu-select.is-open .menu-select-chevron {
-  transform: rotate(180deg);
+.menu-select.prop-select.has-value {
+  color: var(--text);
+  font-weight: 500;
 }
+.menu-select.st-select {
+  gap: 3px;
+  padding: 1px 3px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text);
+}
+.menu-select.st-select:hover:not(:disabled),
+.menu-select.st-select.is-open {
+  background: var(--surface);
+}
+.menu-select.st-select:focus-visible {
+  box-shadow: 0 0 0 1.5px var(--accent-soft);
+}
+.menu-select.mini-cal-pick {
+  gap: 3px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 0;
+}
+
+/* The open menu */
 .menu-select-pop {
   min-width: 180px;
   padding: 5px;
 }
 .menu-select-list {
+  position: relative;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.menu-select-pop .menu-item:focus-visible {
+.menu-select-pop .menu-item:focus {
   outline: none;
+}
+.menu-select-pop .menu-item:focus-visible,
+.menu-select-pop .menu-item:focus {
   background: var(--surface-2);
+}
+.menu-select-pop .menu-item:focus-visible {
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 .menu-select-pop .menu-item {
@@ -6733,6 +6806,12 @@ img.connect-logo {
 .menu-select-pop .menu-item.is-current {
   color: var(--accent-text);
   font-weight: 600;
+}
+.menu-select-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .menu-select-check {
   flex: none;

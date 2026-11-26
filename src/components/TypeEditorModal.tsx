@@ -11,6 +11,7 @@ import { RichEditor } from '../editor/Editor';
 import { emptyDoc } from '../lib/content';
 import { EmojiPicker } from './TypeIcon';
 import { Modal } from './Popover';
+import { MenuSelect } from './MenuSelect';
 
 const COLORS = ['#6d5efc', '#3f9bd8', '#2fa57a', '#e5b12e', '#e0864a', '#d9546e', '#b05cc9', '#4bb3a8', '#8b8a86', '#5b7083'];
 const KINDS: [PropertyKind, string][] = [
@@ -155,13 +156,14 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
           {draft.properties.map((p, i) => (
             <div key={i} className="te-prop">
               <input placeholder={tr('Property name')} value={p.name} onChange={(e) => setProp(i, { name: e.target.value })} />
-              <select value={p.kind} onChange={(e) => setProp(i, { kind: e.target.value as PropertyKind })}>
-                {KINDS.map(([k, l]) => (
-                  <option key={k} value={k}>
-                    {tr(l)}
-                  </option>
-                ))}
-              </select>
+              <MenuSelect
+                look="field"
+                className="te-prop-select"
+                label={tr('Property type')}
+                value={p.kind}
+                onChange={(kind) => setProp(i, { kind })}
+                options={KINDS.map(([k, l]) => ({ value: k, label: tr(l) }))}
+              />
               {p.kind === 'select' && (
                 <input
                   className="te-wide"
@@ -172,16 +174,17 @@ export function TypeEditorModal({ typeId }: { typeId: string }) {
               )}
               {p.kind === 'relation' && (
                 <>
-                  <select value={p.targetTypeId ?? ''} onChange={(e) => setProp(i, { targetTypeId: e.target.value || null })}>
-                    <option value="">{tr('Any type')}</option>
-                    {types
-                      .filter((t) => t.id !== 'daily')
-                      .map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.icon} {typeLabel(t, tr)}
-                        </option>
-                      ))}
-                  </select>
+                  <MenuSelect
+                    look="field"
+                    className="te-prop-select"
+                    label={tr('Links to')}
+                    value={p.targetTypeId ?? ''}
+                    onChange={(v) => setProp(i, { targetTypeId: v || null })}
+                    options={[
+                      { value: '', label: tr('Any type') },
+                      ...types.filter((t) => t.id !== 'daily').map((t) => ({ value: t.id, label: `${t.icon} ${typeLabel(t, tr)}` })),
+                    ]}
+                  />
                   <label className="te-check">
                     <input type="checkbox" checked={!!p.multi} onChange={(e) => setProp(i, { multi: e.target.checked })} /> {tr('Multiple')}
                   </label>

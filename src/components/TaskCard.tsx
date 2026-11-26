@@ -9,6 +9,7 @@ import { displayTitle, useActiveObjects, useObject, useTypeMap } from '../store/
 import { objPath, useOpen } from '../store/pane';
 import { useT } from '../store/uiStore';
 import { Popover } from './Popover';
+import { MenuSelect } from './MenuSelect';
 
 export function TaskCard({
   task,
@@ -305,29 +306,25 @@ export function TaskCard({
       {ctxOpen && (
         <Popover anchor={ctxBtnRef.current || menuBtnRef.current} onClose={() => setCtxOpen(false)} className="task-popover">
           <div className="tp-section">{tr('Context')}</div>
-          <select
+          <MenuSelect
+            look="field"
             className="tp-select"
             autoFocus
+            label={tr('Context')}
             value={task.contextId ?? ''}
-            onChange={(e) => {
-              void updateTask(task.id, { contextId: e.target.value || null });
+            onChange={(v) => {
+              void updateTask(task.id, { contextId: v || null });
               setCtxOpen(false);
             }}
-          >
-            <option value="">{srcObj ? displayTitle(srcObj, tr) : tr('Default')}</option>
-            {activeObjects
-              .filter((o) => o.typeId !== 'daily')
-              .sort((a, b) => b.updatedAt - a.updatedAt)
-              .slice(0, 50)
-              .map((o) => {
-                const tp = typeMap.get(o.typeId);
-                return (
-                  <option key={o.id} value={o.id}>
-                    {o.icon || tp?.icon || '📄'} {displayTitle(o, tr)}
-                  </option>
-                );
-              })}
-          </select>
+            options={[
+              { value: '', label: srcObj ? displayTitle(srcObj, tr) : tr('Default') },
+              ...activeObjects
+                .filter((o) => o.typeId !== 'daily')
+                .sort((a, b) => b.updatedAt - a.updatedAt)
+                .slice(0, 50)
+                .map((o) => ({ value: o.id, label: `${o.icon || typeMap.get(o.typeId)?.icon || '📄'} ${displayTitle(o, tr)}` })),
+            ]}
+          />
         </Popover>
       )}
     </div>

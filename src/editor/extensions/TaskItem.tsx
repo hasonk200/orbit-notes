@@ -11,6 +11,7 @@ import { displayTitle, useActiveObjects, useData } from '../../store/dataStore';
 import { objPath, useOpen } from '../../store/pane';
 import { useT } from '../../store/uiStore';
 import { Popover } from '../../components/Popover';
+import { MenuSelect } from '../../components/MenuSelect';
 import { parseAiTodo } from '../../lib/spaces';
 
 function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
@@ -254,28 +255,24 @@ function TaskItemView({ node, updateAttributes, editor }: ReactNodeViewProps) {
               ))}
             </div>
             <div className="tp-section">{tr('Context')}</div>
-            <select
+            <MenuSelect
+              look="field"
               className="tp-select"
+              label={tr('Context')}
               value={contextId ?? ''}
-              onChange={(e) => {
-                set({ contextId: e.target.value || null });
+              onChange={(v) => {
+                set({ contextId: v || null });
                 setPickerOpen(false);
               }}
-            >
-              <option value="">{tr('This note (default)')}</option>
-              {activeObjects
-                .filter((o) => o.typeId !== 'daily')
-                .sort((a, b) => b.updatedAt - a.updatedAt)
-                .slice(0, 40)
-                .map((o) => {
-                  const tp = types.find((t) => t.id === o.typeId);
-                  return (
-                    <option key={o.id} value={o.id}>
-                      {o.icon || tp?.icon || '📄'} {displayTitle(o, tr)}
-                    </option>
-                  );
-                })}
-            </select>
+              options={[
+                { value: '', label: tr('This note (default)') },
+                ...activeObjects
+                  .filter((o) => o.typeId !== 'daily')
+                  .sort((a, b) => b.updatedAt - a.updatedAt)
+                  .slice(0, 40)
+                  .map((o) => ({ value: o.id, label: `${o.icon || types.find((t) => t.id === o.typeId)?.icon || '📄'} ${displayTitle(o, tr)}` })),
+              ]}
+            />
           </Popover>
         )}
       </span>

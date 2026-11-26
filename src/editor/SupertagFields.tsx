@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { ObjType, PropertyDef } from '../db/schema';
+import { MenuSelect } from '../components/MenuSelect';
 import { RelationPicker } from '../components/PropertyPanel';
 import { supertagTypes, type ItemFields } from '../lib/supertags';
 import { optionLabel, propertyLabel } from '../lib/typeLabels';
@@ -61,14 +62,15 @@ function FieldEditor({ def, type, value, onChange, editable }: { def: PropertyDe
       return <input type="checkbox" className="st-check" checked={!!value} disabled={!editable} onChange={(e) => onChange(e.target.checked || null)} />;
     case 'select':
       return (
-        <select className="st-select" value={value == null ? '' : String(value)} disabled={!editable} onChange={(e) => onChange(e.target.value || null)}>
-          <option value="">—</option>
-          {(def.options ?? []).map((o) => (
-            <option key={o} value={o}>
-              {optionLabel(type, def, o, tr)}
-            </option>
-          ))}
-        </select>
+        <MenuSelect
+          look="bare"
+          className="st-select"
+          label={propertyLabel(type, def, tr)}
+          value={value == null ? '' : String(value)}
+          disabled={!editable}
+          onChange={(v) => onChange(v || null)}
+          options={[{ value: '', label: '—' }, ...(def.options ?? []).map((o) => ({ value: o, label: optionLabel(type, def, o, tr) }))]}
+        />
       );
     case 'relation':
       return <RelationPicker def={def} value={value} onChange={onChange} />;

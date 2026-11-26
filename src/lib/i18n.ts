@@ -748,6 +748,11 @@ const zhHant: Record<string, string> = {
   "Double-click to edit": "雙擊編輯",
   "Add task": "新增任務",
   "This note (default)": "此筆記（預設）",
+  "Property type": "屬性類型",
+  "Links to": "連結到",
+  "Value": "值",
+  "Today’s Daily Note": "今日日記",
+  "Default": "預設",
 };
 
 export function resolveLanguage(saved: string | null, preferred: readonly string[]): Language {
