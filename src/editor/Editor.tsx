@@ -9,6 +9,7 @@ import { OrbitTaskItem } from './extensions/TaskItem';
 import { OutlinerListItem } from './extensions/OutlinerListItem';
 import { Callout } from './extensions/Callout';
 import { Toggle } from './extensions/Toggle';
+import { BlockGroup, findEnclosingBlockGroup, spansMultipleBlocks } from './extensions/BlockGroup';
 import { ObjectLink } from './extensions/ObjectLink';
 import { Tag } from './extensions/TagSuggest';
 import { DateRef } from './extensions/DateRef';
@@ -27,6 +28,7 @@ import { registerDraft } from '../db/drafts';
 import { isAllowedLinkUrl, looksLikeMarkdown, MARKDOWN_LINK_INPUT_RE, markdownToBlocks } from '../lib/markdown';
 import { openLocalFile } from '../lib/native';
 import { Plugin } from '@tiptap/pm/state';
+import { Layers, Ungroup } from 'lucide-react';
 
 /** Ctrl/Cmd+K on selected text (or inside a link) opens the link box; otherwise the key falls through to search. */
 const LinkShortcut = Extension.create<{ open: () => boolean }>({
@@ -99,6 +101,37 @@ const MarkdownLinkInput = Extension.create({
   },
 });
 
+/** Typing `** text **` with accidental inner spaces still turns into bold text cleanly. */
+const LOOSE_BOLD_INPUT_RE = /(?<!\*)\*\*([ \t]+[^\n*]+?|[^\n*]+?[ \t]+)\*\*\s$/;
+
+const LooseBoldInput = Extension.create({
+  name: 'looseBoldInput',
+  addInputRules() {
+    return [
+      new InputRule({
+        find: LOOSE_BOLD_INPUT_RE,
+        handler: ({ state, range, match }) => {
+          const inner = match[1];
+          const trimmed = inner.trim();
+          const boldType = state.schema.marks.bold;
+          if (!trimmed || !boldType) return null;
+          if (state.selection.$from.parent.type.spec.code) return null;
+          const codeMark = state.schema.marks.code;
+          if (codeMark && codeMark.isInSet(state.selection.$from.marks())) return null;
+          const beforeChar = range.from > 0 ? state.doc.textBetween(range.from - 1, range.from) : '';
+          const leadSpace = /^[ \t]/.test(inner) && beforeChar && !/\s/.test(beforeChar) ? ' ' : '';
+          const nodes = [
+            ...(leadSpace ? [state.schema.text(leadSpace)] : []),
+            state.schema.text(trimmed, [boldType.create()]),
+            state.schema.text(' '),
+          ];
+          state.tr.replaceWith(range.from, range.to, nodes).removeStoredMark(boldType);
+        },
+      }),
+    ];
+  },
+});
+
 function buildExtensions(getPlaceholder: (heading: boolean) => string, openLinkBox: () => boolean) {
   return [
     StarterKit.configure({
@@ -114,6 +147,7 @@ function buildExtensions(getPlaceholder: (heading: boolean) => string, openLinkB
     LinkShortcut.configure({ open: openLinkBox }),
     MarkdownPaste,
     MarkdownLinkInput,
+    LooseBoldInput,
     Outliner,
     LiveSearch,
     OutlinerListItem,
@@ -125,6 +159,7 @@ function buildExtensions(getPlaceholder: (heading: boolean) => string, openLinkB
     OrbitTaskItem,
     Callout,
     Toggle,
+    BlockGroup,
     TableKit.configure({
       table: { resizable: true, renderWrapper: true },
     }),
@@ -334,6 +369,7 @@ export function RichEditor({
   const wrapRef = useRef<HTMLDivElement>(null);
   const [inTable, setInTable] = useState(false);
   const [linkBoxOpen, setLinkBoxOpen] = useState(false);
+  const [selBar, setSelBar] = useState<{ top: number; left: number; inGroup: boolean } | null>(null);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [trail, setTrail] = useState<ZoomCrumb[]>([]);
   const trailKey = useRef('[]');
@@ -343,6 +379,25 @@ export function RichEditor({
     if (key === trailKey.current) return;
     trailKey.current = key;
     setTrail(next);
+  };
+  const syncSelBar = (ed: Editor) => {
+    if (!editable || linkBoxOpen || ed.isDestroyed || !spansMultipleBlocks(ed.state)) {
+      setSelBar(null);
+      return;
+    }
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    try {
+      const cFrom = ed.view.coordsAtPos(ed.state.selection.from);
+      const cTo = ed.view.coordsAtPos(ed.state.selection.to);
+      const rect = wrap.getBoundingClientRect();
+      const top = Math.max(4, Math.min(cFrom.top, cTo.top) - rect.top - 40);
+      const left = Math.max(8, Math.min(cFrom.left - rect.left, Math.max(8, rect.width - 210)));
+      const inGroup = !!findEnclosingBlockGroup(ed.state);
+      setSelBar({ top, left, inGroup });
+    } catch {
+      setSelBar(null);
+    }
   };
   const outlineKey = useRef('');
   const [copiedAt, setCopiedAt] = useState<{ top: number; left: number } | null>(null);
@@ -393,13 +448,23 @@ export function RichEditor({
         onChangeRef.current(editor.getJSON() as JSONContent);
         syncOutline(editor);
       },
-      onSelectionUpdate: ({ editor }) => setInTable(editor.isActive('table')),
-      onFocus: ({ editor }) => editorFocused(editor),
-      onBlur: ({ editor, event }) => editorBlurred(editor, (event as FocusEvent).relatedTarget),
+      onSelectionUpdate: ({ editor }) => {
+        setInTable(editor.isActive('table'));
+        syncSelBar(editor);
+      },
+      onFocus: ({ editor }) => {
+        editorFocused(editor);
+        syncSelBar(editor);
+      },
+      onBlur: ({ editor, event }) => {
+        editorBlurred(editor, (event as FocusEvent).relatedTarget);
+        setSelBar(null);
+      },
       onTransaction: ({ editor, transaction }) => {
         setInTable(editor.isActive('table'));
         if (transaction.docChanged) syncOutline(editor);
         syncTrail(editor);
+        syncSelBar(editor);
       },
     },
     [docKey],
@@ -437,6 +502,36 @@ export function RichEditor({
       {editor && trail.length > 0 && <ZoomBar editor={editor} trail={trail} />}
       {showOutline && editor && !trail.length && outline.length >= 2 && <Outline editor={editor} items={outline} />}
       {editable && editor && inTable && <TableToolbar editor={editor} />}
+      {editable && editor && selBar && !linkBoxOpen && (
+        <div
+          className="selection-block-bar"
+          style={{ top: selBar.top, left: selBar.left }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <button
+            type="button"
+            className="sel-bar-btn primary"
+            onClick={() => {
+              editor.chain().focus().wrapInBlockGroup().run();
+              setSelBar(null);
+            }}
+          >
+            <Layers size={14} /> {tr('Group into block')}
+          </button>
+          {selBar.inGroup && (
+            <button
+              type="button"
+              className="sel-bar-btn"
+              onClick={() => {
+                editor.chain().focus().unwrapBlockGroup().run();
+                setSelBar(null);
+              }}
+            >
+              <Ungroup size={14} /> {tr('Ungroup block')}
+            </button>
+          )}
+        </div>
+      )}
       <EditorContent editor={editor} className="editor-root" />
       {editable && editor && linkBoxOpen && <LinkBox editor={editor} onClose={() => setLinkBoxOpen(false)} />}
       {copiedAt && (

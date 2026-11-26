@@ -799,6 +799,19 @@ const zhHant: Record<string, string> = {
   "Add to folder": "加入資料夾",
   "Folder name…": "資料夾名稱…",
   "New folder…": "新增資料夾…",
+  "Block group": "合成區塊（群組）",
+  "Group & collapse blocks": "將多行內容包成可摺疊區塊",
+  "Group into block": "合成區塊",
+  "Wrap in block": "包成區塊",
+  "Ungroup block": "解開區塊",
+  "Ungroup": "解開",
+  "Ungroup into separate blocks": "解開還原成獨立區塊",
+  "Ungroup into separate tasks": "解開還原成獨立待辦",
+  "Block title (optional)…": "區塊標題（選填）…",
+  "Grouped block": "群組區塊",
+  "{count} blocks": "{count} 個區塊",
+  "Grouped as 1 card in To-do & Tasks (click to split)": "在待辦／任務頁合埋成 1 張卡（點擊拆開顯示）",
+  "Shown individually in To-do & Tasks (click to group)": "在待辦／任務頁逐條顯示（點擊合埋成 1 張卡）",
 };
 
 export function resolveLanguage(saved: string | null, preferred: readonly string[]): Language {

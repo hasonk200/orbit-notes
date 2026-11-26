@@ -7148,3 +7148,296 @@ img.connect-logo {
 .tag-task.is-done {
   text-decoration: none;
 }
+
+/* ---------- SiYuan-style BlockGroup superblock ---------- */
+.block-group-node {
+  margin: 10px 0;
+  padding: 8px 12px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, var(--line-strong));
+  background: color-mix(in srgb, var(--surface-2) 48%, var(--surface));
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.block-group-node:hover,
+.block-group-node:focus-within {
+  border-color: var(--line-strong);
+  border-left-color: var(--accent);
+}
+.block-group-node.is-collapsed {
+  padding-bottom: 8px;
+}
+.bg-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+}
+.block-group-node.is-open > .bg-head > .bg-caret {
+  transform: rotate(90deg);
+}
+.bg-icon {
+  flex: none;
+  color: var(--accent-text);
+  opacity: 0.85;
+}
+.bg-title {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+.bg-title:hover:not(:disabled),
+.bg-title:focus {
+  background: color-mix(in srgb, var(--surface-2) 80%, transparent);
+}
+.bg-title::placeholder {
+  color: var(--muted);
+  font-weight: 400;
+}
+.bg-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.bg-progress-bar {
+  width: 44px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.bg-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width var(--dur) var(--ease-out);
+}
+.bg-progress.is-done .bg-progress-fill {
+  background: var(--ok);
+}
+.bg-progress-label,
+.bg-count-pill {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.bg-count-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.bg-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.block-group-node:hover .bg-actions,
+.block-group-node:focus-within .bg-actions,
+.block-group-node.is-collapsed .bg-actions {
+  opacity: 1;
+}
+.bg-act-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.bg-act-btn:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+  background: var(--surface-2);
+}
+.bg-act-btn.is-grouped {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+.bg-body-wrap {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+.bg-body > :first-child {
+  margin-top: 0;
+}
+.bg-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* Floating selection bar for grouping blocks */
+.selection-block-bar {
+  position: absolute;
+  z-index: 24;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.sel-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+.sel-bar-btn:hover {
+  background: var(--surface-2);
+}
+.sel-bar-btn.primary {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.sel-bar-btn.primary:hover {
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface));
+}
+
+/* ---------- Option B: Task Bundle Card in /todos & /tasks ---------- */
+.task-bundle {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  margin: 4px 0;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.task-bundle:hover {
+  border-color: var(--line-strong);
+}
+.task-bundle-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  flex-wrap: wrap;
+}
+.task-bundle-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 140px;
+  text-align: left;
+  color: var(--text);
+  padding: 2px 4px;
+  border-radius: 8px;
+}
+.task-bundle-toggle:hover {
+  background: var(--surface-2);
+}
+.task-bundle-chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.task-bundle.is-open .task-bundle-chevron {
+  transform: rotate(90deg);
+}
+.task-bundle-icon {
+  flex: none;
+  color: var(--accent-text);
+}
+.task-bundle-title {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-bundle-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.task-bundle-progress .proj-progress-bar {
+  width: 48px;
+}
+.task-bundle-ungroup {
+  opacity: 0.72;
+}
+.task-bundle:hover .task-bundle-ungroup {
+  opacity: 1;
+}
+.task-bundle-body {
+  border-top: 1px solid var(--line);
+  padding: 4px 8px 8px 20px;
+  background: color-mix(in srgb, var(--surface-2) 35%, var(--surface));
+  border-radius: 0 0 12px 12px;
+}
+.task-bundle.is-compact .task-bundle-head {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 10px;
+  gap: 8px;
+}
+.task-bundle.is-compact .task-bundle-toggle {
+  min-width: 0;
+}
+.task-bundle.is-compact .task-bundle-meta {
+  justify-content: space-between;
+}
+.task-bundle.is-compact .task-bundle-body {
+  padding: 4px 6px 6px;
+}
+
+@media (max-width: 820px) {
+  .bg-head {
+    flex-wrap: wrap;
+  }
+  .bg-title {
+    font-size: 16px;
+    min-width: 140px;
+  }
+  .bg-actions {
+    opacity: 1;
+  }
+  .bg-act-btn {
+    height: 32px;
+    padding: 0 8px;
+  }
+  .task-bundle-head {
+    padding: 10px;
+  }
+  .task-bundle-body {
+    padding-left: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .block-group-node,
+  .bg-progress-fill,
+  .selection-block-bar,
+  .task-bundle,
+  .task-bundle-chevron {
+    transition: none;
+  }
+}

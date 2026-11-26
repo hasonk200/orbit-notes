@@ -1,6 +1,7 @@
 import MarkdownIt, { type Token } from 'markdown-it';
 import cjkFriendly from 'markdown-it-cjk-friendly';
 import type { JSONContent } from '../db/schema';
+import { uid } from './uid';
 
 /**
  * Markdown → Orbit editor JSON, shared by the editor (paste) and the AI API.
@@ -31,6 +32,103 @@ const md = new MarkdownIt({ html: false, linkify: false, typographer: false });
 md.use(cjkFriendly);
 // Only allow explicit safe link schemes (including local file:// links used on desktop).
 md.validateLink = isAllowedLinkUrl;
+
+// SiYuan-style superblock container: :::block [collapsed,ungrouped] Optional title ... :::
+md.block.ruler.before(
+  'fence',
+  'block_group',
+  (state, startLine, endLine, silent) => {
+    const startPos = state.bMarks[startLine] + state.tShift[startLine];
+    const startMax = state.eMarks[startLine];
+    if (state.sCount[startLine] - state.blkIndent >= 4) return false;
+    const head = state.src.slice(startPos, startMax);
+    const m = head.match(/^:::block(?:\s+\[([^\]]+)\])?(?:\s+(.*))?\s*$/);
+    if (!m) return false;
+    if (silent) return true;
+
+    const flagSet = new Set(
+      (m[1] ?? '')
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
+    );
+    const collapsed = flagSet.has('collapsed');
+    const groupTasks = !flagSet.has('ungrouped');
+    const title = (m[2] ?? '').trim();
+
+    let nextLine = startLine + 1;
+    let depth = 1;
+    let foundClose = false;
+    let fenceMarker: string | null = null;
+    while (nextLine < endLine) {
+      const pos = state.bMarks[nextLine] + state.tShift[nextLine];
+      const max = state.eMarks[nextLine];
+      const line = state.src.slice(pos, max);
+      if (state.sCount[nextLine] - state.blkIndent < 4) {
+        if (fenceMarker) {
+          if (line.trim().startsWith(fenceMarker)) fenceMarker = null;
+        } else {
+          const fm = line.match(/^(`{3,}|~{3,})/);
+          if (fm) fenceMarker = fm[1];
+          else if (/^:::block(?:\s|$)/.test(line)) depth++;
+          else if (/^:::\s*$/.test(line)) {
+            depth--;
+            if (depth === 0) {
+              foundClose = true;
+              break;
+            }
+          }
+        }
+      }
+      nextLine++;
+    }
+
+    const oldParent = state.parentType;
+    const oldLineMax = state.lineMax;
+    state.parentType = 'container' as any;
+    state.lineMax = nextLine;
+
+    const open = state.push('block_group_open', 'div', 1);
+    open.markup = ':::block';
+    open.block = true;
+    open.meta = { title, collapsed, groupTasks };
+    open.map = [startLine, nextLine + (foundClose ? 1 : 0)];
+
+    state.md.block.tokenize(state, startLine + 1, nextLine);
+
+    const close = state.push('block_group_close', 'div', -1);
+    close.markup = ':::';
+    close.block = true;
+
+    state.parentType = oldParent;
+    state.lineMax = oldLineMax;
+    state.line = foundClose ? nextLine + 1 : nextLine;
+    return true;
+  },
+  { alt: ['paragraph', 'reference', 'blockquote', 'list'] },
+);
+
+/**
+ * Tolerate accidental spaces right inside `** ... **` markers (e.g. `**0.1 標題 **` or `** 截止**`)
+ * while leaving inline backtick code spans untouched.
+ */
+export function normalizeLooseBold(src: string): string {
+  if (!src.includes('**')) return src;
+  const spans: string[] = [];
+  const masked = src.replace(/(`+)[\s\S]*?\1/g, (m) => {
+    const idx = spans.push(m) - 1;
+    return `\uE000${idx}\uE001`;
+  });
+  const fixed = masked.replace(/(?<!\*)\*\*(?!\*)((?:[^*\n]|\*(?!\*))+?)(?<!\*)\*\*(?!\*)/g, (full, inner: string, offset: number) => {
+    const trimmed = inner.trim();
+    if (!trimmed || !/^[ \t]|[ \t]$/.test(inner)) return full;
+    const leadSpace = /^[ \t]/.test(inner) && offset > 0 && !/\s/.test(masked[offset - 1]) ? ' ' : '';
+    const end = offset + full.length;
+    const trailSpace = /[ \t]$/.test(inner) && end < masked.length && !/\s/.test(masked[end]) ? ' ' : '';
+    return `${leadSpace}**${trimmed}**${trailSpace}`;
+  });
+  return fixed.replace(/\uE000(\d+)\uE001/g, (_, idx) => spans[Number(idx)]);
+}
 
 // ---------- Bare links ----------
 
@@ -158,7 +256,7 @@ const joinLines = (nodes: JSONContent[]) => nodes.map((n) => (n === BREAK ? { ty
 
 /** Inline Markdown → text nodes with marks (line breaks become spaces). */
 export function parseInline(src: string): JSONContent[] {
-  const tokens = md.parseInline(src, {})[0]?.children ?? [];
+  const tokens = md.parseInline(normalizeLooseBold(src), {})[0]?.children ?? [];
   return joinLines(inlineNodes(tokens));
 }
 
@@ -203,6 +301,10 @@ function prepare(markdown: string): Prepared {
       rest = rest0.slice(0, indent) + body;
     }
     const fenceOpen = body.match(FENCE_OPEN);
+    if (!fenceOpen) {
+      rest = normalizeLooseBold(rest);
+      body = rest.trimStart();
+    }
     const isBlank = body.trim() === '';
     const isList = LIST_MARKER.test(body);
     if (prev && !isBlank && prev.text.trim() !== '') {
@@ -226,7 +328,7 @@ function prepare(markdown: string): Prepared {
 
 type Group = { nodes: JSONContent[]; map: [number, number] | null };
 
-const SPACED = new Set(['heading', 'horizontalRule', 'table', 'codeBlock']);
+const SPACED = new Set(['heading', 'horizontalRule', 'table', 'codeBlock', 'blockGroup']);
 
 class Converter {
   constructor(private tokens: Token[], private lines: string[], private synthetic: Set<number>) {}
@@ -293,6 +395,25 @@ class Converter {
       case 'blockquote_open': {
         const [kids, next] = this.blocks(i + 1, 'blockquote_close', true);
         return [[{ type: 'blockquote', content: kids.length ? kids : [{ type: 'paragraph' }] }], next];
+      }
+      case 'block_group_open': {
+        const [kids, next] = this.blocks(i + 1, 'block_group_close', true);
+        const meta = (t.meta ?? {}) as { title?: string; collapsed?: boolean; groupTasks?: boolean };
+        return [
+          [
+            {
+              type: 'blockGroup',
+              attrs: {
+                groupId: uid(),
+                title: meta.title ?? '',
+                collapsed: !!meta.collapsed,
+                groupTasks: meta.groupTasks !== false,
+              },
+              content: kids.length ? kids : [{ type: 'paragraph' }],
+            },
+          ],
+          next,
+        ];
       }
       case 'fence':
       case 'code_block': {
@@ -373,6 +494,7 @@ export function markdownToBlocks(markdown: string): JSONContent[] {
 const LOOKS = [
   /^#{1,6}\s+\S/, // heading
   /^(```|~~~)/, // code fence
+  /^:::block(?:\s|$)/, // superblock group
   /^(?:[-*+]\s+\[[ xX]\]|[☐□☑☒])\s+/, // to-do
   /^[-*+•]\s+\S/, // bullet
   /^\d{1,3}[.)]\s+\S/, // numbered
@@ -490,6 +612,17 @@ function serializeBlock(node: JSONContent): string {
       const title = String(node.attrs?.summary ?? '');
       const body = blocksToMarkdown(node.content ?? []);
       return body ? `- **${title}**\n${body.split('\n').map((l) => `  ${l}`).join('\n')}` : `- **${title}**`;
+    }
+    case 'blockGroup': {
+      const title = String(node.attrs?.title ?? '').trim();
+      const collapsed = !!node.attrs?.collapsed;
+      const groupTasks = node.attrs?.groupTasks !== false;
+      const flags: string[] = [];
+      if (collapsed) flags.push('collapsed');
+      if (!groupTasks) flags.push('ungrouped');
+      const head = [':::block', flags.length ? `[${flags.join(',')}]` : '', title].filter(Boolean).join(' ');
+      const inner = blocksToMarkdown(node.content ?? []).replace(/\n+$/, '');
+      return inner ? `${head}\n${inner}\n:::` : `${head}\n:::`;
     }
     case 'bulletList':
       return serializeList(node, '', false, false).join('\n');

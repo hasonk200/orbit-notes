@@ -1,8 +1,9 @@
 import { useT } from '../store/uiStore';
 import type { Editor } from '@tiptap/react';
-import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, Trash } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, GripVertical, Layers, Plus, Trash, Ungroup } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Popover } from '../components/Popover';
+import { unwrapBlockGroupAt } from './extensions/BlockGroup';
 
 interface HoveredBlock {
   index: number;
@@ -197,6 +198,37 @@ export function BlockDragHandle({
   };
 
   const total = editor.state.doc.childCount;
+  const hoveredNode = hovered && hovered.index < total ? editor.state.doc.child(hovered.index) : null;
+  const isHoveredGroup = hoveredNode?.type.name === 'blockGroup';
+
+  const wrapHoveredBlock = () => {
+    if (!hovered) return;
+    const blk = topLevelBlocks(editor)[hovered.index];
+    if (!blk) return;
+    editor.chain().focus().setNodeSelection(blk.pos).wrapInBlockGroup().run();
+    setMenuOpen(false);
+  };
+
+  const toggleGroupCollapse = () => {
+    if (!hovered || !hoveredNode || !isHoveredGroup) return;
+    const blk = topLevelBlocks(editor)[hovered.index];
+    if (!blk) return;
+    editor.view.dispatch(
+      editor.state.tr.setNodeMarkup(blk.pos, undefined, {
+        ...hoveredNode.attrs,
+        collapsed: !hoveredNode.attrs.collapsed,
+      }),
+    );
+    setMenuOpen(false);
+  };
+
+  const ungroupHoveredBlock = () => {
+    if (!hovered || !isHoveredGroup) return;
+    const blk = topLevelBlocks(editor)[hovered.index];
+    if (!blk) return;
+    unwrapBlockGroupAt(editor, blk.pos);
+    setMenuOpen(false);
+  };
 
   return (
     <>
@@ -259,6 +291,21 @@ export function BlockDragHandle({
           <button type="button" onClick={duplicateBlock}>
             <Copy size={14} /> {tr('Duplicate')}
           </button>
+          {isHoveredGroup ? (
+            <>
+              <button type="button" onClick={toggleGroupCollapse}>
+                {hoveredNode?.attrs.collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                {hoveredNode?.attrs.collapsed ? tr('Expand') : tr('Collapse')}
+              </button>
+              <button type="button" onClick={ungroupHoveredBlock}>
+                <Ungroup size={14} /> {tr('Ungroup block')}
+              </button>
+            </>
+          ) : (
+            <button type="button" onClick={wrapHoveredBlock}>
+              <Layers size={14} /> {tr('Wrap in block')}
+            </button>
+          )}
           <button type="button" className="danger" onClick={deleteBlock}>
             <Trash size={14} /> {tr('Delete')}
           </button>

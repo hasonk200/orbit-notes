@@ -129,6 +129,9 @@ export interface TaskRec {
   completedAt?: number | null;
   /** Set for the AI workspace's two kinds of to-do. */
   aiTodo?: AiTodo | null;
+  /** Enclosing BlockGroup id & title when grouped into a single task bundle card. */
+  groupId?: string | null;
+  groupTitle?: string | null;
   createdAt: number;
   updatedAt: number;
 }

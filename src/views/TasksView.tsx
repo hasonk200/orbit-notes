@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { TaskPriority, TaskRec, TaskStatus } from '../db/schema';
-import { createTask, rescheduleTasks, updateTask } from '../db/indexers';
+import { createTask, rescheduleTasks, updateTask, updateTasksStatus } from '../db/indexers';
 import { displayTitle, useData, useObjMap, useSpaceObjects, useSpaceTasks, useTypeMap } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { useT } from '../store/uiStore';
@@ -25,6 +25,8 @@ import { relativeTime, shortDate, todayISO, toISODate } from '../lib/dates';
 import { includesText } from '../lib/search';
 import { typeLabel } from '../lib/typeLabels';
 import { classifyTaskKind, parseQuickTaskInput, PRIO_MAP, PRIO_RANK, priorityChoices, resolveTaskStatus, STATUS_MAP, STATUS_RANK, statusChoices, TASK_STATUSES } from '../lib/tasks';
+import { collapseTaskGroups, countCollapsedEntries, type TaskListEntry } from '../lib/taskGroups';
+import { TaskBundleCard } from '../components/TaskBundleCard';
 import { TaskRow } from '../components/TaskRow';
 import { TaskCard } from '../components/TaskCard';
 import { Modal } from '../components/Popover';
@@ -162,24 +164,31 @@ export function TasksView() {
     (a.due ?? '9999').localeCompare(b.due ?? '9999') ||
     b.updatedAt - a.updatedAt;
 
-  // Per-tab computed counts
+  // Per-tab computed counts (grouped blocks count as 1 card)
   const counts = useMemo(() => {
-    let inbox = 0;
-    let todayC = 0;
-    let scheduled = 0;
-    let openC = 0;
-    let completed = 0;
+    const inboxRaw: TaskRec[] = [];
+    const todayRaw: TaskRec[] = [];
+    const scheduledRaw: TaskRec[] = [];
+    const openRaw: TaskRec[] = [];
+    const completedRaw: TaskRec[] = [];
     for (const t of allTasks) {
       if (t.done) {
-        completed++;
+        completedRaw.push(t);
         continue;
       }
-      openC++;
-      if (!t.due && t.status === 'open') inbox++;
-      if (t.due) scheduled++;
-      if ((t.due && t.due <= today) || t.status === 'in_progress') todayC++;
+      openRaw.push(t);
+      if (!t.due && t.status === 'open') inboxRaw.push(t);
+      if (t.due) scheduledRaw.push(t);
+      if ((t.due && t.due <= today) || t.status === 'in_progress') todayRaw.push(t);
     }
-    return { inbox, today: todayC, scheduled, open: openC, completed, all: allTasks.length };
+    return {
+      inbox: countCollapsedEntries(inboxRaw),
+      today: countCollapsedEntries(todayRaw),
+      scheduled: countCollapsedEntries(scheduledRaw),
+      open: countCollapsedEntries(openRaw),
+      completed: countCollapsedEntries(completedRaw),
+      all: countCollapsedEntries(allTasks),
+    };
   }, [allTasks, today]);
 
   // Tab datasets
@@ -191,51 +200,54 @@ export function TasksView() {
       map.set(k, [...(map.get(k) ?? []), t]);
     }
     return (['Today', 'Yesterday', 'Earlier'] as const)
-      .map((label) => ({ key: label, label: tr(label), items: map.get(label) ?? [] }))
+      .map((label) => ({ key: label, label: tr(label), items: collapseTaskGroups(map.get(label) ?? [], allTasks) }))
       .filter((g) => g.items.length > 0);
-  }, [filtered, tr]);
+  }, [filtered, tr, allTasks]);
 
   const todayGroups = useMemo(() => {
     const list = filtered.filter((t) => !t.done && ((t.due && t.due <= today) || t.status === 'in_progress'));
     const overdue = list.filter((t) => t.due && t.due < today).sort(byPrioThenDue);
     const rest = list.filter((t) => !(t.due && t.due < today));
     const statusOrder: TaskStatus[] = ['in_progress', 'next_up', 'not_started', 'open'];
-    const out: { key: string; label: string; tone?: string; items: TaskRec[] }[] = [];
-    if (overdue.length) out.push({ key: 'overdue', label: tr('Overdue'), tone: 'rose', items: overdue });
+    const out: { key: string; label: string; tone?: string; items: TaskListEntry[] }[] = [];
+    if (overdue.length) out.push({ key: 'overdue', label: tr('Overdue'), tone: 'rose', items: collapseTaskGroups(overdue, allTasks) });
     for (const st of statusOrder) {
       const items = rest.filter((t) => t.status === st).sort(byPrioThenDue);
       if (items.length) {
         const def = STATUS_MAP.get(st)!;
-        out.push({ key: st, label: tr(def.label), tone: def.tone, items });
+        out.push({ key: st, label: tr(def.label), tone: def.tone, items: collapseTaskGroups(items, allTasks) });
       }
     }
     return out;
-  }, [filtered, today, tr]);
+  }, [filtered, today, tr, allTasks]);
 
+  const scheduledRaw = useMemo(() => filtered.filter((t) => !t.done && !!t.due), [filtered]);
   const scheduledGroups = useMemo(() => {
-    const list = filtered.filter((t) => !t.done && !!t.due);
     const byDue = (a: TaskRec, b: TaskRec) => (a.due ?? '').localeCompare(b.due ?? '') || byPrioThenDue(a, b);
     return [
-      { key: 'overdue', label: tr('Overdue'), tone: 'rose', items: list.filter((t) => t.due! < today).sort(byDue) },
-      { key: 'today', label: tr('Today'), tone: 'amber', items: list.filter((t) => t.due === today).sort(byDue) },
-      { key: 'tomorrow', label: tr('Tomorrow'), tone: 'blue', items: list.filter((t) => t.due === tomorrow).sort(byDue) },
-      { key: 'week', label: tr('Next 7 days'), tone: 'neutral', items: list.filter((t) => t.due! > tomorrow && t.due! <= nextWeekEnd).sort(byDue) },
-      { key: 'later', label: tr('Later'), tone: 'neutral', items: list.filter((t) => t.due! > nextWeekEnd).sort(byDue) },
+      { key: 'overdue', label: tr('Overdue'), tone: 'rose', items: collapseTaskGroups(scheduledRaw.filter((t) => t.due! < today).sort(byDue), allTasks) },
+      { key: 'today', label: tr('Today'), tone: 'amber', items: collapseTaskGroups(scheduledRaw.filter((t) => t.due === today).sort(byDue), allTasks) },
+      { key: 'tomorrow', label: tr('Tomorrow'), tone: 'blue', items: collapseTaskGroups(scheduledRaw.filter((t) => t.due === tomorrow).sort(byDue), allTasks) },
+      { key: 'week', label: tr('Next 7 days'), tone: 'neutral', items: collapseTaskGroups(scheduledRaw.filter((t) => t.due! > tomorrow && t.due! <= nextWeekEnd).sort(byDue), allTasks) },
+      { key: 'later', label: tr('Later'), tone: 'neutral', items: collapseTaskGroups(scheduledRaw.filter((t) => t.due! > nextWeekEnd).sort(byDue), allTasks) },
     ].filter((g) => g.items.length > 0);
-  }, [filtered, today, tomorrow, nextWeekEnd, tr]);
+  }, [scheduledRaw, today, tomorrow, nextWeekEnd, tr, allTasks]);
 
   const statusColumns = useMemo(() => {
     return TASK_STATUSES.map((s) => ({
       ...s,
-      items: filtered
-        .filter((t) => t.status === s.id)
-        .sort((a, b) =>
-          s.id === 'done'
-            ? (b.completedAt ?? b.updatedAt) - (a.completedAt ?? a.updatedAt)
-            : byPrioThenDue(a, b),
-        ),
+      items: collapseTaskGroups(
+        filtered
+          .filter((t) => t.status === s.id)
+          .sort((a, b) =>
+            s.id === 'done'
+              ? (b.completedAt ?? b.updatedAt) - (a.completedAt ?? a.updatedAt)
+              : byPrioThenDue(a, b),
+          ),
+        allTasks,
+      ),
     }));
-  }, [filtered]);
+  }, [filtered, allTasks]);
 
   const contextGroups = useMemo(() => {
     const map = new Map<string, { open: TaskRec[]; doneCount: number; totalCount: number }>();
@@ -260,16 +272,17 @@ export function TasksView() {
           title: obj ? displayTitle(obj, tr) : tr('Unknown'),
           icon: obj?.icon || tp?.icon || '📄',
           color: tp?.color ?? '#8b8a86',
-          items: entry.open.sort(byPrioThenDue),
+          items: collapseTaskGroups(entry.open.sort(byPrioThenDue), allTasks),
           doneCount: entry.doneCount,
           totalCount: entry.totalCount,
           pct,
         };
       })
       .sort((a, b) => b.items.length - a.items.length || b.totalCount - a.totalCount || a.title.localeCompare(b.title));
-  }, [filtered, objMap, typeMap, tr]);
+  }, [filtered, objMap, typeMap, tr, allTasks]);
 
-  const openList = useMemo(() => filtered.filter((t) => !t.done).sort(byPrioThenDue), [filtered]);
+  const openList = useMemo(() => collapseTaskGroups(filtered.filter((t) => !t.done).sort(byPrioThenDue), allTasks), [filtered, allTasks]);
+  const allEntries = useMemo(() => collapseTaskGroups([...filtered].sort(byPrioThenDue), allTasks), [filtered, allTasks]);
 
   const completedGroups = useMemo(() => {
     const list = filtered
@@ -281,9 +294,9 @@ export function TasksView() {
       map.set(k, [...(map.get(k) ?? []), t]);
     }
     return (['Today', 'Yesterday', 'Earlier'] as const)
-      .map((label) => ({ key: label, label: tr(label), items: map.get(label) ?? [] }))
+      .map((label) => ({ key: label, label: tr(label), items: collapseTaskGroups(map.get(label) ?? [], allTasks) }))
       .filter((g) => g.items.length > 0);
-  }, [filtered, tr]);
+  }, [filtered, tr, allTasks]);
 
   const visibleCount = useMemo(() => {
     switch (tab) {
@@ -294,7 +307,7 @@ export function TasksView() {
       case 'scheduled':
         return scheduledGroups.reduce((n, g) => n + g.items.length, 0);
       case 'status':
-        return filtered.length;
+        return statusColumns.reduce((n, c) => n + c.items.length, 0);
       case 'context':
         return contextGroups.reduce((n, g) => n + g.items.length, 0);
       case 'open':
@@ -302,15 +315,25 @@ export function TasksView() {
       case 'completed':
         return completedGroups.reduce((n, g) => n + g.items.length, 0);
       case 'all':
-        return filtered.length;
+        return allEntries.length;
     }
-  }, [tab, inboxGroups, todayGroups, scheduledGroups, filtered, contextGroups, openList, completedGroups]);
+  }, [tab, inboxGroups, todayGroups, scheduledGroups, statusColumns, contextGroups, openList, completedGroups, allEntries]);
 
   const handleDropOnColumn = async (targetStatus: TaskStatus, e: React.DragEvent) => {
     e.preventDefault();
-    const id = e.dataTransfer.getData('text/orbit-task') || dragTaskId;
+    const bundleRaw = e.dataTransfer.getData('text/orbit-task-bundle');
     setDragOverCol(null);
     setDragTaskId(null);
+    if (bundleRaw) {
+      try {
+        const ids = JSON.parse(bundleRaw);
+        if (Array.isArray(ids) && ids.length) await updateTasksStatus(ids, targetStatus);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    const id = e.dataTransfer.getData('text/orbit-task') || dragTaskId;
     if (!id) return;
     await updateTask(id, { status: targetStatus });
   };
@@ -364,9 +387,21 @@ export function TasksView() {
   };
 
   const rescheduleOverdueToToday = async () => {
-    const overdue = scheduledGroups.find((g) => g.key === 'overdue')?.items ?? [];
+    const overdue = scheduledRaw.filter((t) => t.due! < today);
     await rescheduleTasks(overdue.map((t) => t.id), today);
   };
+
+  const renderTaskEntry = (entry: TaskListEntry, showSource = true) =>
+    entry.kind === 'bundle' ? (
+      <TaskBundleCard
+        key={entry.key}
+        bundle={entry}
+        showSource={showSource}
+        renderChild={(t) => <TaskRow key={t.id} task={t} showSource={false} />}
+      />
+    ) : (
+      <TaskRow key={entry.task.id} task={entry.task} showSource={showSource} />
+    );
 
   const openNewModalForTab = () => {
     setNewStatus(tab === 'today' ? 'in_progress' : 'open');
@@ -413,17 +448,30 @@ export function TasksView() {
             </div>
 
             <div className="kanban-cards">
-              {col.items.map((t) => (
-                <TaskCard
-                  key={t.id}
-                  task={t}
-                  onDragStart={(id) => setDragTaskId(id)}
-                  onDragEnd={() => {
-                    setDragTaskId(null);
-                    setDragOverCol(null);
-                  }}
-                />
-              ))}
+              {col.items.map((entry) =>
+                entry.kind === 'bundle' ? (
+                  <TaskBundleCard
+                    key={entry.key}
+                    bundle={entry}
+                    compact
+                    showSource
+                    draggable
+                    onDragStart={() => setDragTaskId(null)}
+                    onDragEnd={() => setDragOverCol(null)}
+                    renderChild={(t) => <TaskRow key={t.id} task={t} showSource={false} showStatus={false} />}
+                  />
+                ) : (
+                  <TaskCard
+                    key={entry.task.id}
+                    task={entry.task}
+                    onDragStart={(id) => setDragTaskId(id)}
+                    onDragEnd={() => {
+                      setDragTaskId(null);
+                      setDragOverCol(null);
+                    }}
+                  />
+                ),
+              )}
             </div>
 
             {addingInCol === col.id ? (
@@ -680,9 +728,7 @@ export function TasksView() {
                 <h3>
                   {g.label} <span className="count">{g.items.length}</span>
                 </h3>
-                {g.items.map((t) => (
-                  <TaskRow key={t.id} task={t} />
-                ))}
+                {g.items.map((entry) => renderTaskEntry(entry))}
               </section>
             ))
           )}
@@ -707,9 +753,7 @@ export function TasksView() {
                   <span className={`status-pill tone-${g.tone ?? 'neutral'}`}>{g.label}</span>
                   <span className="count">{g.items.length}</span>
                 </h3>
-                {g.items.map((t) => (
-                  <TaskRow key={t.id} task={t} />
-                ))}
+                {g.items.map((entry) => renderTaskEntry(entry))}
               </section>
             ))
           )}
@@ -738,9 +782,7 @@ export function TasksView() {
                     </button>
                   )}
                 </div>
-                {g.items.map((t) => (
-                  <TaskRow key={t.id} task={t} />
-                ))}
+                {g.items.map((entry) => renderTaskEntry(entry))}
               </section>
             ))
           )}
@@ -816,7 +858,7 @@ export function TasksView() {
                     {g.items.length === 0 ? (
                       <p className="muted small">{tr('All tasks completed.')}</p>
                     ) : (
-                      g.items.map((t) => <TaskRow key={t.id} task={t} showSource={false} />)
+                      g.items.map((entry) => renderTaskEntry(entry, false))
                     )}
                   </div>
                 </section>
@@ -836,9 +878,7 @@ export function TasksView() {
             </div>
           ) : (
             <div className="task-group">
-              {openList.map((t) => (
-                <TaskRow key={t.id} task={t} />
-              ))}
+              {openList.map((entry) => renderTaskEntry(entry))}
             </div>
           )}
         </div>
@@ -858,16 +898,25 @@ export function TasksView() {
                 <h3>
                   {g.label} <span className="count">{g.items.length}</span>
                 </h3>
-                {g.items.map((t) => (
-                  <div key={t.id} className="completed-row-wrap">
-                    <TaskRow task={t} />
-                    {t.completedAt && (
-                      <span className="completed-time muted small">
-                        {tr('Done')} {relativeTime(t.completedAt, tr)}
-                      </span>
-                    )}
-                  </div>
-                ))}
+                {g.items.map((entry) =>
+                  entry.kind === 'bundle' ? (
+                    <TaskBundleCard
+                      key={entry.key}
+                      bundle={entry}
+                      showSource
+                      renderChild={(t) => <TaskRow key={t.id} task={t} showSource={false} />}
+                    />
+                  ) : (
+                    <div key={entry.task.id} className="completed-row-wrap">
+                      <TaskRow task={entry.task} />
+                      {entry.task.completedAt && (
+                        <span className="completed-time muted small">
+                          {tr('Done')} {relativeTime(entry.task.completedAt, tr)}
+                        </span>
+                      )}
+                    </div>
+                  ),
+                )}
               </section>
             ))
           )}
@@ -879,19 +928,17 @@ export function TasksView() {
         allLayout === 'board' ? (
           renderKanban()
         ) : allLayout === 'table' ? (
-          renderTable(filtered.sort(byPrioThenDue))
+          renderTable([...filtered].sort(byPrioThenDue))
         ) : (
           <div className="tasks-section-wrap">
-            {filtered.length === 0 ? (
+            {allEntries.length === 0 ? (
               <div className="empty-inline center">
                 <strong>{tr('No matching open tasks.')}</strong>
                 <span>{tr('Add one above or clear your filters.')}</span>
               </div>
             ) : (
               <div className="task-group">
-                {filtered.sort(byPrioThenDue).map((t) => (
-                  <TaskRow key={t.id} task={t} />
-                ))}
+                {allEntries.map((entry) => renderTaskEntry(entry))}
               </div>
             )}
           </div>
