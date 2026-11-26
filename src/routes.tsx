@@ -3,6 +3,7 @@ import { ObjectPage } from './views/ObjectPage';
 import { CalendarView, type CalMode } from './views/CalendarView';
 import { TasksView } from './views/TasksView';
 import { TodosView } from './views/TodosView';
+import { RoutinesView } from './views/RoutinesView';
 import { TypeView } from './views/TypeView';
 import { TagsView } from './views/TagsView';
 import { TrashView } from './views/TrashView';
@@ -48,6 +49,8 @@ export function renderPath(path: string, tr: Translate) {
       return <TypeView typeId={b} collectionId={q.get('collection')} />;
     case 'todos':
       return <TodosView />;
+    case 'routines':
+      return <RoutinesView />;
     case 'tasks':
       return <TasksView />;
     case 'graph':

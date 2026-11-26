@@ -153,6 +153,7 @@ export function CommandPalette() {
       ['📅', tr(space === 'ai' ? 'Today’s AI log' : 'Today’s note'), 'today'],
       ['🗓️', tr('Calendar'), '/calendar'],
       ['✓', tr('To-do'), '/todos'],
+      ['🔁', tr('Routines'), '/routines'],
       ['☑', tr('Tasks'), '/tasks'],
       ['🕸', tr('Graph'), '/graph'],
       ['#', tr('Tags'), '/tags'],

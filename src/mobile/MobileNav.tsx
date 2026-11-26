@@ -19,7 +19,7 @@ export function MobileNav() {
   const p = new URL(path, 'http://orbit.local').pathname;
   const isHome = p === '/home';
   const isCalendar = p === '/' || p.startsWith('/calendar') || p.startsWith('/daily');
-  const isTodos = p === '/todos' || p === '/tasks';
+  const isTodos = p === '/todos' || p === '/routines' || p === '/tasks';
 
   const item = (active: boolean, label: string, icon: React.ReactNode, onClick: () => void) => (
     <button type="button" className={`m-nav-item${active ? ' is-active' : ''}`} aria-label={label} aria-current={active ? 'page' : undefined} onClick={onClick}>

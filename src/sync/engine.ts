@@ -13,6 +13,7 @@ import { db, type BlobRec, type ObjType } from '../db/schema';
 import { fb, firebaseConfigured } from './firebase';
 import { syncObject } from './objects';
 import { syncCollection } from './collections';
+import { isRoutineMetaKey, type RoutineRec } from '../lib/routines';
 
 type BatchedCollection = 'types' | 'blobs' | 'meta';
 type Coll = 'objects' | 'collections' | BatchedCollection;
@@ -67,7 +68,12 @@ async function readLocal(c: BatchedCollection, id: string, full = true): Promise
     if (!full) return { ts: b.createdAt, payload: { size: data.size } };
     return { ts: b.createdAt, payload: { json: JSON.stringify(meta), data: await blobToBase64(data), size: data.size } };
   }
-  // meta: only the pinned list is synced
+  // meta: pinned list + recurring routines (`routine-*`) are synced
+  if (isRoutineMetaKey(id)) {
+    const row = await db.meta.get(id);
+    const rec = row?.value as RoutineRec | undefined;
+    return rec ? { ts: rec.updatedAt ?? 0, payload: { json: JSON.stringify(rec) } } : null;
+  }
   if (id !== 'pinned') return null;
   const [pinned, ts] = await Promise.all([db.meta.get('pinned'), db.meta.get('pinnedUpdatedAt')]);
   if (!pinned) return null;
@@ -219,6 +225,7 @@ async function applyRemote(c: BatchedCollection, changes: { id: string; data: an
       if (!local || local.ts > ts) continue;
       if (c === 'types') await db.types.delete(id);
       else if (c === 'blobs') await db.blobs.delete(id);
+      else if (c === 'meta' && isRoutineMetaKey(id)) await db.meta.delete(id);
       continue;
     }
     if (local && local.ts >= ts) continue;
@@ -232,6 +239,8 @@ async function applyRemote(c: BatchedCollection, changes: { id: string; data: an
           { key: 'pinned', value: JSON.parse(data.json) },
           { key: 'pinnedUpdatedAt', value: ts },
         ]);
+      } else if (c === 'meta' && isRoutineMetaKey(id)) {
+        await db.meta.put({ key: id, value: JSON.parse(data.json) as RoutineRec });
       }
     } catch (e) {
       console.warn('Orbit sync: could not apply', c, id, e);
@@ -243,10 +252,11 @@ async function reconcileAll() {
   const account = uid;
   const currentSession = session;
   if (!account) return;
-  const [objs, types, collections, blobs, bases] = await Promise.all([
+  const [objs, types, collections, blobs, bases, metaKeys] = await Promise.all([
     db.objects.toCollection().primaryKeys(), db.types.toCollection().primaryKeys(),
     db.collections.toCollection().primaryKeys(), db.blobs.toCollection().primaryKeys(),
     db.objectSyncBases.where('account').equals(account).toArray(),
+    db.meta.toCollection().primaryKeys(),
   ]);
   if (session !== currentSession) return;
   objs.forEach((id) => pending.add(key('objects', String(id))));
@@ -255,6 +265,7 @@ async function reconcileAll() {
   types.forEach((id) => pending.add(key('types', String(id))));
   collections.forEach((id) => pending.add(key('collections', String(id))));
   blobs.forEach((id) => pending.add(key('blobs', String(id))));
+  metaKeys.filter((k) => isRoutineMetaKey(k)).forEach((k) => pending.add(key('meta', String(k))));
   pending.add(key('meta', 'pinned'));
   await flush();
 }
@@ -344,10 +355,11 @@ export function initSync() {
   watch('collections', db.collections);
   watch('blobs', db.blobs);
   const metaHook = (pk: any) => {
-    if (pk === 'pinned' || pk === 'pinnedUpdatedAt') schedule('meta', 'pinned');
+    if (pk === 'pinned' || pk === 'pinnedUpdatedAt' || isRoutineMetaKey(pk)) schedule('meta', String(pk));
   };
   db.meta.hook('creating', metaHook);
   db.meta.hook('updating', (_m: any, pk: any) => metaHook(pk));
+  db.meta.hook('deleting', (pk: any) => metaHook(pk));
 
   window.addEventListener('online', () => {
     if (uid) {
