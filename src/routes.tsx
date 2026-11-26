@@ -9,13 +9,17 @@ import { TrashView } from './views/TrashView';
 import { Settings } from './views/Settings';
 import { HomeView } from './views/HomeView';
 import { MobileHome } from './mobile/MobileHome';
+import { AiHome } from './views/AiHome';
+import { useUI } from './store/uiStore';
 import { useIsMobile } from './mobile/useIsMobile';
 import { todayISO } from './lib/dates';
 import type { Translate } from './lib/i18n';
 
-/** Phones get their own home screen; the desktop keeps Explore. */
+/** The AI workspace has its own home. In my space, phones get their own home screen and the desktop keeps Explore. */
 function HomeRoute() {
-  return useIsMobile() ? <MobileHome /> : <HomeView />;
+  const mobile = useIsMobile();
+  if (useUI((s) => s.space) === 'ai') return <AiHome />;
+  return mobile ? <MobileHome /> : <HomeView />;
 }
 
 const GraphView = lazy(() => import('./views/GraphView').then((m) => ({ default: m.GraphView })));

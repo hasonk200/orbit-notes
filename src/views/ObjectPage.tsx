@@ -6,7 +6,7 @@ import { isComposing } from '../lib/keyboard';
 import { togglePinned, useData, useObject } from '../store/dataStore';
 import { objPath, useOpen, usePane } from '../store/pane';
 import { moveToSpace, restoreObject, saveObject, softDelete } from '../db/indexers';
-import { otherSpace, spaceOf } from '../lib/spaces';
+import { AI_DOC_TYPE, aiDocStatus, otherSpace, spaceOf } from '../lib/spaces';
 import { useUI } from '../store/uiStore';
 import { registerDraft } from '../db/drafts';
 import { saveImage, useBlobUrl } from '../db/blobs';
@@ -182,6 +182,14 @@ export function ObjectPage({ id, isNew }: { id: string; isNew?: boolean }) {
           {tr('This object is in the Trash.')}
           <button type="button" className="btn" onClick={() => restoreObject(obj.id)}>
             <RotateCcw size={14} /> {tr('Restore')}
+          </button>
+        </div>
+      )}
+      {obj.typeId === AI_DOC_TYPE && space === 'ai' && aiDocStatus(obj) === 'Adopted' && !obj.deletedAt && (
+        <div className="banner aiw-adopted-banner">
+          {tr('You adopted this document. Move it to your space to keep it with your own notes.')}
+          <button type="button" className="btn" onClick={move}>
+            <ArrowLeftRight size={14} /> {tr('Move to my space')}
           </button>
         </div>
       )}

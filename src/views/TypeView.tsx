@@ -4,7 +4,7 @@ import { relativeTime } from '../lib/dates';
 import { includesText } from '../lib/search';
 import { propertyLabel, typeLabel } from '../lib/typeLabels';
 import { createCollection, createObject, deleteCollection, getOrCreateDayNote, updateCollection } from '../db/indexers';
-import { AI_LOG_TYPE, spaceOf } from '../lib/spaces';
+import { AI_DOC_TYPE, AI_LOG_TYPE, aiDocStatus, spaceOf } from '../lib/spaces';
 import { displayTitle, useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
@@ -43,6 +43,8 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
   const open = useOpen();
   const setTypeEditor = useUI((s) => s.setTypeEditor);
   const isDayType = typeId === 'daily' || typeId === AI_LOG_TYPE;
+  // Archived AI documents are hidden unless asked for.
+  const [showArchived, setShowArchived] = useState(false);
   const [view, setViewState] = useState<ViewMode>(() => readPref(`orbit-view-${typeId}`, isDayType ? 'list' : 'grid'));
   const [sort, setSort] = useState<string>(() => readPref(`orbit-sort-${typeId}`, 'updated'));
   const [filterKey, setFilterKey] = useState('');
@@ -63,6 +65,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
   const activeCol = collectionId ? typeCollections.find((c) => c.id === collectionId) ?? null : null;
 
   const allOfType = useMemo(() => objects.filter((o) => o.typeId === typeId && !o.deletedAt && spaceOf(o) === space), [objects, typeId, space]);
+  const archivedCount = typeId === AI_DOC_TYPE ? allOfType.filter((o) => aiDocStatus(o) === 'Archived').length : 0;
 
   const colCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -76,6 +79,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
   const items = useMemo(() => {
     if (!type) return [];
     let list = activeCol ? allOfType.filter((o) => o.collectionIds?.includes(activeCol.id)) : allOfType;
+    if (typeId === AI_DOC_TYPE && !showArchived) list = list.filter((o) => aiDocStatus(o) !== 'Archived');
     if (filterKey && filterVal.trim()) {
       const q = filterVal.trim();
       if (filterKey === '__title') list = list.filter((o) => includesText(displayTitle(o, tr), q));
@@ -100,7 +104,7 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
       if (key === 'daily') return (b.dailyDate ?? '').localeCompare(a.dailyDate ?? '');
       return cmp(a.props[key], b.props[key]);
     });
-  }, [allOfType, objectMap, type, activeCol, sort, filterKey, filterVal, tr]);
+  }, [allOfType, objectMap, type, activeCol, sort, filterKey, filterVal, tr, showArchived, typeId]);
 
   if (!type) return <div className="empty-state"><h2>{tr('Unknown type')}</h2></div>;
 
@@ -295,6 +299,11 @@ export function TypeView({ typeId, collectionId }: { typeId: string; collectionI
           </select>
           {filterKey && <input placeholder="contains…" value={filterVal} onChange={(e) => setFilterVal(e.target.value)} autoFocus />}
         </label>
+        {archivedCount > 0 && (
+          <button type="button" className={`chip${showArchived ? ' active' : ''}`} aria-pressed={showArchived} onClick={() => setShowArchived((v) => !v)}>
+            {tr(showArchived ? 'Hide archived' : 'Show {count} archived', { count: archivedCount })}
+          </button>
+        )}
       </div>
 
       {items.length === 0 && (

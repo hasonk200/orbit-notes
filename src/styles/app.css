@@ -6514,3 +6514,290 @@ img.connect-logo {
   :root:not([data-theme='light']) .ai-todo-chip.is-confirm { background: #3a2f17; color: #f3c46b; }
   :root:not([data-theme='light']) .ai-todo-chip.is-next { background: #13332f; color: #6fdccd; }
 }
+
+/* ---------- the AI workspace home ---------- */
+.page.aiw-home {
+  max-width: 1120px;
+}
+.aiw-head h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.aiw-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.aiw-home:not(.is-mobile) .aiw-today {
+  width: auto;
+  min-width: 320px;
+  flex: 0 1 auto;
+}
+.aiw-today-icon .mh-today-month {
+  background: var(--accent);
+}
+.aiw-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.aiw-quick .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.aiw-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.aiw-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.aiw-block {
+  padding: 14px 14px 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.aiw-block.is-attention {
+  border-color: color-mix(in srgb, #e39a1d 45%, var(--line));
+  background: color-mix(in srgb, #fff4e0 55%, var(--surface));
+}
+:root[data-theme='dark'] .aiw-block.is-attention {
+  background: color-mix(in srgb, #3a2f17 60%, var(--surface));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .aiw-block.is-attention {
+    background: color-mix(in srgb, #3a2f17 60%, var(--surface));
+  }
+}
+.aiw-block-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.aiw-block-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+.aiw-block-action {
+  margin-left: auto;
+}
+.aiw-count {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+}
+.aiw-count.is-attention {
+  background: #e39a1d;
+  color: #fff;
+}
+.aiw-empty {
+  margin: 4px 0 6px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.aiw-sub {
+  margin: 10px 0 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.aiw-stale {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.aiw-entries {
+  display: flex;
+  flex-direction: column;
+}
+.aiw-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 6px;
+  border-radius: 8px;
+  text-align: left;
+  color: var(--text);
+}
+.aiw-entry:hover {
+  background: var(--surface-2);
+}
+.aiw-entry-time {
+  flex: none;
+  color: var(--accent-text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.aiw-entry-title {
+  flex: 1;
+  min-width: 0;
+}
+.aiw-entry-by {
+  color: var(--muted);
+  font-size: 12px;
+}
+.aiw-doc-meta {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.aiw-adopted {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.aiw-adopted .obj-row {
+  flex: 1;
+  min-width: 0;
+}
+.aiw-adopted .btn {
+  flex: none;
+  white-space: nowrap;
+}
+.aiw-more {
+  margin: 6px 0 2px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--accent-text);
+  font-size: 13px;
+}
+.aiw-more:hover {
+  background: var(--surface-2);
+}
+.aiw-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  height: 120px;
+  padding-top: 4px;
+}
+.aiw-week-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 0;
+  border-radius: 8px;
+  color: var(--muted);
+}
+.aiw-week-day:not(:disabled):hover {
+  background: var(--surface-2);
+}
+.aiw-week-day:disabled {
+  cursor: default;
+}
+.aiw-week-count {
+  height: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.aiw-week-track {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  width: 60%;
+  max-width: 28px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.aiw-week-bar {
+  width: 100%;
+  border-radius: 6px;
+  background: var(--accent);
+}
+.aiw-week-label {
+  font-size: 12px;
+}
+.aiw-week-day.is-today .aiw-week-label {
+  color: var(--accent-text);
+  font-weight: 700;
+}
+.aiw-month {
+  border-top: 1px solid var(--line);
+}
+.aiw-month:first-of-type {
+  border-top: 0;
+}
+.aiw-month summary {
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 4px;
+  cursor: pointer;
+  list-style-position: inside;
+}
+.aiw-archive-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px 7px 20px;
+  border-radius: 8px;
+  color: var(--text);
+  text-align: left;
+}
+.aiw-archive-row:hover {
+  background: var(--surface-2);
+}
+.aiw-adopted-banner {
+  background: var(--accent-soft);
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+@media (max-width: 900px) {
+  .aiw-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.aiw-home.is-mobile .aiw-top {
+  margin-top: 2px;
+}
+.aiw-home.is-mobile .aiw-grid,
+.aiw-home.is-mobile .aiw-col {
+  gap: 14px;
+}
+.aiw-home.is-mobile {
+  padding-bottom: 120px;
+}
+/* Every row in the documents block is an AI document, so the type label is left out there. */
+.aiw-block .obj-row-type {
+  display: none;
+}
+.aiw-home.is-mobile .aiw-adopted {
+  flex-wrap: wrap;
+}
+.aiw-home.is-mobile .aiw-adopted .obj-row {
+  flex-basis: 100%;
+}
+.aiw-home.is-mobile .aiw-adopted .btn {
+  margin: -2px 0 4px auto;
+}
