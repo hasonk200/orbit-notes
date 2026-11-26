@@ -2960,7 +2960,7 @@ span.olink-card {
 }
 .prio-medium {
   background: var(--warn-soft);
-  color: #b87800;
+  color: var(--warn);
   border-color: color-mix(in srgb, #e5a01a 35%, transparent);
 }
 :root[data-theme='dark'] .prio-medium {
@@ -3666,7 +3666,7 @@ span.olink-card {
 }
 .tcard-meta-btn.prio-medium {
   background: var(--warn-soft);
-  color: #b87800;
+  color: var(--warn);
 }
 :root[data-theme='dark'] .tcard-meta-btn.prio-medium {
   color: #f3bd4d;
