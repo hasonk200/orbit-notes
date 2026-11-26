@@ -5,6 +5,7 @@ import { mergeAttributes, Node, type Editor } from '@tiptap/core';
 import { Fragment, type Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { ChevronRight, Layers, ListChecks, Ungroup } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -17,6 +18,205 @@ export interface BlockGroupAttrs {
   title?: string;
   collapsed?: boolean;
   groupTasks?: boolean;
+}
+
+export interface SelectableTarget {
+  from: number;
+  to: number;
+  isListItem: boolean;
+  listPos?: number;
+  itemIndex?: number;
+}
+
+export interface MarqueeState {
+  targets: SelectableTarget[];
+}
+
+export const marqueeKey = new PluginKey<MarqueeState>('orbitMarqueeBlockSelect');
+
+/** Collect top-level selectable blocks in document order, splitting lists into individual item targets. */
+export function collectSelectableTargets(doc: PMNode): SelectableTarget[] {
+  const targets: SelectableTarget[] = [];
+  doc.forEach((child, offset) => {
+    if (LIST_TYPES.has(child.type.name)) {
+      child.forEach((item, itemOffset, itemIndex) => {
+        const from = offset + 1 + itemOffset;
+        targets.push({
+          from,
+          to: from + item.nodeSize,
+          isListItem: true,
+          listPos: offset,
+          itemIndex,
+        });
+      });
+    } else {
+      targets.push({ from: offset, to: offset + child.nodeSize, isListItem: false });
+    }
+  });
+  return targets;
+}
+
+export function getMarqueeTargets(state: EditorState): SelectableTarget[] {
+  return marqueeKey.getState(state)?.targets ?? [];
+}
+
+export function setMarqueeTargets(editor: Editor, targets: SelectableTarget[]) {
+  const tr = editor.state.tr.setMeta(marqueeKey, { targets });
+  editor.view.dispatch(tr);
+}
+
+export function clearMarqueeTargets(editor: Editor) {
+  if (!getMarqueeTargets(editor.state).length) return;
+  const tr = editor.state.tr.setMeta(marqueeKey, { targets: [] });
+  editor.view.dispatch(tr);
+}
+
+function partitionTargets(doc: PMNode, targets: SelectableTarget[]) {
+  const first = targets[0];
+  const last = targets[targets.length - 1];
+  const topStart = first.isListItem ? first.listPos! : first.from;
+  const lastList = last.isListItem ? doc.nodeAt(last.listPos!)! : null;
+  const topEnd = last.isListItem ? last.listPos! + lastList!.nodeSize : last.to;
+
+  const outerBefore: PMNode[] = [];
+  const innerNodes: PMNode[] = [];
+  const outerAfter: PMNode[] = [];
+
+  if (first.isListItem && last.isListItem && first.listPos === last.listPos) {
+    const listNode = doc.nodeAt(first.listPos!)!;
+    const sIdx = first.itemIndex!;
+    const eIdx = last.itemIndex!;
+    const beforeItems: PMNode[] = [];
+    const midItems: PMNode[] = [];
+    const afterItems: PMNode[] = [];
+    for (let i = 0; i < listNode.childCount; i++) {
+      const c = listNode.child(i);
+      if (i < sIdx) beforeItems.push(c);
+      else if (i <= eIdx) midItems.push(c);
+      else afterItems.push(c);
+    }
+    if (beforeItems.length) outerBefore.push(listNode.copy(Fragment.from(beforeItems)));
+    if (midItems.length) innerNodes.push(listNode.copy(Fragment.from(midItems)));
+    if (afterItems.length) outerAfter.push(listNode.copy(Fragment.from(afterItems)));
+    return { topStart, topEnd, outerBefore, innerNodes, outerAfter };
+  }
+
+  let curPos = 0;
+  for (let i = 0; i < doc.childCount; i++) {
+    const child = doc.child(i);
+    const childEnd = curPos + child.nodeSize;
+    if (curPos >= topStart && childEnd <= topEnd) {
+      if (first.isListItem && curPos === first.listPos) {
+        const beforeItems: PMNode[] = [];
+        const midItems: PMNode[] = [];
+        for (let k = 0; k < child.childCount; k++) {
+          if (k < first.itemIndex!) beforeItems.push(child.child(k));
+          else midItems.push(child.child(k));
+        }
+        if (beforeItems.length) outerBefore.push(child.copy(Fragment.from(beforeItems)));
+        if (midItems.length) innerNodes.push(child.copy(Fragment.from(midItems)));
+      } else if (last.isListItem && curPos === last.listPos) {
+        const midItems: PMNode[] = [];
+        const afterItems: PMNode[] = [];
+        for (let k = 0; k < child.childCount; k++) {
+          if (k <= last.itemIndex!) midItems.push(child.child(k));
+          else afterItems.push(child.child(k));
+        }
+        if (midItems.length) innerNodes.push(child.copy(Fragment.from(midItems)));
+        if (afterItems.length) outerAfter.push(child.copy(Fragment.from(afterItems)));
+      } else {
+        innerNodes.push(child);
+      }
+    }
+    curPos = childEnd;
+  }
+
+  return { topStart, topEnd, outerBefore, innerNodes, outerAfter };
+}
+
+/** Wrap marquee-selected targets into a single `blockGroup`, cleanly splitting partial lists. */
+export function wrapMarqueeTargets(editor: Editor, targets: SelectableTarget[], attrs?: BlockGroupAttrs): boolean {
+  if (!targets.length) return false;
+  return editor
+    .chain()
+    .focus()
+    .command(({ tr, dispatch }) => {
+      const blockGroupType = tr.doc.type.schema.nodes.blockGroup;
+      if (!blockGroupType) return false;
+      const { topStart, topEnd, outerBefore, innerNodes, outerAfter } = partitionTargets(tr.doc, targets);
+      if (!innerNodes.length) return false;
+      if (innerNodes.length === 1 && innerNodes[0].type.name === 'blockGroup') return false;
+      const groupNode = blockGroupType.create(
+        {
+          groupId: attrs?.groupId || uid(),
+          title: attrs?.title ?? '',
+          collapsed: !!attrs?.collapsed,
+          groupTasks: attrs?.groupTasks !== false,
+        },
+        Fragment.from(innerNodes),
+      );
+      const parts = [...outerBefore, groupNode, ...outerAfter];
+      const beforeSize = outerBefore.reduce((n, p) => n + p.nodeSize, 0);
+      tr.replaceWith(topStart, topEnd, Fragment.from(parts));
+      tr.setMeta(marqueeKey, { targets: [] });
+      tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(topStart + beforeSize + 1, tr.doc.content.size))));
+      tr.scrollIntoView();
+      if (dispatch) dispatch(tr);
+      return true;
+    })
+    .run();
+}
+
+/** Duplicate marquee-selected targets right after the selection. */
+export function duplicateMarqueeTargets(editor: Editor, targets: SelectableTarget[]): boolean {
+  if (!targets.length) return false;
+  return editor
+    .chain()
+    .focus()
+    .command(({ tr, dispatch }) => {
+      const { topStart, topEnd, outerBefore, innerNodes, outerAfter } = partitionTargets(tr.doc, targets);
+      if (!innerNodes.length) return false;
+      const cloned = innerNodes.map((n) => n.copy(n.content));
+      const parts = [...outerBefore, ...innerNodes, ...cloned, ...outerAfter];
+      const beforeSize = outerBefore.reduce((n, p) => n + p.nodeSize, 0);
+      const innerSize = innerNodes.reduce((n, p) => n + p.nodeSize, 0);
+      tr.replaceWith(topStart, topEnd, Fragment.from(parts));
+      const joinMid = topStart + beforeSize + innerSize;
+      if (joinMid > 0 && joinMid < tr.doc.content.size && canJoin(tr.doc, joinMid)) tr.join(joinMid);
+      tr.setMeta(marqueeKey, { targets: [] });
+      tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(joinMid + 1, tr.doc.content.size))));
+      tr.scrollIntoView();
+      if (dispatch) dispatch(tr);
+      return true;
+    })
+    .run();
+}
+
+/** Delete marquee-selected targets cleanly, keeping document non-empty. */
+export function deleteMarqueeTargets(editor: Editor, targets: SelectableTarget[]): boolean {
+  if (!targets.length) return false;
+  return editor
+    .chain()
+    .focus()
+    .command(({ tr, dispatch }) => {
+      const { topStart, topEnd, outerBefore, outerAfter } = partitionTargets(tr.doc, targets);
+      const parts = [...outerBefore, ...outerAfter];
+      if (!parts.length && topStart === 0 && topEnd === tr.doc.content.size) {
+        const para = tr.doc.type.schema.nodes.paragraph?.create();
+        if (para) parts.push(para);
+      }
+      tr.replaceWith(topStart, topEnd, Fragment.from(parts));
+      if (outerBefore.length && outerAfter.length) {
+        const joinAt = topStart + outerBefore.reduce((n, p) => n + p.nodeSize, 0);
+        if (joinAt > 0 && joinAt < tr.doc.content.size && canJoin(tr.doc, joinAt)) tr.join(joinAt);
+      }
+      tr.setMeta(marqueeKey, { targets: [] });
+      tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(topStart, tr.doc.content.size))));
+      tr.scrollIntoView();
+      if (dispatch) dispatch(tr);
+      return true;
+    })
+    .run();
 }
 
 /** Find the innermost `blockGroup` enclosing a selection's head, if any. */
@@ -427,6 +627,31 @@ export const BlockGroup = Node.create({
             return true;
           });
           return changed ? tr : null;
+        },
+      }),
+      new Plugin<MarqueeState>({
+        key: marqueeKey,
+        state: {
+          init: () => ({ targets: [] }),
+          apply(tr, prev) {
+            const meta = tr.getMeta(marqueeKey) as MarqueeState | undefined;
+            if (meta) return { targets: meta.targets };
+            if (tr.docChanged || tr.selectionSet) return prev.targets.length ? { targets: [] } : prev;
+            return prev;
+          },
+        },
+        props: {
+          decorations(state) {
+            const targets = marqueeKey.getState(state)?.targets;
+            if (!targets?.length) return DecorationSet.empty;
+            const decos: Decoration[] = [];
+            for (const t of targets) {
+              if (t.from >= 0 && t.to <= state.doc.content.size && t.from < t.to) {
+                decos.push(Decoration.node(t.from, t.to, { class: 'pm-block-selected' }));
+              }
+            }
+            return DecorationSet.create(state.doc, decos);
+          },
         },
       }),
     ];

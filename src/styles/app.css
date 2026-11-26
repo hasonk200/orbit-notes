@@ -7319,6 +7319,33 @@ img.connect-logo {
 .sel-bar-btn.primary:hover {
   background: color-mix(in srgb, var(--accent) 20%, var(--surface));
 }
+.sel-bar-btn.danger {
+  color: var(--danger);
+}
+.sel-bar-btn.danger:hover {
+  background: var(--danger-soft);
+}
+.sel-bar-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0 6px;
+  white-space: nowrap;
+}
+.marquee-box {
+  position: fixed;
+  z-index: 30;
+  pointer-events: none;
+  border-radius: 6px;
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.prose .pm-block-selected {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: 1.5px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+  border-radius: 8px;
+}
 
 /* ---------- Option B: Task Bundle Card in /todos & /tasks ---------- */
 .task-bundle {

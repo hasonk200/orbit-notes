@@ -9,7 +9,20 @@ import { OrbitTaskItem } from './extensions/TaskItem';
 import { OutlinerListItem } from './extensions/OutlinerListItem';
 import { Callout } from './extensions/Callout';
 import { Toggle } from './extensions/Toggle';
-import { BlockGroup, findEnclosingBlockGroup, spansMultipleBlocks } from './extensions/BlockGroup';
+import {
+  BlockGroup,
+  clearMarqueeTargets,
+  collectSelectableTargets,
+  deleteMarqueeTargets,
+  duplicateMarqueeTargets,
+  findEnclosingBlockGroup,
+  getMarqueeTargets,
+  setMarqueeTargets,
+  spansMultipleBlocks,
+  unwrapBlockGroupAt,
+  wrapMarqueeTargets,
+  type SelectableTarget,
+} from './extensions/BlockGroup';
 import { ObjectLink } from './extensions/ObjectLink';
 import { Tag } from './extensions/TagSuggest';
 import { DateRef } from './extensions/DateRef';
@@ -28,7 +41,7 @@ import { registerDraft } from '../db/drafts';
 import { isAllowedLinkUrl, looksLikeMarkdown, MARKDOWN_LINK_INPUT_RE, markdownToBlocks, repairLooseBoldInDoc } from '../lib/markdown';
 import { openLocalFile } from '../lib/native';
 import { Plugin } from '@tiptap/pm/state';
-import { Layers, Ungroup } from 'lucide-react';
+import { Copy, Layers, Trash, Ungroup, X } from 'lucide-react';
 
 /** Ctrl/Cmd+K on selected text (or inside a link) opens the link box; otherwise the key falls through to search. */
 const LinkShortcut = Extension.create<{ open: () => boolean }>({
@@ -57,9 +70,9 @@ const MarkdownPaste = Extension.create({
             const data = event.clipboardData;
             const text = data?.getData('text/plain') ?? '';
             if (!text || view.state.selection.$from.parent.type.spec.code) return false;
-            // Rich text copied from a web page or document already has its structure.
+            // Rich text copied from Orbit (data-pm-slice) or structured HTML already has its structure.
             const html = data?.getData('text/html') ?? '';
-            if (html && /<(h[1-6]|ul|ol|li|table|blockquote|pre)\b/i.test(html)) return false;
+            if (html && (/data-pm-slice=/i.test(html) || /<(h[1-6]|ul|ol|li|table|blockquote|pre)\b/i.test(html))) return false;
             if (!looksLikeMarkdown(text)) return false;
             const blocks = markdownToBlocks(text);
             if (!blocks.length) return false;
@@ -393,6 +406,8 @@ export function RichEditor({
   const [inTable, setInTable] = useState(false);
   const [linkBoxOpen, setLinkBoxOpen] = useState(false);
   const [selBar, setSelBar] = useState<{ top: number; left: number; inGroup: boolean } | null>(null);
+  const [marqueeBox, setMarqueeBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [marqueeBar, setMarqueeBar] = useState<{ top: number; left: number; targets: SelectableTarget[]; singleGroupPos: number | null } | null>(null);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [trail, setTrail] = useState<ZoomCrumb[]>([]);
   const trailKey = useRef('[]');
@@ -403,8 +418,31 @@ export function RichEditor({
     trailKey.current = key;
     setTrail(next);
   };
+  const syncMarqueeBar = useCallback((ed: Editor, draggingNow = false) => {
+    const targets = getMarqueeTargets(ed.state);
+    if (!editable || draggingNow || !targets.length || ed.isDestroyed) {
+      setMarqueeBar(null);
+      return;
+    }
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    try {
+      const firstDom = ed.view.nodeDOM(targets[0].from);
+      const el = firstDom instanceof HTMLElement ? firstDom : firstDom?.parentElement;
+      if (!el) return setMarqueeBar(null);
+      const rect = el.getBoundingClientRect();
+      const wrapRect = wrap.getBoundingClientRect();
+      const top = Math.max(4, rect.top - wrapRect.top - 42);
+      const left = Math.max(8, Math.min(rect.left - wrapRect.left, Math.max(8, wrapRect.width - 300)));
+      const singleNode = targets.length === 1 ? ed.state.doc.nodeAt(targets[0].from) : null;
+      const singleGroupPos = singleNode?.type.name === 'blockGroup' ? targets[0].from : null;
+      setMarqueeBar({ top, left, targets, singleGroupPos });
+    } catch {
+      setMarqueeBar(null);
+    }
+  }, [editable]);
   const syncSelBar = (ed: Editor) => {
-    if (!editable || linkBoxOpen || ed.isDestroyed || !spansMultipleBlocks(ed.state)) {
+    if (!editable || linkBoxOpen || ed.isDestroyed || !spansMultipleBlocks(ed.state) || getMarqueeTargets(ed.state).length > 0) {
       setSelBar(null);
       return;
     }
@@ -488,6 +526,7 @@ export function RichEditor({
         if (transaction.docChanged) syncOutline(editor);
         syncTrail(editor);
         syncSelBar(editor);
+        if (!marqueeDraggingRef.current) syncMarqueeBar(editor, false);
       },
     },
     [docKey],
@@ -511,6 +550,133 @@ export function RichEditor({
     jump();
     return onJump((id) => id === docKey && jump());
   }, [editor, docKey]);
+  const marqueeDraggingRef = useRef(false);
+
+  // Notion / SiYuan-style rubber-band marquee block selection from page/gutter margins
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap || !editor || !editable || editor.isDestroyed) return;
+    const host = (wrap.closest('.obj-page') as HTMLElement | null) ?? wrap;
+
+    const IGNORE_SEL =
+      'button, a, input, textarea, select, label, .block-gutter, .selection-block-bar, .link-box, .table-bar, .note-outline, .zoom-bar, .callout-icon, .callout-tones, .task-check, .bg-head, .toggle-head, .obj-head, .obj-toolbar, .obj-props, .ai-notes-panel, .ctx-tasks-section, .backlinks';
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0 || window.innerWidth <= 820) return;
+      const target = e.target as HTMLElement | null;
+      if (!target || target.closest(IGNORE_SEL)) return;
+      const pm = wrap.querySelector('.ProseMirror') as HTMLElement | null;
+      if (!pm) return;
+      const pmRect = pm.getBoundingClientRect();
+      const inMargin =
+        e.clientX <= pmRect.left + 8 ||
+        e.clientX >= pmRect.right - 8 ||
+        e.clientY >= pmRect.bottom - 4 ||
+        target === pm ||
+        target === wrap ||
+        target === host ||
+        target.classList.contains('obj-inner') ||
+        target.classList.contains('obj-editor');
+      if (!inMargin) return;
+      if (e.clientY < pmRect.top - 16 && target.closest('.obj-inner') && target !== host) return;
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let didDrag = false;
+      let raf = 0;
+
+      const updateHit = (curX: number, curY: number) => {
+        const left = Math.min(startX, curX);
+        const top = Math.min(startY, curY);
+        const width = Math.abs(curX - startX);
+        const height = Math.abs(curY - startY);
+        setMarqueeBox({ left, top, width, height });
+
+        const boxRight = left + width;
+        const boxBottom = top + height;
+        const curPmRect = pm.getBoundingClientRect();
+        if (boxRight < curPmRect.left - 240 || left > curPmRect.right + 240) {
+          setMarqueeTargets(editor, []);
+          return;
+        }
+        const all = collectSelectableTargets(editor.state.doc);
+        const hits: SelectableTarget[] = [];
+        for (const t of all) {
+          const dom = editor.view.nodeDOM(t.from);
+          const el = dom instanceof HTMLElement ? dom : dom?.parentElement;
+          if (!el) continue;
+          const r = el.getBoundingClientRect();
+          if (r.height <= 0 && r.width <= 0) continue;
+          if (r.bottom >= top && r.top <= boxBottom) {
+            hits.push(t);
+          }
+        }
+        setMarqueeTargets(editor, hits);
+      };
+
+      const onMove = (me: MouseEvent) => {
+        if (!didDrag) {
+          if (Math.hypot(me.clientX - startX, me.clientY - startY) < 5) return;
+          didDrag = true;
+          marqueeDraggingRef.current = true;
+          setMarqueeBar(null);
+          setSelBar(null);
+        }
+        me.preventDefault();
+        window.getSelection()?.removeAllRanges();
+        window.cancelAnimationFrame(raf);
+        const cx = me.clientX;
+        const cy = me.clientY;
+        raf = window.requestAnimationFrame(() => updateHit(cx, cy));
+      };
+
+      const onUp = (ue: MouseEvent) => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        window.cancelAnimationFrame(raf);
+        if (didDrag) {
+          updateHit(ue.clientX, ue.clientY);
+          marqueeDraggingRef.current = false;
+          setMarqueeBox(null);
+          syncMarqueeBar(editor, false);
+          // Prevent mouseup from triggering a stray click that clears selection or clicks a link
+          const eatClick = (ce: MouseEvent) => {
+            ce.preventDefault();
+            ce.stopPropagation();
+          };
+          window.addEventListener('click', eatClick, { capture: true, once: true });
+          window.setTimeout(() => window.removeEventListener('click', eatClick, true), 80);
+        } else if (getMarqueeTargets(editor.state).length > 0) {
+          clearMarqueeTargets(editor);
+        }
+      };
+
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const targets = getMarqueeTargets(editor.state);
+      if (!targets.length) return;
+      const activeTag = (document.activeElement as HTMLElement | null)?.tagName;
+      if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        clearMarqueeTargets(editor);
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        deleteMarqueeTargets(editor, targets);
+      }
+    };
+
+    host.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      host.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [editor, editable, syncMarqueeBar]);
+
   useEffect(() => {
     editor?.setEditable(editable, false);
   }, [editor, editable]);
@@ -525,7 +691,81 @@ export function RichEditor({
       {editor && trail.length > 0 && <ZoomBar editor={editor} trail={trail} />}
       {showOutline && editor && !trail.length && outline.length >= 2 && <Outline editor={editor} items={outline} />}
       {editable && editor && inTable && <TableToolbar editor={editor} />}
-      {editable && editor && selBar && !linkBoxOpen && (
+      {marqueeBox && (
+        <div
+          className="marquee-box"
+          style={{
+            left: marqueeBox.left,
+            top: marqueeBox.top,
+            width: marqueeBox.width,
+            height: marqueeBox.height,
+          }}
+        />
+      )}
+      {editable && editor && marqueeBar && marqueeBar.targets.length > 0 && !linkBoxOpen && (
+        <div
+          className="selection-block-bar"
+          style={{ top: marqueeBar.top, left: marqueeBar.left }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <span className="sel-bar-count">{tr('{count} selected', { count: marqueeBar.targets.length })}</span>
+          {marqueeBar.singleGroupPos !== null ? (
+            <button
+              type="button"
+              className="sel-bar-btn primary"
+              onClick={() => {
+                unwrapBlockGroupAt(editor, marqueeBar.singleGroupPos!);
+                setMarqueeBar(null);
+              }}
+            >
+              <Ungroup size={14} /> {tr('Ungroup block')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="sel-bar-btn primary"
+              onClick={() => {
+                wrapMarqueeTargets(editor, marqueeBar.targets);
+                setMarqueeBar(null);
+              }}
+            >
+              <Layers size={14} /> {tr('Group into block')}
+            </button>
+          )}
+          <button
+            type="button"
+            className="sel-bar-btn"
+            onClick={() => {
+              duplicateMarqueeTargets(editor, marqueeBar.targets);
+              setMarqueeBar(null);
+            }}
+          >
+            <Copy size={14} /> {tr('Duplicate')}
+          </button>
+          <button
+            type="button"
+            className="sel-bar-btn danger"
+            onClick={() => {
+              deleteMarqueeTargets(editor, marqueeBar.targets);
+              setMarqueeBar(null);
+            }}
+          >
+            <Trash size={14} /> {tr('Delete')}
+          </button>
+          <button
+            type="button"
+            className="icon-btn tiny"
+            title={tr('Clear')}
+            onClick={() => {
+              clearMarqueeTargets(editor);
+              setMarqueeBar(null);
+            }}
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+      {editable && editor && !marqueeBar && selBar && !linkBoxOpen && (
         <div
           className="selection-block-bar"
           style={{ top: selBar.top, left: selBar.left }}

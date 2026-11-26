@@ -812,6 +812,8 @@ const zhHant: Record<string, string> = {
   "{count} blocks": "{count} 個區塊",
   "Grouped as 1 card in To-do & Tasks (click to split)": "在待辦／任務頁合埋成 1 張卡（點擊拆開顯示）",
   "Shown individually in To-do & Tasks (click to group)": "在待辦／任務頁逐條顯示（點擊合埋成 1 張卡）",
+  "{count} selected": "已選 {count} 項",
+  "Clear": "清除選擇",
 };
 
 export function resolveLanguage(saved: string | null, preferred: readonly string[]): Language {
