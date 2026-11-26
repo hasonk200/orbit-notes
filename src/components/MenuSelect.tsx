@@ -13,9 +13,20 @@ export interface MenuOption<T extends string> {
  */
 export function MenuSelect<T extends string>({ value, options, onChange, icon, label, className }: { value: T; options: MenuOption<T>[]; onChange: (v: T) => void; icon?: ReactNode; label: string; className?: string }) {
   const [open, setOpen] = useState(false);
+  // The list's height: it fits below the box (scrolling if needed), and opens above only when there is no room below.
+  const [maxHeight, setMaxHeight] = useState(360);
   const btn = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const current = options.find((o) => o.value === value) ?? options[0];
+  const toggle = () => {
+    if (!open && btn.current) {
+      const r = btn.current.getBoundingClientRect();
+      // Room left after the 6px gap, the 8px edge margin and the menu's own padding and border.
+      const below = window.innerHeight - r.bottom - 30;
+      setMaxHeight(Math.min(360, below >= 160 ? below : Math.max(below, r.top - 30)));
+    }
+    setOpen((v) => !v);
+  };
   const pick = (v: T) => {
     setOpen(false);
     onChange(v);
@@ -40,11 +51,11 @@ export function MenuSelect<T extends string>({ value, options, onChange, icon, l
         aria-expanded={open}
         aria-label={`${label}: ${current?.label ?? ''}`}
         title={label}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown' && !open) {
             e.preventDefault();
-            setOpen(true);
+            toggle();
           }
         }}
       >
@@ -54,7 +65,7 @@ export function MenuSelect<T extends string>({ value, options, onChange, icon, l
       </button>
       {open && (
         <Popover anchor={btn.current} onClose={() => setOpen(false)} className="menu menu-select-pop">
-          <div ref={list} role="listbox" aria-label={label} onKeyDown={move}>
+          <div ref={list} role="listbox" aria-label={label} onKeyDown={move} className="menu-select-list" style={{ maxHeight }}>
             {options.map((o) => (
               <button
                 key={o.value}

@@ -4,6 +4,9 @@ type Values = Record<string, string | number>;
 export type Translate = ((message: string, values?: Values) => string) & { language: Language };
 
 const zhHant: Record<string, string> = {
+  "Sort": "排序",
+  "Filter": "篩選",
+  "Contains…": "包含…",
   "What AI apps did for you, what waits for your OK, and what they will do next.": "AI 幫你做了什麼、哪些事等你點頭、下次要接著做什麼，都在這裡。",
   "{count} piece(s) of work today": "今天做了 {count} 段工作",
   "No work recorded yet today": "今天還沒有工作紀錄",

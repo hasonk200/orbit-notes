@@ -6683,3 +6683,68 @@ img.connect-logo {
   justify-content: space-between;
   flex-wrap: wrap;
 }
+
+/* ---------- MenuSelect: drop-downs in Orbit's own menu style ---------- */
+.control.menu-select {
+  position: relative;
+  padding: 0 8px 0 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.control.menu-select > svg:first-child {
+  position: static;
+  color: var(--muted);
+}
+.control.menu-select:hover,
+.control.menu-select.is-open {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+.menu-select-value {
+  white-space: nowrap;
+}
+.menu-select-chevron {
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.menu-select.is-open .menu-select-chevron {
+  transform: rotate(180deg);
+}
+.menu-select-pop {
+  min-width: 180px;
+  padding: 5px;
+}
+.menu-select-list {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.menu-select-pop .menu-item:focus-visible {
+  outline: none;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.menu-select-pop .menu-item {
+  justify-content: space-between;
+  text-align: left;
+}
+.menu-select-pop .menu-item.is-current {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.menu-select-check {
+  flex: none;
+  color: var(--accent-text);
+}
+.control-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.control.filter-text input {
+  width: 150px;
+  border-left: 0;
+  padding-left: 0;
+}
