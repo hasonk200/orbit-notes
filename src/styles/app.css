@@ -1993,6 +1993,25 @@ span.olink-card {
   border-left: 1px solid var(--line);
   padding-left: 8px;
 }
+/* The sort and filter menus: the whole box opens the menu, not only the text beside the icon. */
+.control:has(> select) {
+  position: relative;
+  padding: 0;
+}
+.control:has(> select) > svg {
+  position: absolute;
+  left: 10px;
+  pointer-events: none;
+}
+.control > select {
+  height: 32px;
+  padding: 0 10px 0 30px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.control > select + input {
+  margin-right: 10px;
+}
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
