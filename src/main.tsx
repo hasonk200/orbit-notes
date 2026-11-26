@@ -9,7 +9,7 @@ import { autoBackupIfDue } from './db/fsSync';
 import { upgradeTaskIndex } from './db/indexers';
 import { initSync } from './sync/engine';
 import { initPwa } from './lib/pwa';
-import { initNative } from './lib/native';
+import { initNative, showDesktopWindow } from './lib/native';
 import './styles/tokens.css';
 import './styles/app.css';
 import './styles/motion.css';
@@ -25,6 +25,53 @@ if ([basePath, basePath + 'settings'].includes(window.location.pathname) && new 
   window.history.replaceState(window.history.state, '', basePath + 'connect' + window.location.hash);
 }
 
+let splashPlayStartedAt: number | null = null;
+let splashDismissRequested = false;
+let splashDismissed = false;
+
+function runExit() {
+  if (splashDismissed || typeof document === 'undefined') return;
+  splashDismissed = true;
+  const splash = document.getElementById('orbit-splash');
+  if (!splash) return;
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const playedFor = splashPlayStartedAt == null ? 0 : performance.now() - splashPlayStartedAt;
+  const wait = reduced ? 0 : Math.max(0, 1200 - playedFor);
+  window.setTimeout(() => {
+    const rootEl = document.getElementById('root');
+    if (rootEl && !reduced) {
+      rootEl.classList.add('orbit-app-reveal');
+      window.setTimeout(() => rootEl.classList.remove('orbit-app-reveal'), 500);
+    }
+    splash.classList.add('is-leaving');
+    window.setTimeout(() => {
+      splash.remove();
+      document.getElementById('orbit-splash-style')?.remove();
+    }, reduced ? 20 : 440);
+  }, wait);
+}
+
+function dismissSplash() {
+  splashDismissRequested = true;
+  if (splashPlayStartedAt != null) runExit();
+}
+
+async function startSplash() {
+  if (typeof document === 'undefined') return;
+  await showDesktopWindow();
+  await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+  const splash = document.getElementById('orbit-splash');
+  if (splash) splash.classList.add('is-playing');
+  splashPlayStartedAt = performance.now();
+  if (splashDismissRequested) runExit();
+}
+
+void startSplash();
+window.setTimeout(() => {
+  if (splashPlayStartedAt == null) splashPlayStartedAt = performance.now();
+  runExit();
+}, 4500);
+
 async function boot() {
   try {
     await ensureSeed();
@@ -34,6 +81,7 @@ async function boot() {
     message.className = 'boot';
     message.textContent = getT()('Orbit could not open its local database. Private windows or blocked site data can cause this.');
     document.getElementById('root')!.replaceChildren(message);
+    dismissSplash();
     return;
   }
   try {
@@ -54,6 +102,7 @@ async function boot() {
       </BrowserRouter>
     </StrictMode>,
   );
+  dismissSplash();
   window.setTimeout(() => void autoBackupIfDue(), 4000);
 }
 

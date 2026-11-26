@@ -14,6 +14,7 @@ import { getOrCreateDaily } from './db/indexers';
 import { todayISO } from './lib/dates';
 import { isComposing } from './lib/keyboard';
 import { ConnectPage } from './views/ConnectPage';
+import { DesktopAuthPage } from './views/DesktopAuthPage';
 import { useIsMobile } from './mobile/useIsMobile';
 import { MobileNav } from './mobile/MobileNav';
 import { KeyboardToolbar } from './mobile/KeyboardToolbar';
@@ -96,8 +97,9 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [navigate, setPalette, toggleSidebar]);
 
-  // The approval page for AI apps stands on its own, without the sidebar or notes.
+  // The approval & desktop auth bridge pages stand on their own, without the sidebar or notes.
   if (location.pathname === '/connect') return <ConnectPage />;
+  if (location.pathname === '/desktop-auth') return <DesktopAuthPage />;
   if (!ready) return <div className="boot">{tr('Loading Orbit…')}</div>;
 
   return (

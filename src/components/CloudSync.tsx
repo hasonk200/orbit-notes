@@ -4,6 +4,7 @@ import { Cloud, CloudCheck, CloudOff, LogIn, LogOut, RefreshCw } from 'lucide-re
 import { relativeTime } from '../lib/dates';
 import { syncNow, useSync, type SyncStatus } from '../sync/engine';
 import { googleDirectAvailable, signInWithFirebasePopup, signInWithGoogle, signOutOfCloud } from '../sync/firebase';
+import { isTauri } from '../lib/native';
 import { resolveObjectConflict } from '../db/indexers';
 import { displayTitle, useData } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
@@ -90,12 +91,15 @@ export function CloudSyncSettings() {
             <button type="button" className="btn primary" disabled={busy} onClick={() => run(signInWithGoogle)}>
               <LogIn size={15} /> {tr('Sign in with Google')}
             </button>
-            {googleDirectAvailable && (
+            {!isTauri() && googleDirectAvailable && (
               <button type="button" className="btn-ghost" disabled={busy} onClick={() => run(signInWithFirebasePopup)} title={tr('Firebase\'s own popup. Use this if the main button doesn\'t work.')}>
                 {tr('Other sign-in method')}
               </button>
             )}
           </div>
+          {busy && isTauri() && (
+            <p className="muted small">{tr('Finish signing in using your browser, then return to Orbit.')}</p>
+          )}
         </>
       ) : (
         <>
