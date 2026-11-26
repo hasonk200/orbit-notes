@@ -1,6 +1,6 @@
 [package]
 name = "orbit-notes"
-version = "0.4.0"
+version = "0.4.1"
 description = "Orbit Notes desktop app"
 authors = ["Orbit"]
 edition = "2021"
