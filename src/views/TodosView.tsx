@@ -21,6 +21,8 @@ import { relativeTime, todayISO, toISODate } from '../lib/dates';
 import { includesText } from '../lib/search';
 import { typeLabel } from '../lib/typeLabels';
 import { classifyTaskKind, parseQuickTaskInput, PRIO_RANK, priorityChoices } from '../lib/tasks';
+import { collapseTaskGroups, countCollapsedEntries, type TaskListEntry } from '../lib/taskGroups';
+import { TaskBundleCard } from '../components/TaskBundleCard';
 import { TaskRow } from '../components/TaskRow';
 import { Popover } from '../components/Popover';
 import { MenuSelect } from '../components/MenuSelect';
@@ -178,43 +180,49 @@ export function TodosView() {
     b.createdAt - a.createdAt;
 
   const counts = useMemo(() => {
-    let todayC = 0;
-    let upcoming = 0;
-    let anytime = 0;
-    let logbook = 0;
+    const todayRaw: TaskRec[] = [];
+    const upcomingRaw: TaskRec[] = [];
+    const anytimeRaw: TaskRec[] = [];
+    const logbookRaw: TaskRec[] = [];
     for (const t of allTodos) {
       if (t.done) {
-        logbook++;
+        logbookRaw.push(t);
         continue;
       }
-      if (t.due && t.due <= today) todayC++;
-      else if (t.due && t.due > today) upcoming++;
-      else anytime++;
+      if (t.due && t.due <= today) todayRaw.push(t);
+      else if (t.due && t.due > today) upcomingRaw.push(t);
+      else anytimeRaw.push(t);
     }
-    return { today: todayC, upcoming, anytime, logbook };
+    return {
+      today: countCollapsedEntries(todayRaw),
+      upcoming: countCollapsedEntries(upcomingRaw),
+      anytime: countCollapsedEntries(anytimeRaw),
+      logbook: countCollapsedEntries(logbookRaw),
+    };
   }, [allTodos, today]);
 
-  const overdueItems = useMemo(
+  const overdueRaw = useMemo(
     () => filtered.filter((t) => !t.done && t.due && t.due < today).sort(byDueAndPrio),
     [filtered, today],
   );
+  const overdueItems = useMemo(() => collapseTaskGroups(overdueRaw, allTodos), [overdueRaw, allTodos]);
   const dueTodayItems = useMemo(
-    () => filtered.filter((t) => !t.done && t.due === today).sort(byDueAndPrio),
-    [filtered, today],
+    () => collapseTaskGroups(filtered.filter((t) => !t.done && t.due === today).sort(byDueAndPrio), allTodos),
+    [filtered, today, allTodos],
   );
 
   const upcomingGroups = useMemo(() => {
     const list = filtered.filter((t) => !t.done && t.due && t.due > today).sort(byDueAndPrio);
     return [
-      { key: 'tomorrow', label: tr('Tomorrow'), tone: 'blue', items: list.filter((t) => t.due === tomorrow) },
-      { key: 'week', label: tr('Next 7 days'), tone: 'neutral', items: list.filter((t) => t.due! > tomorrow && t.due! <= nextWeekEnd) },
-      { key: 'later', label: tr('Later'), tone: 'neutral', items: list.filter((t) => t.due! > nextWeekEnd) },
+      { key: 'tomorrow', label: tr('Tomorrow'), tone: 'blue', items: collapseTaskGroups(list.filter((t) => t.due === tomorrow), allTodos) },
+      { key: 'week', label: tr('Next 7 days'), tone: 'neutral', items: collapseTaskGroups(list.filter((t) => t.due! > tomorrow && t.due! <= nextWeekEnd), allTodos) },
+      { key: 'later', label: tr('Later'), tone: 'neutral', items: collapseTaskGroups(list.filter((t) => t.due! > nextWeekEnd), allTodos) },
     ].filter((g) => g.items.length > 0);
-  }, [filtered, today, tomorrow, nextWeekEnd, tr]);
+  }, [filtered, today, tomorrow, nextWeekEnd, tr, allTodos]);
 
   const anytimeItems = useMemo(
-    () => filtered.filter((t) => !t.done && !t.due).sort(byDueAndPrio),
-    [filtered],
+    () => collapseTaskGroups(filtered.filter((t) => !t.done && !t.due).sort(byDueAndPrio), allTodos),
+    [filtered, allTodos],
   );
 
   const logbookGroups = useMemo(() => {
@@ -227,9 +235,9 @@ export function TodosView() {
       map.set(k, [...(map.get(k) ?? []), t]);
     }
     return (['Today', 'Yesterday', 'Earlier'] as const)
-      .map((label) => ({ key: label, label: tr(label), items: map.get(label) ?? [] }))
+      .map((label) => ({ key: label, label: tr(label), items: collapseTaskGroups(map.get(label) ?? [], allTodos) }))
       .filter((g) => g.items.length > 0);
-  }, [filtered, tr]);
+  }, [filtered, tr, allTodos]);
 
   const submitQuickAdd = async () => {
     const parsed = parseQuickTaskInput(draft);
@@ -264,6 +272,13 @@ export function TodosView() {
       extraActions={<PromoteButton task={t} />}
     />
   );
+
+  const renderEntry = (entry: TaskListEntry) =>
+    entry.kind === 'bundle' ? (
+      <TaskBundleCard key={entry.key} bundle={entry} showSource renderChild={renderRow} />
+    ) : (
+      renderRow(entry.task)
+    );
 
   return (
     <div className="page todos-page">
@@ -395,12 +410,12 @@ export function TodosView() {
                 <button
                   type="button"
                   className="btn small"
-                  onClick={() => void rescheduleTasks(overdueItems.map((t) => t.id), today)}
+                  onClick={() => void rescheduleTasks(overdueRaw.map((t) => t.id), today)}
                 >
                   {tr('Reschedule all to Today')}
                 </button>
               </div>
-              {overdueItems.map(renderRow)}
+              {overdueItems.map(renderEntry)}
             </section>
           )}
           <section className="task-group">
@@ -413,7 +428,7 @@ export function TodosView() {
                 <span>{tr('Type above to jot down a quick reminder or bill.')}</span>
               </div>
             ) : (
-              dueTodayItems.map(renderRow)
+              dueTodayItems.map(renderEntry)
             )}
           </section>
         </div>
@@ -434,7 +449,7 @@ export function TodosView() {
                   <span className={`status-pill tone-${g.tone}`}>{g.label}</span>
                   <span className="count">{g.items.length}</span>
                 </h3>
-                {g.items.map(renderRow)}
+                {g.items.map(renderEntry)}
               </section>
             ))
           )}
@@ -450,7 +465,7 @@ export function TodosView() {
               <span>{tr('One-off items without a date show up here.')}</span>
             </div>
           ) : (
-            <section className="task-group">{anytimeItems.map(renderRow)}</section>
+            <section className="task-group">{anytimeItems.map(renderEntry)}</section>
           )}
         </div>
       )}
@@ -469,16 +484,20 @@ export function TodosView() {
                 <h3>
                   <CheckCircle2 size={14} className="muted" /> {g.label} <span className="count">{g.items.length}</span>
                 </h3>
-                {g.items.map((t) => (
-                  <div key={t.id} className="completed-row-wrap">
-                    {renderRow(t)}
-                    {t.completedAt && (
-                      <span className="completed-time muted small">
-                        {tr('Done')} {relativeTime(t.completedAt, tr)}
-                      </span>
-                    )}
-                  </div>
-                ))}
+                {g.items.map((entry) =>
+                  entry.kind === 'bundle' ? (
+                    <TaskBundleCard key={entry.key} bundle={entry} showSource renderChild={renderRow} />
+                  ) : (
+                    <div key={entry.task.id} className="completed-row-wrap">
+                      {renderRow(entry.task)}
+                      {entry.task.completedAt && (
+                        <span className="completed-time muted small">
+                          {tr('Done')} {relativeTime(entry.task.completedAt, tr)}
+                        </span>
+                      )}
+                    </div>
+                  ),
+                )}
               </section>
             ))
           )}

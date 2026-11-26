@@ -2,7 +2,7 @@ import type { AiTodo, JSONContent, TaskKind, TaskPriority, TaskStatus } from '..
 import { uid } from './uid';
 import { resolveTaskStatus } from './tasks';
 import { parseAiTodo } from './spaces';
-import { eachTaggedLine, isTaskTag, lineDate, setLineDue, setLineText, tagTaskKind, tagTaskName } from './tagTasks';
+import { eachTaggedLine, isTaskTag, lineDate, setLineDue, setLineText, tagTaskKind, tagTaskName, taskTagOf } from './tagTasks';
 
 export const emptyDoc = (): JSONContent => ({ type: 'doc', content: [{ type: 'paragraph' }] });
 
@@ -21,13 +21,13 @@ export function nodeText(node: JSONContent | undefined, titleOf?: (id: string) =
   if (node.type === 'dateRef') return node.attrs?.date ?? '';
   if (node.type === 'hardBreak') return ' ';
   const inner = (node.content ?? []).map((c) => nodeText(c, titleOf));
-  if (node.type === 'toggle') {
+  if (node.type === 'toggle' || node.type === 'blockGroup') {
     const head = String(node.attrs?.title ?? '').trim();
     const body = inner.join('\n').trim();
     return [head, body].filter(Boolean).join('\n');
   }
   if (node.type === 'tableRow') return inner.join(' | ');
-  const isBlockContainer = ['doc', 'bulletList', 'orderedList', 'taskList', 'listItem', 'taskItem', 'blockquote', 'callout', 'table'].includes(node.type ?? '');
+  const isBlockContainer = ['doc', 'bulletList', 'orderedList', 'taskList', 'listItem', 'taskItem', 'blockquote', 'callout', 'blockGroup', 'table'].includes(node.type ?? '');
   return inner.join(isBlockContainer ? '\n' : '');
 }
 
@@ -71,6 +71,34 @@ export interface ExtractedTask {
   contextId: string | null;
   completedAt: number | null;
   aiTodo: AiTodo | null;
+  groupId: string | null;
+  groupTitle: string | null;
+}
+
+/** Derive a readable title for a blockGroup: explicit title, first heading, or first line/item. */
+export function blockGroupTitle(node: JSONContent, titleOf?: (id: string) => string): string {
+  const explicit = String(node.attrs?.title ?? '').trim();
+  if (explicit) return explicit;
+  let heading = '';
+  let fallback = '';
+  const scan = (n: JSONContent) => {
+    if (heading) return;
+    if (n.type === 'heading') {
+      const t = nodeText(n, titleOf).trim();
+      if (t) {
+        heading = t;
+        return;
+      }
+    }
+    if (!fallback && n.type === 'paragraph') {
+      const t = nodeText(n, titleOf).trim();
+      if (t) fallback = t;
+    }
+    n.content?.forEach(scan);
+  };
+  node.content?.forEach(scan);
+  const raw = heading || fallback;
+  return raw.length > 60 ? raw.slice(0, 59) + '…' : raw;
 }
 
 /** Text of a task item, without nested task lists. */
@@ -95,13 +123,18 @@ function taskOwnLinkIds(n: JSONContent): string[] {
 }
 
 export function extractTasks(doc: JSONContent | undefined, titleOf?: (id: string) => string): ExtractedTask[] {
-  const out: ExtractedTask[] = [];
-  walk(doc, (n) => {
+  const taskItems: ExtractedTask[] = [];
+  const taggedItems: ExtractedTask[] = [];
+  const visit = (n: JSONContent, parent: JSONContent | undefined, activeGroup: { id: string; title: string } | null) => {
+    let nextGroup = activeGroup;
+    if (n.type === 'blockGroup' && !activeGroup && n.attrs?.groupTasks !== false && n.attrs?.groupId) {
+      nextGroup = { id: String(n.attrs.groupId), title: blockGroupTitle(n, titleOf) };
+    }
     if (n.type === 'taskItem' && n.attrs?.taskId) {
       const done = !!n.attrs.checked || n.attrs.status === 'done';
       const rawKind = n.attrs.kind;
       const explicitKind: TaskKind | null = rawKind === 'todo' || rawKind === 'task' ? rawKind : null;
-      out.push({
+      taskItems.push({
         id: n.attrs.taskId,
         text: taskOwnText(n, titleOf),
         done,
@@ -113,47 +146,56 @@ export function extractTasks(doc: JSONContent | undefined, titleOf?: (id: string
         contextId: n.attrs.contextId || null,
         completedAt: typeof n.attrs.completedAt === 'number' ? n.attrs.completedAt : null,
         aiTodo: parseAiTodo(n.attrs.aiTodo),
+        groupId: nextGroup?.id ?? null,
+        groupTitle: nextGroup?.title ?? null,
       });
     }
-  });
-  // Lines tagged #待辦 / #專案任務 are tasks too; the tag holds their state.
-  eachTaggedLine(doc, (line, tag) => {
-    const a = tag.attrs ?? {};
-    if (!a.taskId) return;
-    const done = !!a.checked || a.status === 'done';
-    // The task's words: the line without its task tag and without the @date that is its due date.
-    const dueRef = line.content?.find((c) => c.type === 'dateRef' && c.attrs?.date);
-    const words = { ...line, content: (line.content ?? []).filter((c) => c !== tag && c !== dueRef) };
-    const linkIds = new Set<string>();
-    walk(words, (c) => {
-      if (c.type === 'objectLink' && c.attrs?.id) linkIds.add(c.attrs.id);
-    });
-    out.push({
-      id: a.taskId,
-      text: nodeText(words, titleOf).replace(/\s+/g, ' ').trim(),
-      done,
-      status: resolveTaskStatus(done, a.status),
-      explicitKind: tagTaskKind(a.name),
-      linkIds: [...linkIds],
-      due: lineDate(line) ?? a.due ?? null,
-      priority: (a.priority as TaskPriority) || null,
-      contextId: a.contextId || null,
-      completedAt: typeof a.completedAt === 'number' ? a.completedAt : null,
-      aiTodo: null,
-    });
-  });
-  return out;
+    const tag = taskTagOf(n, parent);
+    if (tag && tag.attrs?.taskId) {
+      const a = tag.attrs;
+      const done = !!a.checked || a.status === 'done';
+      const dueRef = n.content?.find((c) => c.type === 'dateRef' && c.attrs?.date);
+      const words = { ...n, content: (n.content ?? []).filter((c) => c !== tag && c !== dueRef) };
+      const linkIds = new Set<string>();
+      walk(words, (c) => {
+        if (c.type === 'objectLink' && c.attrs?.id) linkIds.add(c.attrs.id);
+      });
+      taggedItems.push({
+        id: a.taskId,
+        text: nodeText(words, titleOf).replace(/\s+/g, ' ').trim(),
+        done,
+        status: resolveTaskStatus(done, a.status),
+        explicitKind: tagTaskKind(a.name),
+        linkIds: [...linkIds],
+        due: lineDate(n) ?? a.due ?? null,
+        priority: (a.priority as TaskPriority) || null,
+        contextId: a.contextId || null,
+        completedAt: typeof a.completedAt === 'number' ? a.completedAt : null,
+        aiTodo: null,
+        groupId: nextGroup?.id ?? null,
+        groupTitle: nextGroup?.title ?? null,
+      });
+    }
+    n.content?.forEach((c) => visit(c, n, nextGroup));
+  };
+  if (doc) visit(doc, undefined, null);
+  return [...taskItems, ...taggedItems];
 }
 
-/** Give every task item a unique id (deep copy). Used for templates and imports. */
+/** Give every task item and blockGroup a unique id (deep copy). Used for templates and imports. */
 export function assignTaskIds(doc: JSONContent, fresh = false): JSONContent {
   const copy: JSONContent = JSON.parse(JSON.stringify(doc ?? emptyDoc()));
-  const seen = new Set<string>();
+  const seenTasks = new Set<string>();
+  const seenGroups = new Set<string>();
   walk(copy, (n) => {
     if (n.type === 'taskItem' || isTaskTag(n)) {
       n.attrs = n.attrs ?? {};
-      if (fresh || !n.attrs.taskId || seen.has(n.attrs.taskId)) n.attrs.taskId = uid();
-      seen.add(n.attrs.taskId);
+      if (fresh || !n.attrs.taskId || seenTasks.has(n.attrs.taskId)) n.attrs.taskId = uid();
+      seenTasks.add(n.attrs.taskId);
+    } else if (n.type === 'blockGroup') {
+      n.attrs = n.attrs ?? {};
+      if (fresh || !n.attrs.groupId || seenGroups.has(n.attrs.groupId)) n.attrs.groupId = uid();
+      seenGroups.add(n.attrs.groupId);
     }
   });
   return copy;
@@ -256,13 +298,38 @@ export function removeTaskFromDoc(doc: JSONContent, taskId: string): JSONContent
       }
       const sub = prune(child);
       if (sub) child.content = sub;
-      if (child.type === 'taskList' && (!child.content || child.content.length === 0)) continue;
+      if ((child.type === 'taskList' || child.type === 'blockGroup') && (!child.content || child.content.length === 0)) continue;
       next.push(child);
     }
     return next;
   };
   const nextRoot = prune(copy);
   if (!removed) return null;
+  copy.content = nextRoot && nextRoot.length ? nextRoot : [{ type: 'paragraph' }];
+  return copy;
+}
+
+/** Unwrap a blockGroup matching `groupId` in place, restoring its inner blocks directly into its parent. */
+export function ungroupBlockInDoc(doc: JSONContent, groupId: string): JSONContent | null {
+  const copy: JSONContent = JSON.parse(JSON.stringify(doc));
+  let found = false;
+  const unwrap = (node: JSONContent): JSONContent[] | null => {
+    if (!node.content) return null;
+    const next: JSONContent[] = [];
+    for (const child of node.content) {
+      if (child.type === 'blockGroup' && child.attrs?.groupId === groupId) {
+        found = true;
+        if (child.content?.length) next.push(...child.content);
+        continue;
+      }
+      const sub = unwrap(child);
+      if (sub) child.content = sub;
+      next.push(child);
+    }
+    return next;
+  };
+  const nextRoot = unwrap(copy);
+  if (!found) return null;
   copy.content = nextRoot && nextRoot.length ? nextRoot : [{ type: 'paragraph' }];
   return copy;
 }

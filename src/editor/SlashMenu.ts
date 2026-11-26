@@ -16,6 +16,7 @@ const ITEMS: Omit<SuggestItem, 'key'>[] = [
   { label: 'Bullet outliner', icon: '•', hint: 'Nested toggle points', section: 'Lists', run: (e, r) => e.chain().focus().deleteRange(r).toggleBulletList().run() },
   { label: 'Numbered list', icon: '1.', section: 'Lists', run: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run() },
   { label: 'Toggle', icon: '▸', hint: 'Collapsible section', section: 'Blocks', run: (e, r) => e.chain().focus().deleteRange(r).insertToggle().run() },
+  { label: 'Block group', icon: '▣', hint: 'Group & collapse blocks', section: 'Blocks', run: (e, r) => e.chain().focus().deleteRange(r).insertBlockGroup().run() },
   { label: 'Callout', icon: '💡', hint: 'Highlighted note box', section: 'Blocks', run: (e, r) => e.chain().focus().deleteRange(r).insertCallout().run() },
   { label: 'Table', icon: '⊞', hint: '3×3 table', section: 'Blocks', run: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { label: 'Quote', icon: '❝', section: 'Blocks', run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },

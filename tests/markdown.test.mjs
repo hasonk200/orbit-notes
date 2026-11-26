@@ -224,3 +224,60 @@ test('blocksToMarkdown round-trips headings, tasks, links, code blocks, and tabl
   assert.match(out, /```ts\nconst x = 1;\n```/);
   assert.match(out, /\| 欄A \| 欄B \|/);
 });
+
+test('loose bold markers with inner spaces render cleanly while code spans stay untouched', () => {
+  const line1 = parseInline('**0.1 交 HKBN 欠單 ** HK$327.28');
+  assert.deepEqual(marked(line1, 'bold'), ['0.1 交 HKBN 欠單']);
+
+  const line2 = parseInline('2026/11/30 ** 截止**');
+  assert.deepEqual(marked(line2, 'bold'), ['截止']);
+
+  const line3 = parseInline('**1.1 私訊 ** moon');
+  assert.deepEqual(marked(line3, 'bold'), ['1.1 私訊']);
+
+  const line4 = parseInline('sadfeiching ** 同 Kenj 按日拆 $46.16 / $109.84 )**');
+  assert.deepEqual(marked(line4, 'bold'), ['同 Kenj 按日拆 $46.16 / $109.84 )']);
+
+  // Inline code spans containing ** with spaces must not be altered
+  const codeSafe = parseInline('**不要在 `**` 的內側留空格**。`** 文字 **` 保留原樣');
+  assert.deepEqual(marked(codeSafe, 'code'), ['**', '** 文字 **']);
+
+  const taskBlocks = markdownToBlocks('- [ ] **0.1 交 HKBN 欠單 ** HK$327.28\n- [ ] **0.2 TG 先覆一句 **');
+  assert.equal(taskBlocks[0].type, 'taskList');
+  assert.deepEqual(marked(taskBlocks[0].content[0].content[0].content, 'bold'), ['0.1 交 HKBN 欠單']);
+});
+
+test(':::block superblock parses and round-trips with flags, title, and nested tasks', () => {
+  const src = [
+    ':::block [collapsed] 階段 0：今日只做呢 3 件小事',
+    '',
+    '### 細項',
+    '',
+    '- [ ] **0.1 交 HKBN 欠單 ** HK$327.28',
+    '- [x] 0.2 TG 先覆一句',
+    ':::',
+    '',
+    ':::block [ungrouped] 不合併待辦的群組',
+    '- [ ] 獨立顯示',
+    ':::',
+  ].join('\n');
+
+  const blocks = markdownToBlocks(src);
+  assert.deepEqual(blockTypes(blocks), ['blockGroup', 'blockGroup']);
+  assert.equal(blocks[0].attrs.title, '階段 0：今日只做呢 3 件小事');
+  assert.equal(blocks[0].attrs.collapsed, true);
+  assert.equal(blocks[0].attrs.groupTasks, true);
+  assert.ok(blocks[0].attrs.groupId);
+  assert.equal(blocks[1].attrs.collapsed, false);
+  assert.equal(blocks[1].attrs.groupTasks, false);
+
+  const out = blocksToMarkdown(blocks);
+  assert.match(out, /^:::block \[collapsed\] 階段 0：今日只做呢 3 件小事/m);
+  assert.match(out, /^:::block \[ungrouped\] 不合併待辦的群組/m);
+
+  const again = markdownToBlocks(out);
+  assert.deepEqual(blockTypes(again), ['blockGroup', 'blockGroup']);
+  assert.equal(again[0].attrs.title, '階段 0：今日只做呢 3 件小事');
+  assert.equal(again[0].attrs.collapsed, true);
+  assert.equal(again[1].attrs.groupTasks, false);
+});

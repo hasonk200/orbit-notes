@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { AtSign, ChevronDown, Hash, IndentDecrease, IndentIncrease, Keyboard, Link2, List, ListChecks, ListOrdered, Pilcrow, Plus } from 'lucide-react';
+import { AtSign, ChevronDown, Hash, IndentDecrease, IndentIncrease, Keyboard, Layers, Link2, List, ListChecks, ListOrdered, Pilcrow, Plus } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { useT } from '../store/uiStore';
 import { useActiveEditor } from './activeEditor';
+import { findEnclosingBlockGroup } from '../editor/extensions/BlockGroup';
 
 /** Distance between the bottom of the layout viewport and the top of the on-screen keyboard. */
 function useKeyboardInset() {
@@ -83,6 +84,11 @@ export function KeyboardToolbar() {
 
   if (!editor || editor.isDestroyed || !editor.isEditable) return null;
   const kind = currentList(editor);
+  const canUnwrap = editor.state.selection.empty && !!findEnclosingBlockGroup(editor.state);
+  const toggleGroup = () => {
+    if (canUnwrap) editor.chain().focus().unwrapBlockGroup().run();
+    else editor.chain().focus().wrapInBlockGroup().run();
+  };
   // Keep the editor focused (and the keyboard up) while tapping the toolbar.
   const hold = (e: React.PointerEvent | React.MouseEvent) => e.preventDefault();
   const btn = (label: string, icon: React.ReactNode, run: () => void, extra?: string) => (
@@ -130,6 +136,7 @@ export function KeyboardToolbar() {
         {btn(tr('Insert'), <Plus size={20} />, () => typeTrigger(editor, '/'))}
         {btn(tr('Date'), <AtSign size={18} />, () => typeTrigger(editor, '@'))}
         {btn(tr('Link'), <Link2 size={18} />, () => typeTrigger(editor, '[['))}
+        {btn(canUnwrap ? tr('Ungroup block') : tr('Group into block'), <Layers size={18} />, toggleGroup, canUnwrap ? 'is-active' : undefined)}
         {btn(
           tr('List'),
           <>

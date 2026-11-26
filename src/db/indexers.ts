@@ -1,5 +1,5 @@
 import { db, getMeta, setMeta, uid, type CollectionRec, type JSONContent, type LinkRec, type Obj, type ObjType, type TaskKind, type TaskPriority, type TaskRec, type TaskStatus } from './schema';
-import { assignTaskIds, emptyDoc, extractBlobIds, extractLinkIds, extractTags, extractTasks, patchTaskInDoc, patchTasksInDoc, removeTaskFromDoc, type TaskPatch } from '../lib/content';
+import { assignTaskIds, emptyDoc, extractBlobIds, extractLinkIds, extractTags, extractTasks, patchTaskInDoc, patchTasksInDoc, removeTaskFromDoc, ungroupBlockInDoc, type TaskPatch } from '../lib/content';
 import { dailyTitle, toISODate } from '../lib/dates';
 import { classifyTaskKind } from '../lib/tasks';
 import { defaultTemplate } from '../lib/typeLabels';
@@ -60,6 +60,8 @@ async function reindex(obj: Obj, type?: ObjType) {
       (prev.due ?? null) !== t.due ||
       (prev.priority ?? null) !== t.priority ||
       (prev.contextId ?? null) !== t.contextId ||
+      (prev.groupId ?? null) !== t.groupId ||
+      (prev.groupTitle ?? null) !== t.groupTitle ||
       JSON.stringify(prev.aiTodo ?? null) !== JSON.stringify(t.aiTodo);
     return {
       id: t.id,
@@ -74,6 +76,7 @@ async function reindex(obj: Obj, type?: ObjType) {
       priority: t.priority,
       completedAt: t.done ? (t.completedAt ?? prev?.completedAt ?? now) : null,
       ...(t.aiTodo ? { aiTodo: t.aiTodo } : {}),
+      ...(t.groupId ? { groupId: t.groupId, groupTitle: t.groupTitle } : {}),
       createdAt: prev?.createdAt ?? now,
       updatedAt: changed ? now : prev!.updatedAt,
     };
@@ -334,6 +337,32 @@ export async function rescheduleTasks(taskIds: string[], due: string | null) {
   }
 }
 
+/** Update status on many tasks in a single write per source note (e.g. moving a grouped bundle on Kanban). */
+export async function updateTasksStatus(taskIds: string[], status: TaskStatus) {
+  if (!taskIds.length) return;
+  const rows = (await db.tasks.bulkGet(taskIds)).filter(Boolean) as TaskRec[];
+  const byObject = new Map<string, Record<string, TaskPatch>>();
+  for (const row of rows) {
+    const map = byObject.get(row.objectId) ?? {};
+    map[row.id] = { status };
+    byObject.set(row.objectId, map);
+  }
+  for (const [objectId, patches] of byObject.entries()) {
+    await saveObject(objectId, (cur) => {
+      const content = patchTasksInDoc(cur.content, patches);
+      return content ? { content } : {};
+    });
+  }
+}
+
+/** Unwrap a blockGroup in its source note so its tasks return to individual items. */
+export async function ungroupBlockGroup(objectId: string, groupId: string) {
+  await saveObject(objectId, (cur) => {
+    const content = ungroupBlockInDoc(cur.content, groupId);
+    return content ? { content } : {};
+  });
+}
+
 /** Delete a task node cleanly from its source object. */
 export async function deleteTask(taskId: string) {
   const task = await db.tasks.get(taskId);
@@ -407,7 +436,7 @@ export async function reindexObjects(ids: string[]) {
   });
 }
 
-const TASK_INDEX_VERSION = 1; // bump when derived task fields change (1: task kind)
+const TASK_INDEX_VERSION = 2; // bump when derived task fields change (1: task kind, 2: blockGroup bundling)
 
 /**
  * Rebuild derived links/tasks once after an upgrade, so tasks indexed before
