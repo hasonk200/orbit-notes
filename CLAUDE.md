@@ -30,7 +30,7 @@ Before writing new CSS, find the existing pattern below and use it. A new screen
 
 **Folding things**: summary line when closed, chevron that rotates (see `SettingsSection`, `AiNotesPanel`).
 
-**Text**: every visible string goes through `tr('English text')` with a Traditional Chinese entry in `src/lib/i18n.ts` (no duplicate keys; check that a key isn't already used with another meaning, e.g. "Shortcuts" = 快捷鍵, "Note" = 備註).
+**Text**: every visible string goes through `tr('English text')` with a Traditional Chinese entry in `src/lib/i18n.ts` (no duplicate keys; check that a key isn't already used with another meaning, e.g. "Shortcuts" = 快捷鍵, "Note" = 備註). Then run `npm run i18n:hans` to regenerate the Simplified Chinese table (`src/lib/i18n.zh-Hans.ts`, never edited by hand; mainland word fixes go in `scripts/zh-hans.mjs`). A test fails while it is out of date.
 
 ## Gotchas
 - `.is-selected` is a global editor-selection outline; don't use it as a class name.

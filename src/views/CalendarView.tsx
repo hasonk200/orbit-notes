@@ -22,6 +22,7 @@ import { MobileHeader, MobileSegmented } from '../mobile/MobileHeader';
 import { WeekStrip } from '../mobile/WeekStrip';
 import type { MenuAction } from '../mobile/BottomSheet';
 import { copyObjectLink } from '../mobile/copyLink';
+import { isChinese } from '../lib/i18n';
 
 export type CalMode = 'day' | 'three' | 'week' | 'month';
 const MODES: [CalMode, string][] = [
@@ -272,7 +273,7 @@ function MonthView({ month, idx, onPickDay, onPickMonth }: { month: Date; idx: C
       <div className="month-grid">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
           <div key={d} className="month-dow" style={{ color: `var(--wd-${i})` }}>
-            {tr.language === 'zh-Hant' ? dateLabel(new Date(2024, 0, 7 + i), tr, 'EEEEEE') : d}
+            {isChinese(tr.language) ? dateLabel(new Date(2024, 0, 7 + i), tr, 'EEEEEE') : d}
           </div>
         ))}
         {days.map((d) => {

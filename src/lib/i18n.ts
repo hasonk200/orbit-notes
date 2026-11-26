@@ -1,9 +1,14 @@
-export type Language = 'en' | 'zh-Hant';
+import { zhHans } from './i18n.zh-Hans';
+
+export type Language = 'en' | 'zh-Hant' | 'zh-Hans';
+
+/** Both Chinese UIs share layout rules (date formats, spacing, punctuation). */
+export const isChinese = (language: Language) => language !== 'en';
 
 type Values = Record<string, string | number>;
 export type Translate = ((message: string, values?: Values) => string) & { language: Language };
 
-const zhHant: Record<string, string> = {
+export const zhHant: Record<string, string> = {
   "Mark as done": "標記為完成",
   "Mark as not done": "標記為未完成",
   "Make this line a to-do": "把這一行變成待辦",
@@ -889,8 +894,11 @@ const zhHant: Record<string, string> = {
 };
 
 export function resolveLanguage(saved: string | null, preferred: readonly string[]): Language {
-  if (saved === 'en' || saved === 'zh-Hant') return saved;
-  return /^zh(?:-|$)/i.test(preferred[0] ?? '') ? 'zh-Hant' : 'en';
+  if (saved === 'en' || saved === 'zh-Hant' || saved === 'zh-Hans') return saved;
+  const first = preferred[0] ?? '';
+  if (!/^zh(?:-|$)/i.test(first)) return 'en';
+  // Mainland China and Singapore use Simplified; Taiwan, Hong Kong, Macau (and plain "zh") keep Traditional.
+  return /^zh-(?:hans|cn|sg|my)\b/i.test(first) ? 'zh-Hans' : 'zh-Hant';
 }
 
 function padCjkAscii(before: string, val: string, after: string): string {
@@ -907,18 +915,19 @@ function padCjkAscii(before: string, val: string, after: string): string {
 
 function translator(language: Language): Translate {
   return Object.assign((message: string, values?: Values) => {
-    const text = language === 'zh-Hant' && Object.hasOwn(zhHant, message) ? zhHant[message] : message;
+    const table = language === 'zh-Hant' ? zhHant : language === 'zh-Hans' ? zhHans : null;
+    const text = table && Object.hasOwn(table, message) ? table[message] : message;
     if (!values) return text;
     return text.replace(/\{(\w+)\}/g, (match, key: string, offset: number) => {
       if (!Object.hasOwn(values, key)) return match;
       const val = String(values[key]);
-      if (language !== 'zh-Hant') return val;
+      if (!isChinese(language)) return val;
       return padCjkAscii(text.slice(0, offset), val, text.slice(offset + match.length));
     });
   }, { language });
 }
 
-export const translators = { en: translator('en'), 'zh-Hant': translator('zh-Hant') };
+export const translators = { en: translator('en'), 'zh-Hant': translator('zh-Hant'), 'zh-Hans': translator('zh-Hans') };
 
 export class LocalizedError extends Error {
   constructor(readonly key: string, readonly values?: Values, options?: ErrorOptions) {

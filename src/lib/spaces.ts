@@ -91,8 +91,9 @@ function weekday(date: string) {
 /** "AI 日誌 · 2026-11-26（三）", or "AI log · 2026-11-26 (Thu)" in English. */
 export function aiLogTitle(date: string, t?: Pick<Translate, 'language'>) {
   const day = weekday(date);
-  if (Number.isNaN(day)) return t?.language === 'en' ? `AI log · ${date}` : `AI 日誌 · ${date}`;
-  return t?.language === 'en' ? `AI log · ${date} (${WEEKDAYS_EN[day]})` : `AI 日誌 · ${date}（${WEEKDAYS_ZH[day]}）`;
+  const zhName = t?.language === 'zh-Hans' ? 'AI 日志' : 'AI 日誌';
+  if (Number.isNaN(day)) return t?.language === 'en' ? `AI log · ${date}` : `${zhName} · ${date}`;
+  return t?.language === 'en' ? `AI log · ${date} (${WEEKDAYS_EN[day]})` : `${zhName} · ${date}（${WEEKDAYS_ZH[day]}）`;
 }
 
 /** "Notion 全面掃描報告（2026-11-25）": AI documents are named topic plus date. */

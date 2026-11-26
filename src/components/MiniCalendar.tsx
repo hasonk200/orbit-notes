@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { addMonths, endOfMonth, endOfWeek, isSameMonth, startOfMonth, startOfWeek, addDays } from 'date-fns';
 import { dailyTitle, dateLabel, fromISODate, toISODate, todayISO } from '../lib/dates';
 import { MenuSelect } from './MenuSelect';
+import { isChinese } from '../lib/i18n';
 
 export function MiniCalendar({ selected, onSelect, marks }: { selected: string; onSelect: (iso: string) => void; marks?: Set<string> }) {
   const tr = useT();
@@ -59,7 +60,7 @@ export function MiniCalendar({ selected, onSelect, marks }: { selected: string; 
       <div className="mini-cal-grid">
         {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d, i) => (
           <div key={d} className="mini-cal-dow">
-            {tr.language === 'zh-Hant' ? dateLabel(new Date(2024, 0, 7 + i), tr, 'EEEEEE') : d}
+            {isChinese(tr.language) ? dateLabel(new Date(2024, 0, 7 + i), tr, 'EEEEEE') : d}
           </div>
         ))}
         {days.map((d) => {

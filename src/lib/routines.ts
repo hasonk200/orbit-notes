@@ -1,7 +1,7 @@
 import { addDays, isValid, startOfWeek, subMonths } from 'date-fns';
 import { db, uid, type Space } from '../db/schema';
 import { fromISODate, toISODate, todayISO } from './dates';
-import type { Translate } from './i18n';
+import { isChinese, type Translate } from './i18n';
 import { spaceMark } from './spaces';
 import { useUI } from '../store/uiStore';
 
@@ -40,7 +40,7 @@ const SHORT_WEEKDAYS_ZH = ['日', '一', '二', '三', '四', '五', '六'];
 
 export function weekdayShortLabel(dow: number, tr: Translate): string {
   const idx = ((dow % 7) + 7) % 7;
-  return tr.language === 'zh-Hant' ? SHORT_WEEKDAYS_ZH[idx] : SHORT_WEEKDAYS_EN[idx];
+  return isChinese(tr.language) ? SHORT_WEEKDAYS_ZH[idx] : SHORT_WEEKDAYS_EN[idx];
 }
 
 export function effectiveMonthDay(year: number, monthIndex0: number, monthDay: number): number {
@@ -222,7 +222,7 @@ export function formatRoutineCadence(r: Pick<RoutineRec, 'cadence' | 'weekdays' 
       return tr('Every weekend');
     case 'weekly': {
       const days = [...new Set(r.weekdays?.length ? r.weekdays : [1])].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
-      const joined = days.map((d) => weekdayShortLabel(d, tr)).join(tr.language === 'zh-Hant' ? '、' : ', ');
+      const joined = days.map((d) => weekdayShortLabel(d, tr)).join(isChinese(tr.language) ? '、' : ', ');
       return tr('Every {days}', { days: joined });
     }
     case 'monthly':
