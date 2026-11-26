@@ -51,8 +51,11 @@ try {
   RunStep '1/6 Pulling latest main' { git pull origin main }
 
   if (-not $SkipChecks) {
-    RunStep '2/6 Running unit tests, web build, and functions check' {
-      npm.cmd test
+    RunStep '2/6 Installing packages, running unit tests, web build, and functions check' {
+      # The pull may bring new packages (e.g. opencc-js); install exactly what the lock files list.
+      npm.cmd ci --no-audit --no-fund
+      if ($LASTEXITCODE -eq 0) { npm.cmd --prefix functions ci --no-audit --no-fund }
+      if ($LASTEXITCODE -eq 0) { npm.cmd test }
       if ($LASTEXITCODE -eq 0) { npm.cmd run build }
       if ($LASTEXITCODE -eq 0) { npm.cmd --prefix functions run check }
     }
