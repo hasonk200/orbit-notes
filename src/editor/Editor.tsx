@@ -1,6 +1,6 @@
 import { useT } from '../store/uiStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { EditorContent, Extension, useEditor, type Editor } from '@tiptap/react';
+import { EditorContent, Extension, InputRule, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TaskList } from '@tiptap/extension-task-list';
 import { Placeholder } from '@tiptap/extension-placeholder';
@@ -24,7 +24,7 @@ import { BlockDragHandle } from './BlockDragHandle';
 import type { JSONContent, Obj } from '../db/schema';
 import { saveObject } from '../db/indexers';
 import { registerDraft } from '../db/drafts';
-import { looksLikeMarkdown, markdownToBlocks } from '../lib/markdown';
+import { isAllowedLinkUrl, looksLikeMarkdown, MARKDOWN_LINK_INPUT_RE, markdownToBlocks } from '../lib/markdown';
 import { openLocalFile } from '../lib/native';
 import { Plugin } from '@tiptap/pm/state';
 
@@ -73,6 +73,32 @@ const MarkdownPaste = Extension.create({
   },
 });
 
+/** Typing `[label](url) ` turns into a clickable link mark right away when the scheme is allowlisted. */
+const MarkdownLinkInput = Extension.create({
+  name: 'markdownLinkInput',
+  addInputRules() {
+    return [
+      new InputRule({
+        find: MARKDOWN_LINK_INPUT_RE,
+        handler: ({ state, range, match }) => {
+          const [, label, href] = match;
+          const linkType = state.schema.marks.link;
+          if (!label || !href || !linkType || !isAllowedLinkUrl(href)) return null;
+          if (state.selection.$from.parent.type.spec.code) return null;
+          const codeMark = state.schema.marks.code;
+          if (codeMark && codeMark.isInSet(state.selection.$from.marks())) return null;
+          state.tr
+            .replaceWith(range.from, range.to, [
+              state.schema.text(label, [linkType.create({ href })]),
+              state.schema.text(' '),
+            ])
+            .removeStoredMark(linkType);
+        },
+      }),
+    ];
+  },
+});
+
 function buildExtensions(getPlaceholder: (heading: boolean) => string, openLinkBox: () => boolean) {
   return [
     StarterKit.configure({
@@ -87,6 +113,7 @@ function buildExtensions(getPlaceholder: (heading: boolean) => string, openLinkB
     }),
     LinkShortcut.configure({ open: openLinkBox }),
     MarkdownPaste,
+    MarkdownLinkInput,
     Outliner,
     LiveSearch,
     OutlinerListItem,

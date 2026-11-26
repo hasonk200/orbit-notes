@@ -4,7 +4,7 @@ import { createServer } from 'vite';
 
 const vite = await createServer({ configFile: false, appType: 'custom', server: { middlewareMode: true, ws: false, watch: null }, optimizeDeps: { noDiscovery: true, include: [] } });
 after(() => vite.close());
-const { markdownToBlocks, blocksToMarkdown, parseInline, looksLikeMarkdown } = await vite.ssrLoadModule('/src/lib/markdown.ts');
+const { markdownToBlocks, blocksToMarkdown, parseInline, looksLikeMarkdown, isAllowedLinkUrl, MARKDOWN_LINK_INPUT_RE } = await vite.ssrLoadModule('/src/lib/markdown.ts');
 const { extractTasks, docText } = await vite.ssrLoadModule('/src/lib/content.ts');
 const { insertMarkdown } = await vite.ssrLoadModule('/src/lib/insertMarkdown.ts');
 
@@ -128,7 +128,27 @@ test('bold wrapping code keeps the code; addresses with brackets stay whole', ()
 test('file names are not mistaken for web addresses, and unsafe links are refused', () => {
   assert.deepEqual(hrefs(parseInline('dicky-finance-tracker.md 和 update.bat、www.example.com')), []);
   assert.deepEqual(hrefs(parseInline('[x](javascript:alert(1))')), []);
+  assert.deepEqual(hrefs(parseInline('[x](data:text/html,hi) [y](ftp://example.com)')), []);
   assert.deepEqual(hrefs(parseInline('![截圖](https://example.com/a.png)')), ['https://example.com/a.png']);
+});
+
+test('isAllowedLinkUrl and live link input rule enforce http/https/mailto/file allowlist', () => {
+  assert.equal(isAllowedLinkUrl('https://google.com'), true);
+  assert.equal(isAllowedLinkUrl('http://localhost:5175'), true);
+  assert.equal(isAllowedLinkUrl('mailto:a@b.com'), true);
+  assert.equal(isAllowedLinkUrl('file:///C:/Users/Dicky/notes.md'), true);
+  assert.equal(isAllowedLinkUrl('javascript:alert(1)'), false);
+  assert.equal(isAllowedLinkUrl('data:text/html,<script>'), false);
+  assert.equal(isAllowedLinkUrl('vbscript:msgbox(1)'), false);
+  assert.equal(isAllowedLinkUrl('ftp://example.com/a'), false);
+  assert.equal(isAllowedLinkUrl('example.com'), false);
+
+  const matchUrl = (s) => s.match(MARKDOWN_LINK_INPUT_RE)?.slice(1, 3) ?? null;
+  assert.deepEqual(matchUrl('看 [Google](https://google.com) '), ['Google', 'https://google.com']);
+  assert.deepEqual(matchUrl('[Wiki](https://en.wikipedia.org/wiki/Foo_(bar)) '), ['Wiki', 'https://en.wikipedia.org/wiki/Foo_(bar)']);
+  assert.deepEqual(matchUrl('[檔](file:///C:/a.md) '), ['檔', 'file:///C:/a.md']);
+  assert.deepEqual(matchUrl('[信](mailto:a@b.com) '), ['信', 'mailto:a@b.com']);
+  assert.equal(matchUrl('[bad](javascript:alert(1)) '), null);
 });
 
 test('nested lists keep their levels, and to-dos split into their own list', () => {

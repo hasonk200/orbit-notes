@@ -112,13 +112,13 @@
 }
 @media (prefers-color-scheme: dark) {
   :root[data-space='ai']:not([data-theme='light']) {
-    --accent: #36c2b2;
+    --accent: #0f9688;
     --accent-soft: #13332f;
     --accent-text: #6fdccd;
   }
 }
 :root[data-space='ai'][data-theme='dark'] {
-  --accent: #36c2b2;
+  --accent: #0f9688;
   --accent-soft: #13332f;
   --accent-text: #6fdccd;
 }

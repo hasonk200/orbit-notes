@@ -19,10 +19,18 @@ import type { JSONContent } from '../db/schema';
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
 
+/** Allowlist for clickable links in Markdown and live editor input (blocks javascript:, data:, vbscript:, etc.). */
+export function isAllowedLinkUrl(url: string): boolean {
+  return /^\s*(?:https?:\/\/|mailto:|file:\/\/\/?)/i.test(url);
+}
+
+/** Matches a completed `[label](allowed-url)` followed by a space for live editor conversion. */
+export const MARKDOWN_LINK_INPUT_RE = /\[([^\[\]\n]+)\]\(((?:https?:\/\/|mailto:|file:\/\/\/?)(?:[^\s()]|\([^\s()]*\))+)\)\s$/;
+
 const md = new MarkdownIt({ html: false, linkify: false, typographer: false });
 md.use(cjkFriendly);
-// Notes link to files on the computer too; only script-like schemes are refused.
-md.validateLink = (url) => !/^\s*(?:javascript|vbscript|data):/i.test(url);
+// Only allow explicit safe link schemes (including local file:// links used on desktop).
+md.validateLink = isAllowedLinkUrl;
 
 // ---------- Bare links ----------
 

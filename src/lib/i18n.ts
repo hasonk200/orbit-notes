@@ -766,6 +766,8 @@ const zhHant: Record<string, string> = {
   "Open containing folder": "打開所在資料夾",
   "Open folder": "打開資料夾",
   "Reload from disk": "重新載入檔案",
+  "Filter tasks": "篩選任務",
+  "{objects} objects · {links} links · Alt+Click opens in split view": "{objects} 個物件 · {links} 條連結 · Alt+點擊於分割檢視開啟",
 };
 
 export function resolveLanguage(saved: string | null, preferred: readonly string[]): Language {
@@ -773,10 +775,28 @@ export function resolveLanguage(saved: string | null, preferred: readonly string
   return /^zh(?:-|$)/i.test(preferred[0] ?? '') ? 'zh-Hant' : 'en';
 }
 
+function padCjkAscii(before: string, val: string, after: string): string {
+  const lead = before && val && (
+    (/[\u4e00-\u9fff]$/.test(before) && /^[A-Za-z]/.test(val)) ||
+    (/[A-Za-z]$/.test(before) && /^[\u4e00-\u9fff]/.test(val))
+  ) ? ' ' : '';
+  const tail = val && after && (
+    (/[\u4e00-\u9fff]$/.test(val) && /^[A-Za-z]/.test(after)) ||
+    (/[A-Za-z]$/.test(val) && /^[\u4e00-\u9fff]/.test(after))
+  ) ? ' ' : '';
+  return lead + val + tail;
+}
+
 function translator(language: Language): Translate {
   return Object.assign((message: string, values?: Values) => {
     const text = language === 'zh-Hant' && Object.hasOwn(zhHant, message) ? zhHant[message] : message;
-    return values ? text.replace(/\{(\w+)\}/g, (match, key: string) => Object.hasOwn(values, key) ? String(values[key]) : match) : text;
+    if (!values) return text;
+    return text.replace(/\{(\w+)\}/g, (match, key: string, offset: number) => {
+      if (!Object.hasOwn(values, key)) return match;
+      const val = String(values[key]);
+      if (language !== 'zh-Hant') return val;
+      return padCjkAscii(text.slice(0, offset), val, text.slice(offset + match.length));
+    });
   }, { language });
 }
 
