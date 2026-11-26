@@ -20,9 +20,10 @@ import { useT } from '../store/uiStore';
 import { relativeTime, todayISO, toISODate } from '../lib/dates';
 import { includesText } from '../lib/search';
 import { typeLabel } from '../lib/typeLabels';
-import { classifyTaskKind, parseQuickTaskInput, PRIO_RANK, TASK_PRIORITIES } from '../lib/tasks';
+import { classifyTaskKind, parseQuickTaskInput, PRIO_RANK, priorityChoices } from '../lib/tasks';
 import { TaskRow } from '../components/TaskRow';
 import { Popover } from '../components/Popover';
+import { MenuSelect } from '../components/MenuSelect';
 import { TaskTabs } from '../mobile/TaskTabs';
 
 type TodoTab = 'today' | 'upcoming' | 'anytime' | 'logbook';
@@ -351,14 +352,14 @@ export function TodosView() {
             {tr('Tomorrow')}
           </button>
           <input type="date" className="todo-quick-date" value={quickDue} onChange={(e) => setQuickDue(e.target.value)} title={tr('Due date')} />
-          <select className="todo-quick-prio" value={quickPrio} onChange={(e) => setQuickPrio(e.target.value as TaskPriority | '')} title={tr('Priority')}>
-            <option value="">{tr('No priority')}</option>
-            {TASK_PRIORITIES.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.bang} {tr(p.label)}
-              </option>
-            ))}
-          </select>
+          <MenuSelect<TaskPriority | ''>
+            look="field"
+            className="todo-quick-prio"
+            label={tr('Priority')}
+            value={quickPrio}
+            onChange={setQuickPrio}
+            options={[{ value: '', label: tr('No priority') }, ...priorityChoices(tr)]}
+          />
         </div>
       </form>
 

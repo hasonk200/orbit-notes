@@ -24,10 +24,11 @@ import { useT } from '../store/uiStore';
 import { relativeTime, shortDate, todayISO, toISODate } from '../lib/dates';
 import { includesText } from '../lib/search';
 import { typeLabel } from '../lib/typeLabels';
-import { classifyTaskKind, parseQuickTaskInput, PRIO_MAP, PRIO_RANK, resolveTaskStatus, STATUS_MAP, STATUS_RANK, TASK_PRIORITIES, TASK_STATUSES } from '../lib/tasks';
+import { classifyTaskKind, parseQuickTaskInput, PRIO_MAP, PRIO_RANK, priorityChoices, resolveTaskStatus, STATUS_MAP, STATUS_RANK, statusChoices, TASK_STATUSES } from '../lib/tasks';
 import { TaskRow } from '../components/TaskRow';
 import { TaskCard } from '../components/TaskCard';
 import { Modal } from '../components/Popover';
+import { MenuSelect } from '../components/MenuSelect';
 import { TaskTabs } from '../mobile/TaskTabs';
 
 type DashTab = 'inbox' | 'today' | 'scheduled' | 'status' | 'context' | 'open' | 'completed' | 'all';
@@ -105,6 +106,14 @@ export function TasksView() {
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, 50),
     [activeObjects],
+  );
+  // Where a new task goes: today's daily note or one of the recently edited objects.
+  const contextOptions = useMemo(
+    () => [
+      { value: '__today', label: `📅 ${tr('Today’s Daily Note')}` },
+      ...targetChoices.map((o) => ({ value: o.id, label: `${o.icon || typeMap.get(o.typeId)?.icon || '📄'} ${displayTitle(o, tr)}` })),
+    ],
+    [targetChoices, typeMap, tr],
   );
 
   // All valid, non-empty, non-trashed project tasks (kind === 'task')
@@ -433,17 +442,7 @@ export function TasksView() {
                   onKeyDown={(e) => e.key === 'Escape' && setAddingInCol(null)}
                 />
                 <div className="kanban-composer-foot">
-                  <select value={colContext} onChange={(e) => setColContext(e.target.value)} title={tr('Context')}>
-                    <option value="__today">📅 {tr('Today’s Daily Note')}</option>
-                    {targetChoices.map((o) => {
-                      const tp = typeMap.get(o.typeId);
-                      return (
-                        <option key={o.id} value={o.id}>
-                          {o.icon || tp?.icon || '📄'} {displayTitle(o, tr)}
-                        </option>
-                      );
-                    })}
-                  </select>
+                  <MenuSelect look="field" className="kanban-composer-ctx" label={tr('Context')} value={colContext} onChange={setColContext} options={contextOptions} />
                   <button type="submit" className="btn small primary" disabled={!colDraft.trim()}>
                     {tr('Add')}
                   </button>
@@ -620,31 +619,30 @@ export function TasksView() {
 
       {filtersOpen && (
         <div className="tasks-filter-bar">
-          <select className="control-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-            <option value="">{tr('All statuses')}</option>
-            {TASK_STATUSES.map((s) => (
-              <option key={s.id} value={s.id}>
-                {tr(s.label)}
-              </option>
-            ))}
-          </select>
-          <select className="control-select" value={filterPrio} onChange={(e) => setFilterPrio(e.target.value)}>
-            <option value="">{tr('All priorities')}</option>
-            {TASK_PRIORITIES.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.bang} {tr(p.label)}
-              </option>
-            ))}
-            <option value="none">{tr('No priority')}</option>
-          </select>
-          <select className="control-select" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-            <option value="">{tr('All types')}</option>
-            {types.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.icon} {typeLabel(t, tr)}
-              </option>
-            ))}
-          </select>
+          <MenuSelect
+            look="field"
+            className="control-select"
+            label={tr('Status')}
+            value={filterStatus}
+            onChange={setFilterStatus}
+            options={[{ value: '', label: tr('All statuses') }, ...statusChoices(tr)]}
+          />
+          <MenuSelect
+            look="field"
+            className="control-select"
+            label={tr('Priority')}
+            value={filterPrio}
+            onChange={setFilterPrio}
+            options={[{ value: '', label: tr('All priorities') }, ...priorityChoices(tr), { value: 'none', label: tr('No priority') }]}
+          />
+          <MenuSelect
+            look="field"
+            className="control-select"
+            label={tr('Type')}
+            value={filterType}
+            onChange={setFilterType}
+            options={[{ value: '', label: tr('All types') }, ...types.map((t) => ({ value: t.id, label: `${t.icon} ${typeLabel(t, tr)}` }))]}
+          />
           {hasActiveFilter && (
             <button
               type="button"
@@ -926,24 +924,11 @@ export function TasksView() {
             <div className="ntm-grid">
               <label>
                 <span>{tr('Status')}</span>
-                <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as TaskStatus)}>
-                  {TASK_STATUSES.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {tr(s.label)}
-                    </option>
-                  ))}
-                </select>
+                <MenuSelect look="field" label={tr('Status')} value={newStatus} onChange={setNewStatus} options={statusChoices(tr)} />
               </label>
               <label>
                 <span>{tr('Priority')}</span>
-                <select value={newPrio} onChange={(e) => setNewPrio(e.target.value as TaskPriority | '')}>
-                  <option value="">{tr('No priority')}</option>
-                  {TASK_PRIORITIES.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.bang} {tr(p.label)}
-                    </option>
-                  ))}
-                </select>
+                <MenuSelect<TaskPriority | ''> look="field" label={tr('Priority')} value={newPrio} onChange={setNewPrio} options={[{ value: '', label: tr('No priority') }, ...priorityChoices(tr)]} />
               </label>
               <label>
                 <span>{tr('Due date')}</span>
@@ -951,17 +936,7 @@ export function TasksView() {
               </label>
               <label>
                 <span>{tr('Context')}</span>
-                <select value={newTarget} onChange={(e) => setNewTarget(e.target.value)}>
-                  <option value="__today">📅 {tr('Today’s Daily Note')}</option>
-                  {targetChoices.map((o) => {
-                    const tp = typeMap.get(o.typeId);
-                    return (
-                      <option key={o.id} value={o.id}>
-                        {o.icon || tp?.icon || '📄'} {displayTitle(o, tr)}
-                      </option>
-                    );
-                  })}
-                </select>
+                <MenuSelect look="field" label={tr('Context')} value={newTarget} onChange={setNewTarget} options={contextOptions} />
               </label>
             </div>
             <div className="modal-foot">

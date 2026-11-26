@@ -1,6 +1,18 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { isComposing } from '../lib/keyboard';
+
+/**
+ * Lets a popover opened from inside another one (a drop-down menu in a task's popover) tell the outer
+ * one about itself, so a click or Escape in the inner menu does not count as "outside" and close both.
+ */
+const PopoverLayer = createContext<((el: HTMLElement) => () => void) | null>(null);
+
+/** For a layer that is not a Popover (a bottom sheet) opened from inside one: clicks in it are not "outside". */
+export function useInsidePopover(ref: RefObject<HTMLElement | null>) {
+  const register = useContext(PopoverLayer);
+  useLayoutEffect(() => (ref.current && register ? register(ref.current) : undefined), [register, ref]);
+}
 
 /** Floating panel anchored to an element (or a rect), rendered in <body>. Closes on outside click / Escape. */
 export function Popover({
@@ -24,6 +36,21 @@ export function Popover({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: -9999, top: -9999 });
+  // Popovers opened from inside this one, at any depth.
+  const inner = useRef(new Set<HTMLElement>());
+  const registerWithOuter = useContext(PopoverLayer);
+  const register = useCallback(
+    (el: HTMLElement) => {
+      inner.current.add(el);
+      const unregister = registerWithOuter?.(el);
+      return () => {
+        inner.current.delete(el);
+        unregister?.();
+      };
+    },
+    [registerWithOuter],
+  );
+  useLayoutEffect(() => (ref.current && registerWithOuter ? registerWithOuter(ref.current) : undefined), [registerWithOuter]);
 
   useLayoutEffect(() => {
     const r = rect ?? anchor?.getBoundingClientRect();
@@ -42,10 +69,11 @@ export function Popover({
     if (!onClose) return;
     const down = (e: MouseEvent) => {
       const t = e.target as globalThis.Node;
-      if (ref.current?.contains(t) || anchor?.contains(t)) return;
+      if (ref.current?.contains(t) || anchor?.contains(t) || [...inner.current].some((el) => el.contains(t))) return;
       onClose();
     };
-    const key = (e: KeyboardEvent) => !isComposing(e) && e.key === 'Escape' && onClose();
+    // While an inner popover is open, Escape closes that one first.
+    const key = (e: KeyboardEvent) => !isComposing(e) && e.key === 'Escape' && !inner.current.size && onClose();
     const t = window.setTimeout(() => document.addEventListener('mousedown', down), 0);
     document.addEventListener('keydown', key);
     return () => {
@@ -64,7 +92,7 @@ export function Popover({
       onMouseLeave={onMouseLeave}
       onClick={(e) => e.stopPropagation()}
     >
-      {children}
+      <PopoverLayer.Provider value={register}>{children}</PopoverLayer.Provider>
     </div>,
     document.body,
   );

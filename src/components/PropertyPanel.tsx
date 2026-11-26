@@ -10,6 +10,7 @@ import { translators } from '../lib/i18n';
 import { includesText, normalizeText } from '../lib/search';
 import { optionLabel, propertyLabel, typeLabel } from '../lib/typeLabels';
 import { Popover } from './Popover';
+import { MenuSelect } from './MenuSelect';
 
 export function formatPropValue(def: PropertyDef, v: any, objects: ReadonlyMap<string, Obj>, type?: ObjType, tr = translators.en): string {
   if (v == null || v === '' || (Array.isArray(v) && !v.length)) return '';
@@ -154,14 +155,14 @@ export function PropertyField({ def, obj, type }: { def: PropertyDef; obj: Obj; 
       return <input type="checkbox" checked={!!value} onChange={(e) => set(e.target.checked)} />;
     case 'select':
       return (
-        <select className={`prop-select${value ? ' has-value' : ''}`} value={value ?? ''} onChange={(e) => set(e.target.value || null)}>
-          <option value="">{tr('Empty')}</option>
-          {(def.options ?? []).map((o) => (
-            <option key={o} value={o}>
-              {optionLabel(type, def, o, tr)}
-            </option>
-          ))}
-        </select>
+        <MenuSelect
+          look="bare"
+          className={`prop-select${value ? ' has-value' : ''}`}
+          label={propertyLabel(type, def, tr)}
+          value={value ?? ''}
+          onChange={(v) => set(v || null)}
+          options={[{ value: '', label: tr('Empty') }, ...(def.options ?? []).map((o) => ({ value: o, label: optionLabel(type, def, o, tr) }))]}
+        />
       );
     case 'relation':
       return <RelationPicker def={def} value={value} onChange={set} selfId={obj.id} />;

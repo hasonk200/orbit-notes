@@ -7,6 +7,7 @@ import { optionLabel, propertyLabel } from '../lib/typeLabels';
 import { displayTitle, useActiveObjects, useData, useObjMap } from '../store/dataStore';
 import { objPath, useOpen } from '../store/pane';
 import { useT } from '../store/uiStore';
+import { MenuSelect } from './MenuSelect';
 import { formatPropValue } from './PropertyPanel';
 
 /** All tagged items, recomputed when notes change. */
@@ -62,32 +63,31 @@ function QueryEditor({ query, onChange, tags, defs, typeOf }: { query: LiveQuery
         <label>
           <span>{tr('Field')}</span>
           <span className="ls-where">
-            <select value={query.field ?? ''} onChange={(e) => onChange({ ...query, field: e.target.value, value: '' })}>
-              <option value="">{tr('Any field')}</option>
-              {defs.map((d) => (
-                <option key={d.key} value={d.key}>
-                  {propertyLabel(typeOf, d, tr)}
-                </option>
-              ))}
-            </select>
+            <MenuSelect
+              look="field"
+              label={tr('Field')}
+              value={query.field ?? ''}
+              onChange={(field) => onChange({ ...query, field, value: '' })}
+              options={[{ value: '', label: tr('Any field') }, ...defs.map((d) => ({ value: d.key, label: propertyLabel(typeOf, d, tr) }))]}
+            />
             {def &&
               (def.kind === 'select' || def.kind === 'checkbox' ? (
-                <select value={query.value ?? ''} onChange={(e) => onChange({ ...query, value: e.target.value })}>
-                  <option value="">{tr('Anything')}</option>
-                  {def.kind === 'checkbox' ? (
-                    <>
-                      <option value="yes">{tr('Yes')}</option>
-                      <option value="no">{tr('No')}</option>
-                    </>
-                  ) : (
-                    (def.options ?? []).map((o) => (
-                      <option key={o} value={o}>
-                        {optionLabel(typeOf, def, o, tr)}
-                      </option>
-                    ))
-                  )}
-                  <option value="∅">{tr('(empty)')}</option>
-                </select>
+                <MenuSelect
+                  look="field"
+                  label={tr('Value')}
+                  value={query.value ?? ''}
+                  onChange={(value) => onChange({ ...query, value })}
+                  options={[
+                    { value: '', label: tr('Anything') },
+                    ...(def.kind === 'checkbox'
+                      ? [
+                          { value: 'yes', label: tr('Yes') },
+                          { value: 'no', label: tr('No') },
+                        ]
+                      : (def.options ?? []).map((o) => ({ value: o, label: optionLabel(typeOf, def, o, tr) }))),
+                    { value: '∅', label: tr('(empty)') },
+                  ]}
+                />
               ) : (
                 <Committed value={query.value ?? ''} placeholder={tr('contains…')} onCommit={(value) => onChange({ ...query, value })} />
               ))}

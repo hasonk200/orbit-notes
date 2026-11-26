@@ -1,5 +1,6 @@
 import type { TaskKind, TaskPriority, TaskStatus } from '../db/schema';
 import { parseQuickDate } from './dates';
+import type { Translate } from './i18n';
 
 export interface StatusDef {
   id: TaskStatus;
@@ -39,6 +40,12 @@ export const TASK_PRIORITIES: PriorityDef[] = [
 ];
 
 export const PRIO_MAP = new Map<TaskPriority, PriorityDef>(TASK_PRIORITIES.map((p) => [p.id, p]));
+
+/** Status choices for a drop-down, in workflow order. */
+export const statusChoices = (tr: Translate) => TASK_STATUSES.map((s) => ({ value: s.id, label: tr(s.label) }));
+
+/** Priority choices for a drop-down, highest first, each with its "!" marks. */
+export const priorityChoices = (tr: Translate) => TASK_PRIORITIES.map((p) => ({ value: p.id, label: `${p.bang} ${tr(p.label)}` }));
 
 export const PRIO_RANK: Record<string, number> = {
   high: 0,
