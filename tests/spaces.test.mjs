@@ -109,3 +109,46 @@ test('AI documents default to Draft and keep known statuses', () => {
   assert.equal(spaces.aiDocStatus({ props: { status: 'Adopted' } }), 'Adopted');
   assert.equal(spaces.aiDocStatus({ props: { status: '亂寫' } }), 'Draft');
 });
+
+test('a line tagged #待辦 or #專案任務 is a task without becoming a checkbox', async () => {
+  const content = await vite.ssrLoadModule('/src/lib/content.ts');
+  const tag = (name, attrs = {}) => ({ type: 'tag', attrs: { name, ...attrs } });
+  const doc = { type: 'doc', content: [
+    { type: 'bulletList', content: [
+      { type: 'listItem', content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'family plan decision ' }, tag('專案任務'), { type: 'text', text: ' ' }, { type: 'dateRef', attrs: { date: '2026-12-01' } }] },
+        { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: '細節，不是任務 ' }, tag('finance')] }] }] },
+      ] },
+      { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: '買菜 ' }, tag('todo')] }] },
+    ] },
+    // Inside a checkbox task the tag adds nothing: the line is a task already.
+    { type: 'taskList', content: [{ type: 'taskItem', attrs: { taskId: 'box', checked: false }, content: [{ type: 'paragraph', content: [{ type: 'text', text: '已是待辦 ' }, tag('待辦')] }] }] },
+  ] };
+  const withIds = content.assignTaskIds(doc);
+  const tasks = content.extractTasks(withIds);
+  assert.deepEqual(tasks.map((t) => [t.text, t.explicitKind, t.due, t.done]), [
+    ['已是待辦 #待辦', null, null, false],
+    ['family plan decision', 'task', '2026-12-01', false],
+    ['買菜', 'todo', null, false],
+  ]);
+  const id = tasks[1].id;
+  assert.ok(id && id !== 'box');
+
+  // Ticking it off, rescheduling, renaming and switching kind all write to the tag and the line.
+  let next = content.patchTaskInDoc(withIds, id, { checked: true });
+  assert.equal(content.extractTasks(next)[1].done, true);
+  next = content.patchTaskInDoc(next, id, { due: '2026-12-05', kind: 'todo', text: '家庭方案決定' });
+  const after = content.extractTasks(next)[1];
+  assert.deepEqual([after.text, after.explicitKind, after.due, after.done], ['家庭方案決定', 'todo', '2026-12-05', true]);
+  const line = next.content[0].content[0].content[0];
+  assert.deepEqual(line.content.map((c) => c.type), ['text', 'tag', 'text', 'dateRef']);
+  assert.equal(line.content[1].attrs.name, '待辦');
+  // The nested list under the line is untouched.
+  assert.equal(next.content[0].content[0].content[1].type, 'bulletList');
+
+  // Removing the task removes only the tag; the line stays.
+  const removed = content.removeTaskFromDoc(next, id);
+  assert.equal(removed.content[0].content[0].content[0].content.some((c) => c.type === 'tag'), false);
+  assert.match(content.docText(removed), /家庭方案決定/);
+  assert.equal(content.extractTasks(removed).length, 2);
+});
