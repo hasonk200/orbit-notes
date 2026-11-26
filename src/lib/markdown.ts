@@ -19,10 +19,18 @@ import type { JSONContent } from '../db/schema';
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
 
+/** Allowlist for clickable links in Markdown and live editor input (blocks javascript:, data:, vbscript:, etc.). */
+export function isAllowedLinkUrl(url: string): boolean {
+  return /^\s*(?:https?:\/\/|mailto:|file:\/\/\/?)/i.test(url);
+}
+
+/** Matches a completed `[label](allowed-url)` followed by a space for live editor conversion. */
+export const MARKDOWN_LINK_INPUT_RE = /\[([^\[\]\n]+)\]\(((?:https?:\/\/|mailto:|file:\/\/\/?)(?:[^\s()]|\([^\s()]*\))+)\)\s$/;
+
 const md = new MarkdownIt({ html: false, linkify: false, typographer: false });
 md.use(cjkFriendly);
-// Notes link to files on the computer too; only script-like schemes are refused.
-md.validateLink = (url) => !/^\s*(?:javascript|vbscript|data):/i.test(url);
+// Only allow explicit safe link schemes (including local file:// links used on desktop).
+md.validateLink = isAllowedLinkUrl;
 
 // ---------- Bare links ----------
 
@@ -378,4 +386,148 @@ export function looksLikeMarkdown(text: string) {
     const line = raw.trim();
     return LOOKS.some((re) => re.test(line)) || /\[[^\]\n]+\]\([^)\s]+\)|\*\*[^*\n]+\*\*|`[^`\n]+`/.test(line);
   });
+}
+
+// ---------- Editor JSON → Markdown ----------
+
+function escapeCode(text: string): string {
+  const ticks = text.match(/`+/g);
+  const max = ticks ? Math.max(...ticks.map((t) => t.length)) : 0;
+  const fence = '`'.repeat(max + 1);
+  const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
+  return `${fence}${pad}${text}${pad}${fence}`;
+}
+
+function inlineToMarkdown(nodes?: JSONContent[]): string {
+  if (!nodes?.length) return '';
+  return nodes
+    .map((n) => {
+      if (n.type === 'hardBreak') return '  \n';
+      if (n.type === 'objectLink') return `[[${String(n.attrs?.label ?? n.attrs?.id ?? '')}]]`;
+      if (n.type === 'tag') return `#${String(n.attrs?.tag ?? '')}`;
+      if (n.type === 'dateRef') return `@${String(n.attrs?.label ?? n.attrs?.date ?? '')}`;
+      if (n.type === 'image') {
+        const alt = String(n.attrs?.alt ?? '');
+        const src = String(n.attrs?.src ?? '');
+        return src ? `![${alt}](${src})` : alt;
+      }
+      if (n.type !== 'text') return n.content ? inlineToMarkdown(n.content) : '';
+      let s = n.text ?? '';
+      const marks = n.marks ?? [];
+      const code = marks.some((m) => m.type === 'code');
+      const link = marks.find((m) => m.type === 'link');
+      if (code) {
+        s = escapeCode(s);
+      } else {
+        if (marks.some((m) => m.type === 'bold')) s = `**${s}**`;
+        if (marks.some((m) => m.type === 'italic')) s = `*${s}*`;
+        if (marks.some((m) => m.type === 'strike')) s = `~~${s}~~`;
+      }
+      if (link) {
+        const href = String(link.attrs?.href ?? '');
+        if (href && s !== href) s = `[${s}](${href})`;
+      }
+      return s;
+    })
+    .join('');
+}
+
+function serializeList(list: JSONContent, indent: string, ordered: boolean, task: boolean): string[] {
+  const lines: string[] = [];
+  let num = Number(list.attrs?.start ?? 1);
+  for (const item of list.content ?? []) {
+    const kids = item.content ?? [];
+    const prefix = task ? `- [${item.attrs?.checked ? 'x' : ' '}] ` : ordered ? `${num++}. ` : '- ';
+    let first = true;
+    for (const child of kids) {
+      if (child.type === 'bulletList' || child.type === 'orderedList' || child.type === 'taskList') {
+        lines.push(
+          ...serializeList(
+            child,
+            indent + '  ',
+            child.type === 'orderedList',
+            child.type === 'taskList',
+          ),
+        );
+      } else {
+        const text = inlineToMarkdown(child.content);
+        lines.push((first ? indent + prefix : indent + '  ') + text);
+        first = false;
+      }
+    }
+    if (first) lines.push(indent + prefix.trimEnd());
+  }
+  return lines;
+}
+
+function serializeBlock(node: JSONContent): string {
+  switch (node.type) {
+    case 'heading': {
+      const level = Math.max(1, Math.min(6, Number(node.attrs?.level ?? 1)));
+      return `${'#'.repeat(level)} ${inlineToMarkdown(node.content)}`.trimEnd();
+    }
+    case 'paragraph':
+      return inlineToMarkdown(node.content);
+    case 'horizontalRule':
+      return '---';
+    case 'codeBlock': {
+      const lang = String(node.attrs?.language ?? '');
+      const code = (node.content ?? []).map((n) => n.text ?? '').join('');
+      const maxTicks = Math.max(2, ...(code.match(/`+/g) ?? []).map((t) => t.length));
+      const fence = '`'.repeat(maxTicks + 1);
+      return `${fence}${lang}\n${code}\n${fence}`;
+    }
+    case 'blockquote': {
+      const inner = blocksToMarkdown(node.content ?? []).split('\n');
+      return inner.map((line) => (line ? `> ${line}` : '>')).join('\n');
+    }
+    case 'callout': {
+      const kind = String(node.attrs?.kind ?? 'note').toUpperCase();
+      const inner = blocksToMarkdown(node.content ?? []).split('\n');
+      return [`> [!${kind}]`, ...inner.map((line) => (line ? `> ${line}` : '>'))].join('\n');
+    }
+    case 'toggle': {
+      const title = String(node.attrs?.summary ?? '');
+      const body = blocksToMarkdown(node.content ?? []);
+      return body ? `- **${title}**\n${body.split('\n').map((l) => `  ${l}`).join('\n')}` : `- **${title}**`;
+    }
+    case 'bulletList':
+      return serializeList(node, '', false, false).join('\n');
+    case 'orderedList':
+      return serializeList(node, '', true, false).join('\n');
+    case 'taskList':
+      return serializeList(node, '', false, true).join('\n');
+    case 'table': {
+      const rows = (node.content ?? []).map((r) =>
+        (r.content ?? []).map((cell) => inlineToMarkdown(cell.content?.[0]?.content).replace(/\|/g, '\\|')),
+      );
+      if (!rows.length) return '';
+      const width = Math.max(...rows.map((r) => r.length));
+      const padRow = (r: string[]) => `| ${Array.from({ length: width }, (_, i) => r[i] ?? '').join(' | ')} |`;
+      const sep = `| ${Array.from({ length: width }, () => '---').join(' | ')} |`;
+      return [padRow(rows[0]), sep, ...rows.slice(1).map(padRow)].join('\n');
+    }
+    default:
+      return node.content ? inlineToMarkdown(node.content) : '';
+  }
+}
+
+/** Serialize Orbit editor block nodes back into clean Markdown. */
+export function blocksToMarkdown(blocks: JSONContent[]): string {
+  if (!blocks.length) return '';
+  const out: string[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    if (b.type === 'paragraph' && (!b.content || b.content.length === 0)) {
+      if (out.length && out[out.length - 1] !== '') out.push('');
+      continue;
+    }
+    const text = serializeBlock(b);
+    const prev = blocks[i - 1];
+    if (out.length && out[out.length - 1] !== '' && prev && (SPACED.has(prev.type ?? '') || SPACED.has(b.type ?? ''))) {
+      out.push('');
+    }
+    out.push(text);
+  }
+  return out.join('\n').replace(/\n+$/, '\n');
 }

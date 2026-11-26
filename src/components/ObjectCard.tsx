@@ -8,7 +8,7 @@ import { formatPropValue } from './PropertyPanel';
 import { relativeTime } from '../lib/dates';
 import { typeLabel } from '../lib/typeLabels';
 
-export function ObjectCard({ obj, type }: { obj: Obj; type?: ObjType }) {
+export function ObjectCard({ obj, type, onContextMenu }: { obj: Obj; type?: ObjType; onContextMenu?: (e: React.MouseEvent) => void }) {
   const tr = useT();
   const open = useOpen();
   const objectMap = useObjMap();
@@ -19,7 +19,13 @@ export function ObjectCard({ obj, type }: { obj: Obj; type?: ObjType }) {
     .slice(0, 3);
   const titleOf = (id: string) => displayTitle(objectMap.get(id), tr);
   return (
-    <button type="button" className="obj-card" style={{ ['--type-color' as any]: type?.color }} onClick={(e) => open(objPath(obj.id), e)}>
+    <button
+      type="button"
+      className="obj-card"
+      style={{ ['--type-color' as any]: type?.color }}
+      onClick={(e) => open(objPath(obj.id), e)}
+      onContextMenu={onContextMenu}
+    >
       {cover ? <img className="obj-card-cover" src={cover} alt="" /> : <div className="obj-card-band" />}
       <div className="obj-card-body">
         <div className="obj-card-title">
@@ -39,11 +45,11 @@ export function ObjectCard({ obj, type }: { obj: Obj; type?: ObjType }) {
   );
 }
 
-export function ObjectRow({ obj, type, right }: { obj: Obj; type?: ObjType; right?: React.ReactNode }) {
+export function ObjectRow({ obj, type, right, onContextMenu }: { obj: Obj; type?: ObjType; right?: React.ReactNode; onContextMenu?: (e: React.MouseEvent) => void }) {
   const tr = useT();
   const open = useOpen();
   return (
-    <button type="button" className="obj-row" onClick={(e) => open(objPath(obj.id), e)}>
+    <button type="button" className="obj-row" onClick={(e) => open(objPath(obj.id), e)} onContextMenu={onContextMenu}>
       <span className="obj-row-icon" style={{ ['--type-color' as any]: type?.color }}>
         {obj.icon || type?.icon}
       </span>

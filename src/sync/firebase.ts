@@ -1,7 +1,7 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithCredential, signInWithPopup, signOut, type Auth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithCredential, signInWithPopup, signInWithRedirect, signOut, type Auth } from 'firebase/auth';
 import { initializeFirestore, type Firestore } from 'firebase/firestore';
-import { isTauri } from '../lib/native';
+import { desktopGoogleSignIn, isCapacitor, isTauri } from '../lib/native';
 
 const env = import.meta.env;
 const config = {
@@ -50,11 +50,13 @@ function loadGis() {
   return gisLoading;
 }
 
-/** Main sign-in: Google's account window, then hand the token to Firebase. */
-export async function signInWithGoogle() {
-  if (isTauri() || !googleClientId) return signInWithFirebasePopup();
+const DESKTOP_AUTH_ORIGIN = 'https://hasonk200.github.io/orbit-notes';
+
+/** Request an OAuth access token via Google Identity Services. */
+export async function requestGoogleAccessToken(): Promise<string> {
+  if (!googleClientId) throw new Error('Google sign-in is not configured for this build.');
   await loadGis();
-  const accessToken = await new Promise<string>((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     const client = (window as any).google.accounts.oauth2.initTokenClient({
       client_id: googleClientId,
       scope: 'openid email profile',
@@ -66,14 +68,39 @@ export async function signInWithGoogle() {
     });
     client.requestAccessToken();
   });
+}
+
+/** Main sign-in: Google's account window, system browser loopback on desktop, or redirect on mobile. */
+export async function signInWithGoogle() {
+  if (isTauri()) {
+    const accessToken = await desktopGoogleSignIn(DESKTOP_AUTH_ORIGIN);
+    await signInWithCredential(fb().auth, GoogleAuthProvider.credential(null, accessToken));
+    return;
+  }
+  if (isCapacitor()) {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    await signInWithRedirect(fb().auth, provider);
+    return;
+  }
+  if (!googleClientId) return signInWithFirebasePopup();
+  const accessToken = await requestGoogleAccessToken();
   await signInWithCredential(fb().auth, GoogleAuthProvider.credential(null, accessToken));
 }
 
-/** Alternative: Firebase's built-in popup (may hang if the browser blocks third-party cookies). */
+/** Alternative: Firebase's built-in popup (falls back to redirect if popups are blocked). */
 export async function signInWithFirebasePopup() {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  await signInWithPopup(fb().auth, provider);
+  try {
+    await signInWithPopup(fb().auth, provider);
+  } catch (err: any) {
+    if (err?.code === 'auth/popup-blocked') {
+      await signInWithRedirect(fb().auth, provider);
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function signOutOfCloud() {

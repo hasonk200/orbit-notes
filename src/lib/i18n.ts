@@ -549,6 +549,13 @@ const zhHant: Record<string, string> = {
   "The browser blocked the sign-in window. Allow pop-ups for this site and try again.": "瀏覽器已封鎖登入視窗。請允許此網站開啟彈出式視窗，再重試。",
   "Google sign-in is not enabled for this Firebase project yet. Enable it in Firebase console → Authentication → Sign-in method → Google.": "此 Firebase 專案尚未啟用 Google 登入。請到 Firebase 控制台的 Authentication → Sign-in method 啟用 Google。",
   "This app domain ({domain}) is not authorized in Firebase yet. Add it under Firebase console → Authentication → Settings → Authorized domains.": "此應用程式網域（{domain}）尚未加入 Firebase 授權名單。請到 Firebase 控制台的 Authentication → Settings → Authorized domains 新增它。",
+  "Sign in to Orbit Desktop": "登入 Orbit 桌面版",
+  "Invalid desktop sign-in link": "桌面版登入連結無效",
+  "Close this tab and click Sign in with Google inside Orbit Desktop again.": "請關閉此分頁，並回到 Orbit 桌面版再按一次「使用 Google 登入」。",
+  "Sending sign-in to Orbit Desktop…": "正在將登入結果傳回 Orbit 桌面版…",
+  "You can return to the Orbit desktop window.": "你可以返回 Orbit 桌面版視窗。",
+  "Choose your Google account in this browser to unlock cloud sync in the Orbit desktop app.": "請在此瀏覽器選擇你的 Google 帳戶，為 Orbit 桌面版開啟雲端同步。",
+  "Finish signing in using your browser, then return to Orbit.": "請在彈出的瀏覽器分頁完成 Google 登入，之後會自動返回 Orbit。",
   "Cloud sync": "雲端同步",
   "Firebase isn’t configured. Copy .env.example to .env.local, fill in your Firebase web config and restart the dev server.": "尚未設定 Firebase。請複製 .env.example 至 .env.local，填寫 Firebase 網頁設定後重新啟動開發伺服器。",
   "Sign in to sync notes, types, collections, pins and images across devices. Your data also stays in this browser for offline use.": "登入後可跨裝置同步筆記、類型、收藏夾、釘選項目及圖片。資料也會保存在此瀏覽器，供離線使用。",
@@ -755,6 +762,43 @@ const zhHant: Record<string, string> = {
   "Double-click to edit": "雙擊編輯",
   "Add task": "新增任務",
   "This note (default)": "此筆記（預設）",
+  "Property type": "屬性類型",
+  "Links to": "連結到",
+  "Value": "值",
+  "Today’s Daily Note": "今日日記",
+  "Default": "預設",
+  "No local Markdown file selected.": "未選擇本地 Markdown 檔案。",
+  "Local Markdown files can only be edited in Orbit Desktop.": "只可在 Orbit 桌面版直接編輯本地 Markdown 檔案。",
+  "Local file · Not synced to cloud": "本機檔案 · 不同步至雲端",
+  "Saving…": "儲存中…",
+  "Saved": "已儲存",
+  "Open containing folder": "打開所在資料夾",
+  "Open folder": "打開資料夾",
+  "Reload from disk": "重新載入檔案",
+  "Filter tasks": "篩選任務",
+  "{objects} objects · {links} links · Alt+Click opens in split view": "{objects} 個物件 · {links} 條連結 · Alt+點擊於分割檢視開啟",
+  "Local Markdown": "本機 Markdown",
+  "Unsaved changes": "有未儲存變更",
+  "Saved at {time}": "已儲存 · {time}",
+  "No changes yet": "尚未修改",
+  "Discard unsaved edits and reload from disk?": "要放棄未儲存的修改並從磁碟重新載入嗎？",
+  "Enter a destination file path.": "請輸入要儲存的檔案路徑。",
+  "Saved to {name}": "已儲存至 {name}",
+  "Save Markdown file": "儲存 Markdown 檔案",
+  "Choose where to save your changes.": "請選擇要將修改儲存到哪裡。",
+  "Overwrite current file": "覆蓋原檔案",
+  "Save as a new file…": "另存新檔…",
+  "Browse…": "瀏覽…",
+  "Save a copy to Orbit": "另存為 Orbit 筆記",
+  "Creates a synced note in Orbit and leaves the disk file unchanged.": "在 Orbit 建立同步筆記複本，不會改動硬碟原檔。",
+  "Confirm save": "確認儲存",
+  "Newest first (click to reverse)": "由新到舊（點擊反轉）",
+  "Oldest first (click to reverse)": "由舊到新（點擊反轉）",
+  "First to end (click to reverse)": "從頭到尾（點擊反轉）",
+  "End to first (click to reverse)": "從尾到頭（點擊反轉）",
+  "Add to folder": "加入資料夾",
+  "Folder name…": "資料夾名稱…",
+  "New folder…": "新增資料夾…",
 };
 
 export function resolveLanguage(saved: string | null, preferred: readonly string[]): Language {
@@ -762,10 +806,28 @@ export function resolveLanguage(saved: string | null, preferred: readonly string
   return /^zh(?:-|$)/i.test(preferred[0] ?? '') ? 'zh-Hant' : 'en';
 }
 
+function padCjkAscii(before: string, val: string, after: string): string {
+  const lead = before && val && (
+    (/[\u4e00-\u9fff]$/.test(before) && /^[A-Za-z]/.test(val)) ||
+    (/[A-Za-z]$/.test(before) && /^[\u4e00-\u9fff]/.test(val))
+  ) ? ' ' : '';
+  const tail = val && after && (
+    (/[\u4e00-\u9fff]$/.test(val) && /^[A-Za-z]/.test(after)) ||
+    (/[A-Za-z]$/.test(val) && /^[\u4e00-\u9fff]/.test(after))
+  ) ? ' ' : '';
+  return lead + val + tail;
+}
+
 function translator(language: Language): Translate {
   return Object.assign((message: string, values?: Values) => {
     const text = language === 'zh-Hant' && Object.hasOwn(zhHant, message) ? zhHant[message] : message;
-    return values ? text.replace(/\{(\w+)\}/g, (match, key: string) => Object.hasOwn(values, key) ? String(values[key]) : match) : text;
+    if (!values) return text;
+    return text.replace(/\{(\w+)\}/g, (match, key: string, offset: number) => {
+      if (!Object.hasOwn(values, key)) return match;
+      const val = String(values[key]);
+      if (language !== 'zh-Hant') return val;
+      return padCjkAscii(text.slice(0, offset), val, text.slice(offset + match.length));
+    });
   }, { language });
 }
 

@@ -98,6 +98,13 @@ test('guards keyboard shortcuts during common Chinese IME composition events', (
   assert.equal(isComposing({ isComposing: false, keyCode: 13 }), false);
 });
 
+test('adds spaces at CJK/Latin interpolation boundaries and translates filter labels', () => {
+  assert.equal(zh('New {type}', { type: 'AI 文件' }), '新增 AI 文件');
+  assert.equal(zh('New {type}', { type: '筆記' }), '新增筆記');
+  assert.equal(zh('All {type}', { type: 'AI 日誌' }), '全部 AI 日誌');
+  assert.equal(zh('Filter tasks'), '篩選任務');
+});
+
 test('renders the main screens in Traditional Chinese and handles an invalid calendar link', async () => {
   const pages = [
     ['Settings', '繁體中文', '備份與還原'],

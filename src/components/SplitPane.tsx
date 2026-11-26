@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
-import { ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight, CircleCheck, Columns2, Compass, Hash, Network, PanelLeft, Plus, Search, Settings, SquareCheckBig, Trash, X } from 'lucide-react';
+import { ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight, CircleCheck, Columns2, Compass, FileText, Hash, Network, PanelLeft, Plus, Search, Settings, SquareCheckBig, Trash, X } from 'lucide-react';
+import { fileNameFromPath } from '../lib/native';
 import { displayTitle, useData } from '../store/dataStore';
 import { objPath, PaneContext, useOpen, usePane, type PaneCtx } from '../store/pane';
 import { useT, useUI } from '../store/uiStore';
@@ -49,6 +50,7 @@ function usePathTitle(path: string): { icon: ReactNode; title: string } {
       trash: [<Trash size={15} />, tr('Trash')],
       settings: [<Settings size={15} />, tr('Settings')],
       home: [<Compass size={15} />, tr(space === 'ai' ? 'AI workspace home' : 'Explore')],
+      'local-file': [<FileText size={15} />, url.searchParams.get('path') ? fileNameFromPath(url.searchParams.get('path')!) : tr('Local Markdown')],
     };
     const m = map[a];
     return m ? { icon: m[0], title: m[1] } : { icon: null, title: 'Orbit' };

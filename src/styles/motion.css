@@ -13,6 +13,13 @@
 @keyframes orbit-fade-in {
   from { opacity: 0; }
 }
+@keyframes orbit-app-reveal {
+  from { opacity: 0; transform: scale(0.985); }
+  to { opacity: 1; transform: scale(1); }
+}
+#root.orbit-app-reveal {
+  animation: orbit-app-reveal 440ms var(--ease-out) both;
+}
 @keyframes orbit-rise-in {
   from { opacity: 0; transform: translateY(8px); }
 }

@@ -12,6 +12,99 @@ export function isNativeApp(): boolean {
   return isTauri() || isCapacitor();
 }
 
+/** Reveal the hidden Tauri desktop window after the initial themed splash frame paints. */
+export async function showDesktopWindow(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('show_main_window');
+  } catch {
+    /* ignore if already shown or running outside Tauri */
+  }
+}
+
+/** Complete Google sign-in via the user's real browser + 1-shot localhost loopback callback. */
+export async function desktopGoogleSignIn(webAppUrl: string): Promise<string> {
+  if (!isTauri()) throw new Error('Desktop sign-in is only available in the desktop app.');
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<string>('desktop_google_sign_in', { webAppUrl });
+}
+
+/** Drain any local Markdown file paths passed on cold start before UI listeners mounted. */
+export async function takePendingLocalFiles(): Promise<string[]> {
+  if (!isTauri()) return [];
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<string[]>('take_pending_files');
+  } catch {
+    return [];
+  }
+}
+
+/** Listen for local Markdown file open events forwarded from Windows "Open with" while running. */
+export async function onOpenLocalFile(cb: (path: string) => void): Promise<() => void> {
+  if (!isTauri()) return () => {};
+  const { listen } = await import('@tauri-apps/api/event');
+  return listen<string>('orbit://open-file', (event) => {
+    if (event.payload) cb(event.payload);
+  });
+}
+
+/** Read a local Markdown file from disk inside Tauri Desktop. */
+export async function readLocalMarkdown(path: string): Promise<string> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<string>('read_local_markdown', { path });
+}
+
+/** Write updated Markdown text back to a local file on disk inside Tauri Desktop. */
+export async function writeLocalMarkdown(path: string, content: string): Promise<void> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('write_local_markdown', { path, content });
+}
+
+/** Open the native Save As dialog for Markdown files when running inside Tauri Desktop. */
+export async function pickMarkdownSavePath(defaultPath: string): Promise<string | null> {
+  if (!isTauri()) return null;
+  const { save } = await import('@tauri-apps/plugin-dialog');
+  const picked = await save({
+    defaultPath,
+    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+  });
+  return typeof picked === 'string' && picked.trim() ? picked : null;
+}
+
+/** Extract file basename across Windows and Unix path separators. */
+export function fileNameFromPath(filePath: string): string {
+  const parts = filePath.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? filePath;
+}
+
+/** Suggest a default copy filename such as `notes.md` -> `notes-copy.md`. */
+export function suggestCopyPath(filePath: string): string {
+  if (!filePath) return 'note-copy.md';
+  const match = filePath.match(/^(.*?)(\.(?:md|markdown))$/i);
+  return match ? `${match[1]}-copy${match[2]}` : `${filePath}-copy.md`;
+}
+
+/** Ensure a target path ends with `.md` or `.markdown`. */
+export function ensureMarkdownExt(filePath: string): string {
+  const trimmed = filePath.trim();
+  if (!trimmed) return '';
+  return /\.(?:md|markdown)$/i.test(trimmed) ? trimmed : `${trimmed}.md`;
+}
+
+/** Validate loopback port + CSRF state parameters for /desktop-auth. */
+export function parseDesktopAuthParams(search: string): { port: number; state: string } | null {
+  const params = new URLSearchParams(search);
+  const rawPort = params.get('port') ?? '';
+  const state = params.get('state') ?? '';
+  if (!/^\d{4,5}$/.test(rawPort)) return null;
+  const port = Number(rawPort);
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) return null;
+  if (!/^[a-f0-9]{16,128}$/i.test(state)) return null;
+  return { port, state };
+}
+
 /** Open a local file:// URI using the host OS when running inside the Tauri desktop app. */
 export async function openLocalFile(url: string): Promise<boolean> {
   if (!isTauri() || !/^file:/i.test(url)) return false;
