@@ -4,7 +4,7 @@ import { createServer } from 'vite';
 
 const vite = await createServer({ configFile: false, appType: 'custom', server: { middlewareMode: true, ws: false, watch: null }, optimizeDeps: { noDiscovery: true, include: [] } });
 after(() => vite.close());
-const { markdownToBlocks, blocksToMarkdown, parseInline, looksLikeMarkdown, isAllowedLinkUrl, MARKDOWN_LINK_INPUT_RE } = await vite.ssrLoadModule('/src/lib/markdown.ts');
+const { markdownToBlocks, blocksToMarkdown, parseInline, looksLikeMarkdown, isAllowedLinkUrl, MARKDOWN_LINK_INPUT_RE, repairLooseBoldInDoc } = await vite.ssrLoadModule('/src/lib/markdown.ts');
 const { extractTasks, docText } = await vite.ssrLoadModule('/src/lib/content.ts');
 const { insertMarkdown } = await vite.ssrLoadModule('/src/lib/insertMarkdown.ts');
 
@@ -280,4 +280,101 @@ test(':::block superblock parses and round-trips with flags, title, and nested t
   assert.equal(again[0].attrs.title, '階段 0：今日只做呢 3 件小事');
   assert.equal(again[0].attrs.collapsed, true);
   assert.equal(again[1].attrs.groupTasks, false);
+});
+
+test('repairLooseBoldInDoc fixes already-saved ** markers even next to or wrapping inline code spans', () => {
+  const savedDoc = {
+    type: 'doc',
+    content: [
+      {
+        type: 'blockGroup',
+        attrs: { groupId: 'g1', title: '' },
+        content: [
+          {
+            type: 'taskList',
+            content: [
+              {
+                type: 'taskItem',
+                attrs: { taskId: 't1', checked: false },
+                content: [
+                  {
+                    type: 'paragraph',
+                    content: [
+                      { type: 'text', text: '**0.1 交 HKBN 欠單 **' },
+                      { type: 'text', text: 'HK$327.28', marks: [{ type: 'code' }] },
+                    ],
+                  },
+                ],
+              },
+              {
+                type: 'taskItem',
+                attrs: { taskId: 't2', checked: false },
+                content: [
+                  {
+                    type: 'paragraph',
+                    content: [
+                      { type: 'text', text: '0.3 決定（', marks: [{ type: 'bold' }] },
+                      { type: 'text', text: '2026/11/30', marks: [{ type: 'code' }] },
+                      { type: 'text', text: ' ** 截止** ）' },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: '實已證實** (' },
+          { type: 'text', text: 'Max', marks: [{ type: 'code' }] },
+          { type: 'text', text: ')** 交齊' },
+        ],
+      },
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: '代碼內 ' },
+          { type: 'text', text: '** 文字 **', marks: [{ type: 'code' }] },
+          { type: 'text', text: ' 唔好郁' },
+        ],
+      },
+    ],
+  };
+
+  const fixed = repairLooseBoldInDoc(savedDoc);
+  assert.ok(fixed);
+
+  const p1 = fixed.content[0].content[0].content[0].content[0].content;
+  assert.deepEqual(p1, [
+    { type: 'text', text: '0.1 交 HKBN 欠單', marks: [{ type: 'bold' }] },
+    { type: 'text', text: ' ' },
+    { type: 'text', text: 'HK$327.28', marks: [{ type: 'code' }] },
+  ]);
+
+  const p2 = fixed.content[0].content[0].content[1].content[0].content;
+  assert.deepEqual(p2, [
+    { type: 'text', text: '0.3 決定（', marks: [{ type: 'bold' }] },
+    { type: 'text', text: '2026/11/30', marks: [{ type: 'code' }] },
+    { type: 'text', text: ' ' },
+    { type: 'text', text: '截止', marks: [{ type: 'bold' }] },
+    { type: 'text', text: ' ）' },
+  ]);
+
+  const pMax = fixed.content[1].content;
+  assert.deepEqual(pMax, [
+    { type: 'text', text: '實已證實 ' },
+    { type: 'text', text: '(', marks: [{ type: 'bold' }] },
+    { type: 'text', text: 'Max', marks: [{ type: 'code' }] },
+    { type: 'text', text: ')', marks: [{ type: 'bold' }] },
+    { type: 'text', text: ' 交齊' },
+  ]);
+
+  const pCode = fixed.content[2].content;
+  assert.deepEqual(pCode, [
+    { type: 'text', text: '代碼內 ' },
+    { type: 'text', text: '** 文字 **', marks: [{ type: 'code' }] },
+    { type: 'text', text: ' 唔好郁' },
+  ]);
 });

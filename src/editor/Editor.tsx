@@ -1,5 +1,5 @@
 import { useT } from '../store/uiStore';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorContent, Extension, InputRule, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TaskList } from '@tiptap/extension-task-list';
@@ -25,7 +25,7 @@ import { BlockDragHandle } from './BlockDragHandle';
 import type { JSONContent, Obj } from '../db/schema';
 import { saveObject } from '../db/indexers';
 import { registerDraft } from '../db/drafts';
-import { isAllowedLinkUrl, looksLikeMarkdown, MARKDOWN_LINK_INPUT_RE, markdownToBlocks } from '../lib/markdown';
+import { isAllowedLinkUrl, looksLikeMarkdown, MARKDOWN_LINK_INPUT_RE, markdownToBlocks, repairLooseBoldInDoc } from '../lib/markdown';
 import { openLocalFile } from '../lib/native';
 import { Plugin } from '@tiptap/pm/state';
 import { Layers, Ungroup } from 'lucide-react';
@@ -101,7 +101,10 @@ const MarkdownLinkInput = Extension.create({
   },
 });
 
-/** Typing `** text **` with accidental inner spaces still turns into bold text cleanly. */
+/**
+ * Typing `** text **` with accidental inner spaces still turns into bold text cleanly,
+ * and pasting HTML that kept literal `** ... **` markers is repaired automatically.
+ */
 const LOOSE_BOLD_INPUT_RE = /(?<!\*)\*\*([ \t]+[^\n*]+?|[^\n*]+?[ \t]+)\*\*\s$/;
 
 const LooseBoldInput = Extension.create({
@@ -126,6 +129,26 @@ const LooseBoldInput = Extension.create({
             state.schema.text(' '),
           ];
           state.tr.replaceWith(range.from, range.to, nodes).removeStoredMark(boldType);
+        },
+      }),
+    ];
+  },
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    return [
+      new Plugin({
+        appendTransaction(transactions, _oldState, newState) {
+          if (!transactions.some((t) => t.docChanged && (t.getMeta('paste') || t.getMeta('uiEvent') === 'paste'))) {
+            return null;
+          }
+          const repaired = repairLooseBoldInDoc(newState.doc.toJSON() as JSONContent);
+          if (!repaired) return null;
+          try {
+            const docNode = editor.schema.nodeFromJSON(repaired);
+            return newState.tr.replaceWith(0, newState.doc.content.size, docNode.content);
+          } catch {
+            return null;
+          }
         },
       }),
     ];
@@ -549,11 +572,35 @@ export function RichEditor({
  */
 export function ObjectEditor({ obj, autofocus, placeholder }: { obj: Obj; autofocus?: boolean; placeholder?: string }) {
   const editorRef = useRef<Editor | null>(null);
+  const initialContent = useMemo(
+    () => (obj.deletedAt ? null : repairLooseBoldInDoc(obj.content)) ?? obj.content,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [obj.id],
+  );
   const lastSaved = useRef(JSON.stringify(obj.content));
   const pending = useRef<JSONContent | null>(null);
   const timer = useRef<number>(0);
   const write = useRef(Promise.resolve());
   const id = obj.id;
+
+  useEffect(() => {
+    if (obj.deletedAt) return;
+    const repaired = repairLooseBoldInDoc(obj.content);
+    if (!repaired) return;
+    lastSaved.current = JSON.stringify(repaired);
+    const ed = editorRef.current;
+    if (ed && !ed.isDestroyed) {
+      const { from, to } = ed.state.selection;
+      ed.commands.setContent(repaired, { emitUpdate: false });
+      try {
+        const max = ed.state.doc.content.size;
+        ed.commands.setTextSelection({ from: Math.min(from, max), to: Math.min(to, max) });
+      } catch {
+        /* ignore */
+      }
+    }
+    void saveObject(id, { content: repaired }).catch((error) => console.error('Orbit could not save repaired bold markers', error));
+  }, [id, obj.content, obj.deletedAt]);
 
   const flush = useCallback(() => {
     window.clearTimeout(timer.current);
@@ -620,7 +667,7 @@ export function ObjectEditor({ obj, autofocus, placeholder }: { obj: Obj; autofo
   return (
     <RichEditor
       docKey={id}
-      content={obj.content}
+      content={initialContent}
       onChange={onChange}
       autofocus={autofocus}
       placeholder={placeholder}

@@ -130,6 +130,210 @@ export function normalizeLooseBold(src: string): string {
   return fixed.replace(/\uE000(\d+)\uE001/g, (_, idx) => spans[Number(idx)]);
 }
 
+function hasNodeMark(node: JSONContent, type: string): boolean {
+  return !!node.marks?.some((m) => m.type === type);
+}
+
+function withBoldMark(marks?: Mark[]): Mark[] {
+  const next = (marks ?? []).map((m) => ({ ...m }));
+  if (!next.some((m) => m.type === 'bold')) next.push({ type: 'bold' });
+  return next;
+}
+
+function tokenText(n: JSONContent): string {
+  if (n.type === 'text') return n.text ?? '';
+  if (n.type === 'hardBreak') return '\n';
+  return 'x';
+}
+
+/**
+ * Repair paired `** ... **` literal markers inside TipTap inline nodes (including saved notes
+ * and rich HTML pastes), even when spanning across inline `code` nodes like `** (` + `Max` + `)**`,
+ * while leaving `code`-marked `**` untouched. Returns a new array if changed, or `null`.
+ */
+export function repairLooseBoldInInline(nodes: JSONContent[]): JSONContent[] | null {
+  type Delim = { nodeIdx: number; offset: number };
+  const delims: Delim[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (n.type !== 'text' || !n.text || hasNodeMark(n, 'code') || hasNodeMark(n, 'bold')) continue;
+    const re = /(?<!\*)\*\*(?!\*)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(n.text))) delims.push({ nodeIdx: i, offset: m.index });
+  }
+  if (delims.length < 2) return null;
+
+  const pairs: { open: Delim; close: Delim }[] = [];
+  for (let i = 0; i + 1 < delims.length; ) {
+    const open = delims[i];
+    const close = delims[i + 1];
+    let between = '';
+    for (let k = open.nodeIdx; k <= close.nodeIdx; k++) {
+      const n = nodes[k];
+      if (n.type !== 'text') {
+        between += 'x';
+        continue;
+      }
+      const txt = n.text ?? '';
+      const s = k === open.nodeIdx ? open.offset + 2 : 0;
+      const e = k === close.nodeIdx ? close.offset : txt.length;
+      between += txt.slice(s, e);
+    }
+    if (between.trim()) {
+      pairs.push({ open, close });
+      i += 2;
+    } else {
+      i += 1;
+    }
+  }
+  if (!pairs.length) return null;
+
+  // Map each nodeIdx -> sorted list of delimiter markers inside that node
+  type SplitMark = { offset: number; kind: 'open' | 'close'; pairId: number };
+  const splits = new Map<number, SplitMark[]>();
+  pairs.forEach((p, idx) => {
+    const oList = splits.get(p.open.nodeIdx) ?? [];
+    oList.push({ offset: p.open.offset, kind: 'open', pairId: idx });
+    splits.set(p.open.nodeIdx, oList);
+    const cList = splits.get(p.close.nodeIdx) ?? [];
+    cList.push({ offset: p.close.offset, kind: 'close', pairId: idx });
+    splits.set(p.close.nodeIdx, cList);
+  });
+
+  type Token = { kind: 'node'; node: JSONContent } | { kind: 'open' | 'close'; pairId: number; marks?: Mark[] };
+  const tokens: Token[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    const marksAtNode = splits.get(i);
+    if (!marksAtNode || n.type !== 'text') {
+      tokens.push({ kind: 'node', node: n });
+      continue;
+    }
+    marksAtNode.sort((a, b) => a.offset - b.offset);
+    const txt = n.text ?? '';
+    let cursor = 0;
+    for (const sm of marksAtNode) {
+      if (sm.offset > cursor) {
+        tokens.push({ kind: 'node', node: { ...n, text: txt.slice(cursor, sm.offset) } });
+      }
+      tokens.push({ kind: sm.kind, pairId: sm.pairId, marks: n.marks });
+      cursor = sm.offset + 2;
+    }
+    if (cursor < txt.length) {
+      tokens.push({ kind: 'node', node: { ...n, text: txt.slice(cursor) } });
+    }
+  }
+
+  const out: JSONContent[] = [];
+  const pushNode = (n: JSONContent) => {
+    if (n.type === 'text' && !n.text) return;
+    const prev = out[out.length - 1];
+    if (
+      n.type === 'text' &&
+      prev?.type === 'text' &&
+      JSON.stringify(prev.marks ?? []) === JSON.stringify(n.marks ?? [])
+    ) {
+      prev.text = (prev.text ?? '') + (n.text ?? '');
+    } else {
+      out.push(n);
+    }
+  };
+  const endsWithSpace = () => {
+    const prev = out[out.length - 1];
+    if (!prev) return true;
+    const s = tokenText(prev);
+    return !s || /\s$/.test(s);
+  };
+  const startsWithSpace = (idx: number) => {
+    for (let k = idx; k < tokens.length; k++) {
+      const tk = tokens[k];
+      if (tk.kind === 'node') {
+        const s = tokenText(tk.node);
+        if (!s) continue;
+        return /^\s/.test(s);
+      }
+      if (tk.kind === 'open') return false;
+    }
+    return true;
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    const tk = tokens[i];
+    if (tk.kind === 'node') {
+      pushNode({ ...tk.node, ...(tk.node.marks ? { marks: tk.node.marks.map((m) => ({ ...m })) } : {}) });
+      continue;
+    }
+    if (tk.kind === 'open') {
+      const inner: JSONContent[] = [];
+      let j = i + 1;
+      while (j < tokens.length && !(tokens[j].kind === 'close' && (tokens[j] as { pairId: number }).pairId === tk.pairId)) {
+        const sub = tokens[j];
+        if (sub.kind === 'node') inner.push({ ...sub.node, ...(sub.node.marks ? { marks: sub.node.marks.map((m) => ({ ...m })) } : {}) });
+        j++;
+      }
+      let hadLeadSpace = false;
+      let hadTrailSpace = false;
+      const first = inner[0];
+      if (first?.type === 'text' && first.text && !hasNodeMark(first, 'code') && /^[ \t]+/.test(first.text)) {
+        hadLeadSpace = true;
+        first.text = first.text.replace(/^[ \t]+/, '');
+      }
+      const last = inner[inner.length - 1];
+      if (last?.type === 'text' && last.text && !hasNodeMark(last, 'code') && /[ \t]+$/.test(last.text)) {
+        hadTrailSpace = true;
+        last.text = last.text.replace(/[ \t]+$/, '');
+      }
+      if (hadLeadSpace && !endsWithSpace()) {
+        pushNode(tk.marks?.length ? { type: 'text', text: ' ', marks: tk.marks.map((m) => ({ ...m })) } : { type: 'text', text: ' ' });
+      }
+      for (const item of inner) {
+        if (item.type === 'text' && !item.text) continue;
+        if (item.type === 'text' && !hasNodeMark(item, 'code')) {
+          pushNode({ ...item, marks: withBoldMark(item.marks) });
+        } else {
+          pushNode(item);
+        }
+      }
+      if (hadTrailSpace && !startsWithSpace(j + 1)) {
+        pushNode(tk.marks?.length ? { type: 'text', text: ' ', marks: tk.marks.map((m) => ({ ...m })) } : { type: 'text', text: ' ' });
+      }
+      i = j;
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Walk a TipTap document (skipping codeBlocks) and repair any paired `** ... **` literal markers
+ * in paragraphs/headings. Returns a cloned repaired document, or `null` if nothing needed fixing.
+ */
+export function repairLooseBoldInDoc(doc: JSONContent | undefined): JSONContent | null {
+  if (!doc) return null;
+  let changed = false;
+  const walkFix = (node: JSONContent): JSONContent => {
+    if (node.type === 'codeBlock') return node;
+    if ((node.type === 'paragraph' || node.type === 'heading') && Array.isArray(node.content)) {
+      const fixed = repairLooseBoldInInline(node.content);
+      if (fixed) {
+        changed = true;
+        return { ...node, content: fixed };
+      }
+      return node;
+    }
+    if (!Array.isArray(node.content)) return node;
+    let childChanged = false;
+    const nextContent = node.content.map((c) => {
+      const next = walkFix(c);
+      if (next !== c) childChanged = true;
+      return next;
+    });
+    return childChanged ? { ...node, content: nextContent } : node;
+  };
+  const nextDoc = walkFix(doc);
+  return changed ? nextDoc : null;
+}
+
 // ---------- Bare links ----------
 
 const URL_START = /(?:https?:\/\/|file:\/\/\/?|mailto:)/giu;
