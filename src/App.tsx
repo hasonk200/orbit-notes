@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PaneContext, type PaneCtx } from './store/pane';
 import { useT, useUI } from './store/uiStore';
@@ -16,8 +16,9 @@ import { getOrCreateDayNote } from './db/indexers';
 import { todayISO } from './lib/dates';
 import { isComposing } from './lib/keyboard';
 import { onOpenLocalFile, takePendingLocalFiles } from './lib/native';
-import { ConnectPage } from './views/ConnectPage';
-import { DesktopAuthPage } from './views/DesktopAuthPage';
+// Sign-in pages need the Firebase SDK; load them only when they are opened.
+const ConnectPage = lazy(() => import('./views/ConnectPage').then((m) => ({ default: m.ConnectPage })));
+const DesktopAuthPage = lazy(() => import('./views/DesktopAuthPage').then((m) => ({ default: m.DesktopAuthPage })));
 import { isMobileNow, useIsMobile } from './mobile/useIsMobile';
 import { MobileNav } from './mobile/MobileNav';
 import { KeyboardToolbar } from './mobile/KeyboardToolbar';
@@ -165,8 +166,8 @@ export default function App() {
   }, [navigate]);
 
   // The approval & desktop auth bridge pages stand on their own, without the sidebar or notes.
-  if (location.pathname === '/connect') return <ConnectPage />;
-  if (location.pathname === '/desktop-auth') return <DesktopAuthPage />;
+  if (location.pathname === '/connect') return <Suspense fallback={<div className="boot">{tr('Loading Orbit…')}</div>}><ConnectPage /></Suspense>;
+  if (location.pathname === '/desktop-auth') return <Suspense fallback={<div className="boot">{tr('Loading Orbit…')}</div>}><DesktopAuthPage /></Suspense>;
   if (!ready) return <div className="boot">{tr('Loading Orbit…')}</div>;
 
   return (

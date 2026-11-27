@@ -1,7 +1,9 @@
 import { flushAllDrafts } from '../db/drafts';
 import { isNewVersionOnline, usePwa } from '../lib/pwa';
 import { create } from 'zustand';
-import { syncNow, useSync } from '../sync/engine';
+import { useSync } from '../sync/state';
+
+const syncNow = async () => (await import('../sync/engine')).syncNow();
 
 /**
  * "Pull to refresh" for Orbit: load a newer version if one is online (saving open edits first),

@@ -8,7 +8,6 @@
  */
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { collection, doc, onSnapshot, writeBatch, type Unsubscribe } from 'firebase/firestore';
-import { create } from 'zustand';
 import { db, type BlobRec, type ObjType } from '../db/schema';
 import { fb, firebaseConfigured } from './firebase';
 import { syncObject } from './objects';
@@ -20,23 +19,9 @@ type Coll = 'objects' | 'collections' | BatchedCollection;
 const COLLS: Coll[] = ['types', 'collections', 'blobs', 'meta', 'objects'];
 const MAX_BLOB_BYTES = 700 * 1024; // base64 must fit in a 1 MiB Firestore document
 
-export type SyncStatus = 'unconfigured' | 'signed-out' | 'connecting' | 'syncing' | 'synced' | 'offline' | 'error';
+import { useSync, type SyncState, type SyncStatus } from './state';
+export { useSync, type SyncStatus };
 
-interface SyncState {
-  status: SyncStatus;
-  user: { uid: string; email: string | null; name: string | null; photo: string | null } | null;
-  error: string | null;
-  lastSyncAt: number | null;
-  skipped: string[]; // keys that could not be uploaded (e.g. images over the size limit)
-}
-
-export const useSync = create<SyncState>(() => ({
-  status: firebaseConfigured ? 'signed-out' : 'unconfigured',
-  user: null,
-  error: null,
-  lastSyncAt: null,
-  skipped: [],
-}));
 
 const remote = new Map<string, { ts: number; deleted: boolean }>();
 const pending = new Set<string>();

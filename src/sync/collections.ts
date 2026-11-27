@@ -1,17 +1,8 @@
 import { doc, runTransaction, type Firestore } from 'firebase/firestore';
 import { db, type CollectionRec } from '../db/schema';
 
-export function collectionTimestamp(collection: CollectionRec) {
-  return collection.updatedAt ?? collection.createdAt;
-}
-
-export function compareCollections(a: CollectionRec, b: CollectionRec) {
-  const first = JSON.stringify(a, Object.keys(a).sort());
-  const second = JSON.stringify(b, Object.keys(b).sort());
-  return collectionTimestamp(a) - collectionTimestamp(b)
-    || Number(!!a.deletedAt) - Number(!!b.deletedAt)
-    || (first > second ? 1 : first < second ? -1 : 0);
-}
+import { collectionTimestamp, compareCollections } from './collectionTime';
+export { collectionTimestamp, compareCollections };
 
 export async function syncCollection(fs: Firestore, account: string, id: string, isCurrent: () => boolean) {
   const local = await db.collections.get(id);

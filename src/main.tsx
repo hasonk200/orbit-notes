@@ -7,7 +7,7 @@ import { startDataSync } from './store/dataStore';
 import { applySpace, applyTheme, getT, useUI } from './store/uiStore';
 import { autoBackupIfDue } from './db/fsSync';
 import { upgradeTaskIndex } from './db/indexers';
-import { initSync } from './sync/engine';
+import { firebaseConfigured } from './sync/config';
 import { initWebDav } from './sync/webdav';
 import { initPwa } from './lib/pwa';
 import { initNative, showDesktopWindow } from './lib/native';
@@ -53,7 +53,26 @@ function runExit() {
   }, wait);
 }
 
+/** The built stylesheet loads in the background (vite.config.ts): wait for it before showing the app. */
+function stylesReady(): Promise<void> {
+  const links = [...document.querySelectorAll<HTMLLinkElement>('link[data-orbit-css]')];
+  return Promise.all(
+    links.map((link) =>
+      link.sheet && link.media === 'all'
+        ? undefined
+        : new Promise<void>((resolve) => {
+            link.addEventListener('load', () => resolve(), { once: true });
+            link.addEventListener('error', () => resolve(), { once: true });
+          }),
+    ),
+  ).then(() => undefined);
+}
+
 function dismissSplash() {
+  void stylesReady().then(dismissNow);
+}
+
+function dismissNow() {
   splashDismissRequested = true;
   if (splashPlayStartedAt != null) runExit();
 }
@@ -63,15 +82,19 @@ async function startSplash() {
   await showDesktopWindow();
   await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
   const splash = document.getElementById('orbit-splash');
+  // index.html usually started it already, while this code was still downloading.
+  const startedEarly = (window as { __orbitSplashStart?: number }).__orbitSplashStart;
   if (splash) splash.classList.add('is-playing');
-  splashPlayStartedAt = performance.now();
+  splashPlayStartedAt = startedEarly ?? performance.now();
   if (splashDismissRequested) runExit();
 }
 
 void startSplash();
 window.setTimeout(() => {
-  if (splashPlayStartedAt == null) splashPlayStartedAt = performance.now();
-  runExit();
+  void stylesReady().then(() => {
+    if (splashPlayStartedAt == null) splashPlayStartedAt = performance.now();
+    runExit();
+  });
 }, 4500);
 
 async function boot() {
@@ -93,7 +116,8 @@ async function boot() {
   }
   startDataSync();
   try {
-    initSync();
+    // Firebase is about a third of Orbit's code: fetch it after the first screen instead of before it.
+    if (firebaseConfigured) void import('./sync/engine').then((m) => m.initSync()).catch((e) => console.error('Orbit: cloud sync failed to start', e));
   } catch (e) {
     console.error('Orbit: cloud sync failed to start', e);
   }

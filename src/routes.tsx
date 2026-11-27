@@ -8,7 +8,6 @@ import { WithCalendarAside } from './components/CalendarAside';
 import { TypeView } from './views/TypeView';
 import { TagsView } from './views/TagsView';
 import { TrashView } from './views/TrashView';
-import { Settings } from './views/Settings';
 import { HomeView } from './views/HomeView';
 import { LocalFileView } from './views/LocalFileView';
 import { MobileHome } from './mobile/MobileHome';
@@ -25,6 +24,8 @@ function HomeRoute() {
   return mobile ? <MobileHome /> : <HomeView />;
 }
 
+// Settings includes the AI access panel, which needs the Firebase SDK.
+const Settings = lazy(() => import('./views/Settings').then((m) => ({ default: m.Settings })));
 const GraphView = lazy(() => import('./views/GraphView').then((m) => ({ default: m.GraphView })));
 
 export function decodePathSegment(part: string) {
@@ -77,7 +78,11 @@ export function renderPath(path: string, tr: Translate) {
     case 'trash':
       return <TrashView />;
     case 'settings':
-      return <Settings />;
+      return (
+        <Suspense fallback={<div className="empty-state muted">{tr('Loading…')}</div>}>
+          <Settings />
+        </Suspense>
+      );
     case 'local-file':
       return <LocalFileView path={q.get('path')} />;
     case 'home':

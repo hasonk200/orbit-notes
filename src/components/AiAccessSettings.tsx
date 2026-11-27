@@ -4,7 +4,7 @@ import { Bot, Check, Copy, Eye, FilePlus2, KeyRound, ListPlus, ListTodo, Pencil,
 import { relativeTime, shortDate, toISODate } from '../lib/dates';
 import { uid } from '../lib/uid';
 import { useT } from '../store/uiStore';
-import { useSync } from '../sync/engine';
+import { useSync } from '../sync/state';
 import { aiService as service, manage, readConsentRequestId } from '../sync/aiService';
 import { SettingsSection } from './SettingsSection';
 import { ensureHandbook } from './aiHandbook';
