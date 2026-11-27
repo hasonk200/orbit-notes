@@ -1,21 +1,10 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithCredential, signInWithPopup, signInWithRedirect, signOut, type Auth } from 'firebase/auth';
 import { initializeFirestore, type Firestore } from 'firebase/firestore';
-import { desktopGoogleSignIn, isCapacitor, isTauri } from '../lib/native';
+import { desktopGoogleSignIn, isCapacitor, isTauri, WEB_APP_URL } from '../lib/native';
 
-const env = import.meta.env;
-const config = {
-  apiKey: env.VITE_FIREBASE_API_KEY as string | undefined,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined,
-  projectId: env.VITE_FIREBASE_PROJECT_ID as string | undefined,
-  appId: env.VITE_FIREBASE_APP_ID as string | undefined,
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID as string | undefined,
-};
-
-const googleClientId = env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-export const googleDirectAvailable = !!googleClientId;
-
-export const firebaseConfigured = !!(config.apiKey && config.projectId && config.appId);
+import { firebaseConfig as config, firebaseConfigured, googleClientId, googleDirectAvailable } from './config';
+export { firebaseConfigured, googleDirectAvailable };
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
@@ -50,7 +39,7 @@ function loadGis() {
   return gisLoading;
 }
 
-const DESKTOP_AUTH_ORIGIN = 'https://hasonk200.github.io/orbit-notes';
+const DESKTOP_AUTH_ORIGIN = WEB_APP_URL;
 
 /** Request an OAuth access token via Google Identity Services. */
 export async function requestGoogleAccessToken(): Promise<string> {

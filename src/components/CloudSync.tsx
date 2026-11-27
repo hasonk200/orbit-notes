@@ -6,8 +6,14 @@ import { docText } from '../lib/content';
 import { diffCounts, diffHunks, diffLines } from '../lib/textDiff';
 import { Cloud, CloudCheck, CloudOff, LogIn, LogOut, RefreshCw } from 'lucide-react';
 import { relativeTime } from '../lib/dates';
-import { syncNow, useSync, type SyncStatus } from '../sync/engine';
-import { googleDirectAvailable, signInWithFirebasePopup, signInWithGoogle, signOutOfCloud } from '../sync/firebase';
+import { useSync, type SyncStatus } from '../sync/state';
+import { googleDirectAvailable } from '../sync/config';
+
+// The Firebase SDK is a large download, so it is fetched when needed (main.tsx starts it after the first screen).
+const syncNow = async () => (await import('../sync/engine')).syncNow();
+const signInWithGoogle = async () => (await import('../sync/firebase')).signInWithGoogle();
+const signInWithFirebasePopup = async () => (await import('../sync/firebase')).signInWithFirebasePopup();
+const signOutOfCloud = async () => (await import('../sync/firebase')).signOutOfCloud();
 import { isTauri } from '../lib/native';
 import { resolveObjectConflict } from '../db/indexers';
 import { displayTitle, useData } from '../store/dataStore';

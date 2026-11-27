@@ -1,4 +1,3 @@
-import JSZip from 'jszip';
 import { db, SCHEMA_VERSION, setMeta, type BlobRec, type CollectionRec, type MetaRec, type Obj, type ObjType, type TaskRec } from './schema';
 import { clearBlobUrlCache, extForMime } from './blobs';
 import { reindexAll } from './indexers';
@@ -15,6 +14,7 @@ export async function buildBackupZip(): Promise<Blob> {
       db.links.toArray(), db.tasks.toArray(), db.blobs.toArray(),
     ]),
   );
+  const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   const blobMeta = blobs.map(({ data: _data, ...rest }) => ({ ...rest, file: `media/${rest.id}.${extForMime(rest.mimeType)}` }));
   const payload = {
@@ -66,6 +66,7 @@ function backupRows<T>(value: unknown, label: string, key = 'id', required = fal
 }
 
 export async function readBackupZip(file: Blob) {
+  const { default: JSZip } = await import('jszip');
   const zip = await JSZip.loadAsync(await file.arrayBuffer(), { checkCRC32: true }).catch((cause: unknown) => {
     throw new LocalizedError('Could not read the Orbit ZIP backup. The file may be damaged.', undefined, { cause });
   });

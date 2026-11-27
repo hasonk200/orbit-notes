@@ -13,7 +13,7 @@ import { reindexObjects } from '../db/indexers';
 import { flushAllDrafts } from '../db/drafts';
 import { isRoutineMetaKey, type RoutineRec } from '../lib/routines';
 import { LocalizedError } from '../lib/i18n';
-import { collectionTimestamp } from './collections';
+import { collectionTimestamp } from './collectionTime';
 import { DELETED_OBJECT, objectFingerprint } from './objectVersions';
 import { basicAuth, folderUrl, platformTransport, type DavResponse, type DavTransport } from './webdavHttp';
 import {
