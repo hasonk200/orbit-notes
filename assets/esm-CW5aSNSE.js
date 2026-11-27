@@ -1,0 +1,2 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/web-uyCPVHtl.js","assets/dist-DRmkVAxp.js"])))=>i.map(i=>d[i]);
+import{registerPlugin as e}from"./dist-DRmkVAxp.js";import{j as t}from"./index-Ciq2pf_w.js";var n=e(`App`,{web:()=>t(()=>import(`./web-uyCPVHtl.js`).then(e=>new e.AppWeb),__vite__mapDeps([0,1]))});export{n as App};
