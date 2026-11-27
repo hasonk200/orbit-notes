@@ -1,7 +1,8 @@
 /*
  * Orbit service worker: makes the app open fast and work offline.
  * - Pages: network first, so a new version shows up as soon as you are online;
- *   the cached copy is used when offline.
+ *   the cached copy is used when offline, or when the network hasn't answered within
+ *   a few seconds (a stalled Wi-Fi looks "online" but never answers).
  * - Built files (hashed names), icons and fonts: cache first, since they never change.
  * Only GET requests to this site and Google Fonts are handled. Firebase, Google
  * sign-in and the Orbit API always go straight to the network.
@@ -30,16 +31,23 @@ async function trim(cache) {
   for (let i = 0; i < keys.length - MAX_ASSETS; i++) await cache.delete(keys[i]);
 }
 
-async function networkFirstPage(request) {
+const PAGE_TIMEOUT = 3000;
+
+async function networkFirstPage(event) {
   const cache = await caches.open(PAGES);
-  try {
-    const response = await fetch(request);
+  const fromNetwork = fetch(event.request).then(async (response) => {
     // Every route serves the same app shell, so keep one copy of it.
     if (response.ok) await cache.put(shell, response.clone());
     return response;
-  } catch {
-    return (await cache.match(shell)) ?? Response.error();
-  }
+  });
+  // Keep updating the saved copy in the background even if the saved one is shown first.
+  event.waitUntil(fromNetwork.catch(() => undefined));
+  const cached = await cache.match(shell);
+  if (!cached) return fromNetwork.catch(() => Response.error());
+  const slow = new Promise((resolve) => setTimeout(() => resolve(null), PAGE_TIMEOUT));
+  // A server error (GitHub Pages sometimes answers 500) also falls back to the saved copy.
+  const winner = await Promise.race([fromNetwork.then((r) => (r.ok ? r : null)).catch(() => null), slow]);
+  return winner ?? cached;
 }
 
 async function cacheFirst(request) {
@@ -60,7 +68,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   const sameScope = url.origin === scope.origin && url.pathname.startsWith(scope.pathname);
   if (request.mode === 'navigate' && sameScope) {
-    event.respondWith(networkFirstPage(request));
+    event.respondWith(networkFirstPage(event));
     return;
   }
   const fonts = url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com';
